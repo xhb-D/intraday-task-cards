@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="GC、CL、ES 独立任务卡；只在本地保存，手动记录，不读取行情或发送订单。">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src data:; font-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
+  <title>日内交易状态卡 · GC / CL / ES · V1</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="shell">
+    <header class="page-head">
+      <div><h1>日内交易状态卡</h1><p class="subtitle">3M · GC → CL → ES · 手动记录</p><p id="restore-note" class="restore-note" hidden></p></div>
+      <div class="stamp"><strong>本地记录 V1</strong><p id="save-status" role="status">正在检查本地保存…</p><button class="link" id="data-tools" type="button">导出 / 备份</button></div>
+    </header>
+    <div id="storage-banner" class="banner" hidden><span id="storage-message"></span><button id="storage-retry" type="button" hidden>重试保存</button><button id="start-fresh" type="button" hidden>开始空白工作区</button></div>
+    <p id="error-banner" class="banner error" role="alert" hidden></p>
+    <noscript><p class="banner error">请在启用 JavaScript 的浏览器中打开。本工具不读取行情、不下单。</p></noscript>
+    <section id="cards" class="cards" aria-label="GC、CL、ES 独立任务卡"></section>
+    <details class="history" id="history"><summary><span class="chevron" aria-hidden="true"></span>今日机会记录 <span id="history-count">0 条 · 今日及未结束</span></summary>
+      <div class="history-body"><p>确认关键位置后登记；同一机会更新同一行。删除只移除记录，不结束任务或持仓。</p>
+        <div class="history-tools"><button type="button" data-scope="today" aria-pressed="true">今日及未结束</button><button type="button" data-scope="all" aria-pressed="false">全部记录</button></div>
+        <p id="history-empty">尚无已登记的机会。填写关键位置并点击「确认」后，这里才会新增记录。</p>
+        <table id="history-table" hidden><thead><tr><th>登记时间</th><th>品种</th><th>方向</th><th>机会</th><th>已确认关键位置</th><th>进展 / 结果</th><th>操作</th></tr></thead><tbody id="history-body"></tbody></table>
+      </div>
+    </details>
+  </main>
+  <dialog id="confirm-dialog" class="dialog" aria-labelledby="dialog-title"><h2 id="dialog-title"></h2><p id="dialog-message"></p><p id="dialog-warning" class="warning" hidden></p><div class="dialog-actions"><button id="dialog-cancel" type="button" autofocus>取消</button><button id="dialog-confirm" class="primary" type="button">确认</button></div></dialog>
+  <dialog id="data-dialog" class="dialog data-dialog"><h2>导出与本地备份</h2><p>Markdown 用于复盘；JSON 保存全部卡片、草稿、记录和阶段时间，可用于恢复。</p><div class="data-grid"><button id="export-today" type="button"><b>今日 Markdown</b><span>今日及未结束的已登记机会</span></button><button id="export-all" type="button"><b>全部 Markdown</b><span>全部仍保留的机会记录</span></button><button id="export-json" type="button"><b>完整备份 JSON</b><span>保存完整本地数据</span></button><button id="import-json" type="button"><b>恢复 JSON 备份</b><span>校验后确认替换，不合并</span></button></div><button id="export-raw" class="link raw-export" type="button" hidden>导出原始存档（用于排查异常）</button><input id="import-file" type="file" accept=".json,application/json" hidden><p id="data-feedback" class="feedback" role="status"></p><p class="caution">数据只保存在本浏览器。恢复完成后，请对照真实交易平台核对当前任务与持仓。</p><div class="dialog-actions"><button id="data-close" type="button">关闭</button></div></dialog>
+  <div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+  <script src="dist/app.bundle.js"></script>
+</body>
+</html>

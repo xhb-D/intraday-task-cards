@@ -1,0 +1,12 @@
+{
+  "name": "intraday-task-cards-v1",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test",
+    "test:coverage": "node --test",
+    "serve": "npx serve ."
+  }
+}
