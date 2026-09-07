@@ -51,9 +51,10 @@ test('D: 空白关键位置不能登记，失焦或切阶段不会登记', () =>
   const state = fresh(); setup(state); assert.equal(confirmPosition(state, 'GC', later()), false); setStage(state, 'GC', 'signal', later()); assert.equal(state.records.length, 0); updateDraft(state, 'GC', '   '); assert.equal(confirmPosition(state, 'GC', later()), false); assertState(state);
 });
 
-test('E: 三个注意力状态可直接双向切换，重复不会重置计时', () => {
+test('E: 等待与找信号可直接双向切换，重复不会重置计时', () => {
   const state = fresh(); setup(state); assert.equal(setStage(state, 'GC', 'signal', later()), true); const signalSince = state.cards.GC.opportunity.stageSince;
-  assert.equal(setStage(state, 'GC', 'signal', later()), false); assert.equal(state.cards.GC.opportunity.stageSince, signalSince); assert.equal(setStage(state, 'GC', 'wait', later()), true); assert.equal(setStage(state, 'GC', 'near', later()), true); assertState(state);
+  assert.equal(setStage(state, 'GC', 'signal', later()), false); assert.equal(state.cards.GC.opportunity.stageSince, signalSince); assert.equal(setStage(state, 'GC', 'wait', later()), true); const waitSince = state.cards.GC.opportunity.stageSince;
+  assert.equal(setStage(state, 'GC', 'wait', later()), false); assert.equal(state.cards.GC.opportunity.stageSince, waitSince); assert.equal(setStage(state, 'GC', 'signal', later()), true); assert.throws(() => setStage(state, 'GC', 'near', later())); assertState(state);
 });
 
 test('F: 未登记的失效和放弃不生成历史，且只影响目标卡', () => {
@@ -75,14 +76,14 @@ test('I: 平仓需要确认，更新同一记录，清空 active opportunity、�
 
 test('J: 删除记录不改变当前任务；普通状态、入场和平仓都不复活；明确重新登记才恢复', () => {
   const state = fresh(); const record = registered(state); const id = record.id; assert.equal(deleteRecord(state, id), true); assert.equal(state.records.length, 0); assert.equal(state.cards.GC.opportunity.id, id);
-  setStage(state, 'GC', 'near', later()); markEntered(state, 'GC', later(), true); assert.equal(state.records.length, 0); markExited(state, 'GC', later(), true); assert.equal(state.records.length, 0);
+  setStage(state, 'GC', 'signal', later()); markEntered(state, 'GC', later(), true); assert.equal(state.records.length, 0); markExited(state, 'GC', later(), true); assert.equal(state.records.length, 0);
   const second = fresh(); registered(second); const active = second.cards.GC.opportunity; deleteRecord(second, active.id); updateDraft(second, 'GC', '3600–3605'); assert.equal(confirmPosition(second, 'GC', later()), true); assert.equal(second.records.length, 1); assert.equal(second.records[0].id, active.id); assertState(state); assertState(second);
 });
 
 test('K/L: 序列化恢复草稿、状态、持仓和历史；导入验证失败不被接受；Markdown 纯导出', () => {
   const state = fresh(); setup(state); updateDraft(state, 'GC', '未确认草稿'); setStage(state, 'GC', 'signal', later()); registered(state, 'CL'); markEntered(state, 'CL', later(), true);
   const before = JSON.stringify(state); const raw = serialize(state, later()); const restored = deserialize(raw); assert.deepEqual(restored.state, JSON.parse(before)); assert.equal(stateOf(restored.state.cards.GC), 'signal'); assert.equal(restored.state.cards.GC.opportunity.zoneDraft, '未确认草稿'); assert.equal(restored.state.records.length, 1); assert.equal(stateOf(restored.state.cards.CL), 'position');
-  assert.throws(() => deserialize('{"app":"bad"}')); const markdown = exportMarkdown(state, 'all', later()); assert.match(markdown, /登记时偏见/); assert.equal(JSON.stringify(state), before); assert.throws(() => validateEnvelope({ ...makeEnvelope(state), schemaVersion: 3 }));
+  assert.throws(() => deserialize('{"app":"bad"}')); const markdown = exportMarkdown(state, 'all', later()); assert.match(markdown, /登记时偏见/); assert.equal(JSON.stringify(state), before); assert.throws(() => validateEnvelope({ ...makeEnvelope(state), schemaVersion: 4 }));
 });
 
 test('M: 静态 UI 合约固定 GC → CL → ES 三卡，并为入场/平仓保留不同操作行', () => {
@@ -94,6 +95,7 @@ test('M: 静态 UI 合约固定 GC → CL → ES 三卡，并为入场/平仓保
   assert.match(app, /let stages = '<div class="empty"[^]*?if \(opportunity && !holding\)[^]*?else if \(holding\) ending/);
   assert.match(refinement, /grid-template-rows:31px 43px 43px 49px 98px 112px 34px 36px 34px/);
   assert.match(refinement, /\.card \.field-label\{margin-bottom:5px;font-size:10px;line-height:12px/);
+  assert.match(css, /\.stage-row\{display:grid;grid-template-columns:repeat\(2,minmax\(0,1fr\)\);gap:5px\}/);
   assert.match(refinement, /\.option:disabled\{cursor:not-allowed/); assert.match(refinement, /\.card \.task\{display:flex/);
 });
 
@@ -106,7 +108,7 @@ test('N: 1,000 次随机操作后始终满足不变量、身份唯一和跨卡�
     if (action === 2) chooseSetup(state, symbol, ['pullback', 'range', 'reversal'][Math.floor(rand() * 3)], later());
     if (action === 3) updateDraft(state, symbol, `Z${i}`);
     if (action === 4 && card.opportunity) confirmPosition(state, symbol, later());
-    if (action === 5) setStage(state, symbol, ['wait', 'near', 'signal'][Math.floor(rand() * 3)], later());
+    if (action === 5) setStage(state, symbol, ['wait', 'signal'][Math.floor(rand() * 2)], later());
     if (action === 6) markEntered(state, symbol, later(), true);
     if (action === 7) markExited(state, symbol, later(), true);
     if (action === 8) endOpportunity(state, symbol, rand() > .5 ? 'invalid' : 'canceled', later());

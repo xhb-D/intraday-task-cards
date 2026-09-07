@@ -15,7 +15,7 @@ Safari 的 `file://` 本地文件模式是否允许 localStorage 由浏览器策
 ## 结构
 
 - `src/model.js`：纯业务状态机、机会/记录 identity 和不变量。
-- `src/persistence.js`：V2 envelope、V1 迁移、结构校验、localStorage 序列化和 Markdown 导出。
+- `src/persistence.js`：V3 envelope、V1/V2 迁移、结构校验、localStorage 序列化和 Markdown 导出。
 - `src/startup.js`：存储故障隔离；保证先创建内存工作区，再尝试恢复。
 - `src/app.js`：DOM 渲染、确认对话框和浏览器 I/O。
 - `dist/app.bundle.js`：供直接双击 `index.html` 使用的 classic-script 生产 bundle。
@@ -47,7 +47,9 @@ Safari 的 `file://` 本地文件模式是否允许 localStorage 由浏览器策
 
 每张卡保存偏见、3M 结构、交易方向、当前机会和空闲状态起点。机会保存稳定 `id`、已确认位置 `zone`、未确认草稿 `zoneDraft`、登记/入场/结束时间、注意力阶段及阶段片段。首次登记会冻结 `biasAtRegistration` 与 `structure3mAtRegistration` 快照；后续修改偏见、结构或重新确认位置都不会改写它们。历史记录是机会的无草稿快照；删除记录不会触碰当前机会，也不会自动复活。
 
-localStorage key 保持为 `intraday-task-cards:v1:state`，当前 envelope `schemaVersion` 为 `2`。V1 存档会在读取时迁移：无机会卡归为“无偏见 / 未判断 / 暂无交易方向”；旧持仓保留旧方向并标记未判断结构；旧的未入场活跃机会会要求先确认当前 3M 结构，期间不能继续执行或新建机会。完整 JSON 备份包含 `app`、`schemaVersion`、`savedAt`、`timezone` 和整个工作区；导入先校验再二次确认。
+注意力阶段固定为“等待 → 找信号”，可直接双向切换；建立新机会默认“等待”，两种状态都可确认入场，重复点击不会重置阶段计时。
+
+localStorage key 保持为 `intraday-task-cards:v1:state`，当前 envelope `schemaVersion` 为 `3`。V1 存档会先迁移为 V2，再迁移为 V3：无机会卡归为“无偏见 / 未判断 / 暂无交易方向”；旧持仓保留旧方向并标记未判断结构；旧的未入场活跃机会会要求先确认当前 3M 结构，期间不能继续执行或新建机会。V2 中旧的 `near` 注意力状态会迁移为 `wait`；映射后相邻且连续的 `wait` 片段会合并，并保留最早起点与最终终点。V3 不接受 `near` 或其他非法阶段。完整 JSON 备份包含 `app`、`schemaVersion`、`savedAt`、`timezone` 和整个工作区；导入先校验再二次确认。
 
 ## 验证
 
@@ -55,7 +57,7 @@ localStorage key 保持为 `intraday-task-cards:v1:state`，当前 envelope `sch
 npm test
 ```
 
-测试覆盖三品种隔离、偏见独立性、3M 结构矩阵和确认失效、持仓期间结构冲突、位置确认与登记快照、V1 迁移、注意力阶段、入场/平仓语义、删除不复活、恢复/导出，以及 1,000 次随机状态转换不变量检查。
+测试覆盖三品种隔离、偏见独立性、3M 结构矩阵和确认失效、持仓期间结构冲突、位置确认与登记快照、V1→V3 与 V2→V3 迁移、两态注意力阶段、入场/平仓语义、删除不复活、恢复/导出，以及 1,000 次随机状态转换不变量检查。
 
 ## 已知限制
 

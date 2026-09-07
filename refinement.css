@@ -27,7 +27,6 @@
 .card .instruction{font-size:13px;line-height:18px;font-weight:560}
 .card .instruction span{font-size:12px;line-height:17px;color:#b5c2d2}
 .state-wait .task{background:#111a25}
-.state-near .task{background:#1c1a17}
 .state-signal .task{border-color:#6e4d3d;border-left-color:#f3ab82;background:#211914}
 .state-position .task{border-color:#514c70;border-left-color:#b9b0ed;background:#191827}
 .card .stage,.card .entry,.card .exit,.card .ending{height:34px}

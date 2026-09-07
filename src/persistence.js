@@ -1,7 +1,7 @@
 import { assertState, copy } from './model.js';
 
 export const APP_ID = 'intraday-task-cards';
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 export const STORE_KEY = 'intraday-task-cards:v1:state';
 export const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
@@ -36,9 +36,16 @@ export const fullTime = time => `${dateKey(time)} ${timeText(time)}`;
 const cell = value => String(value).replace(/\|/g, '&#124;').replace(/[\r\n]+/g, '<br>');
 
 function migrateEnvelope(envelope) {
-  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== 1) return envelope;
-  const migrated = copy(envelope); const state = migrated.state;
-  if (!state || !state.cards || !Array.isArray(state.records)) return envelope;
+  if (!envelope || envelope.app !== APP_ID || ![1, 2].includes(envelope.schemaVersion)) return envelope;
+  const migrated = copy(envelope);
+  if (migrated.schemaVersion === 1) migrateV1ToV2(migrated);
+  if (migrated.schemaVersion === 2) migrateV2ToV3(migrated);
+  return migrated;
+}
+
+function migrateV1ToV2(migrated) {
+  const state = migrated.state;
+  if (!state || !state.cards || !Array.isArray(state.records)) return;
   state.schemaVersion = 2;
   for (const card of Object.values(state.cards)) {
     card.bias = 'neutral'; card.structure3m = 'unjudged';
@@ -54,5 +61,28 @@ function migrateEnvelope(envelope) {
     record.biasAtRegistration = 'neutral'; record.structure3mAtRegistration = 'unjudged'; record.invalidReason = null;
   }
   migrated.schemaVersion = 2;
-  return migrated;
+}
+
+function migrateV2ToV3(migrated) {
+  const state = migrated.state;
+  if (!state || !state.cards || !Array.isArray(state.records)) return;
+  state.schemaVersion = 3;
+  for (const card of Object.values(state.cards)) if (card.opportunity) migrateOpportunity(card.opportunity);
+  for (const record of state.records) migrateOpportunity(record);
+  migrated.schemaVersion = 3;
+}
+
+function migrateOpportunity(opportunity) {
+  if (!opportunity || typeof opportunity !== 'object') return;
+  if (opportunity.attention === 'near') opportunity.attention = 'wait';
+  if (!Array.isArray(opportunity.stages)) return;
+  const stages = [];
+  for (const source of opportunity.stages) {
+    const stage = source && typeof source === 'object' ? { ...source, state: source.state === 'near' ? 'wait' : source.state } : source;
+    const previous = stages.at(-1);
+    if (previous?.state === 'wait' && stage?.state === 'wait' && previous.end === stage.start) previous.end = stage.end;
+    else stages.push(stage);
+  }
+  opportunity.stages = stages;
+  if (stages.length) opportunity.stageSince = stages.at(-1).start;
 }

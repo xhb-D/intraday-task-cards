@@ -6,12 +6,13 @@ const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', bearish:
 const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' });
 const DIRECTIONS = Object.freeze({ long: '只找多', short: '只找空', none: '暂无交易方向' });
 const SETUPS = Object.freeze({ pullback: '趋势回调', range: '区间反转', reversal: '趋势反转' });
-const STAGES = Object.freeze({ none: '无机会', wait: '等待', near: '接近', signal: '找信号', position: '持仓' });
+const STAGES = Object.freeze({ none: '无机会', wait: '等待', signal: '找信号', position: '持仓' });
 const RESULTS = Object.freeze({ invalid: '失效', canceled: '已取消', direction: '方向改变结束', closed: '已平仓' });
-const ATTENTION = Object.freeze(['wait', 'near', 'signal']);
+const ATTENTION = Object.freeze(['wait', 'signal']);
 
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const stateError = (message, path) => Object.assign(new Error(message), { code: 'STATE_VALIDATION_ERROR', path });
+const storedStage = stage => ATTENTION.includes(stage) || stage === 'position';
 const copy = value => JSON.parse(JSON.stringify(value));
 const stateOf = card => !card.opportunity ? 'none' : card.opportunity.enteredAt === null ? card.opportunity.attention : 'position';
 const hasRecord = (state, opportunity) => Boolean(opportunity && state.records.some(record => record.id === opportunity.id));
@@ -27,7 +28,7 @@ function createWorkspace(time = Date.now()) {
     symbol, bias: 'neutral', structure3m: 'unjudged', needsStructureReview: false,
     direction: 'none', opportunity: null, idleSince: time
   }]));
-  return { schemaVersion: 2, sequence: 0, revision: 0, lastSavedAt: null, cards, records: [] };
+  return { schemaVersion: 3, sequence: 0, revision: 0, lastSavedAt: null, cards, records: [] };
 }
 
 function cardFor(state, symbol) { if (!ORDER.includes(symbol)) throw new Error('未知品种'); return state.cards[symbol]; }
@@ -153,13 +154,12 @@ function instruction(card) {
   const state = stateOf(card);
   if (card.needsStructureReview) return ['先确认当前 3M 市场结构', '旧版本机会暂不可继续执行'];
   if (state === 'none') return card.direction === 'none' ? ['先确认 3M 结构与交易方向', '不找入场'] : ['等具体机会', '不找入场'];
-  if (state === 'wait') return ['等价格到关键位置', '不追价'];
-  if (state === 'near') return ['把注意力转回图表', '不提前入场'];
+  if (state === 'wait') return ['等既定条件成熟', '不提前入场'];
   if (state === 'signal') return ['按既定规则找入场信号', '不临时更换入场理由'];
   return ['只管理当前持仓', '本卡不找新入场'];
 }
 function assertState(state) {
-  if (!state || state.schemaVersion !== 2 || !Array.isArray(state.records) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw stateError('状态结构无效', 'state');
+  if (!state || state.schemaVersion !== 3 || !Array.isArray(state.records) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw stateError('状态结构无效', 'state');
   const active = new Map(); const ids = new Set();
   for (const symbol of ORDER) {
     const card = state.cards?.[symbol];
@@ -173,18 +173,32 @@ function assertState(state) {
     if ((opportunity.registeredAt === null) !== (opportunity.zone === '')) throw stateError('登记状态无效', `cards.${symbol}.opportunity.registeredAt`);
     if (opportunity.registeredAt === null ? opportunity.biasAtRegistration !== null || opportunity.structure3mAtRegistration !== null : !own(BIASES, opportunity.biasAtRegistration) || !own(STRUCTURES_3M, opportunity.structure3mAtRegistration)) throw stateError('登记快照无效', `cards.${symbol}.opportunity`);
     if (opportunity.invalidReason !== null && opportunity.invalidReason !== 'structure_change') throw stateError('失效原因无效', `cards.${symbol}.opportunity.invalidReason`);
-    const last = opportunity.stages.at(-1);
-    if (last.end !== null || last.start !== opportunity.stageSince || last.state !== stateOf(card) || (opportunity.enteredAt !== null) !== holding) throw stateError('阶段状态无效', `cards.${symbol}.opportunity.stages`);
-    for (let i = 1; i < opportunity.stages.length; i += 1) if (opportunity.stages[i - 1].end !== opportunity.stages[i].start || opportunity.stages[i - 1].state === opportunity.stages[i].state) throw stateError('阶段不连续', `cards.${symbol}.opportunity.stages.${i}`);
+    const last = assertTimeline(opportunity, `cards.${symbol}.opportunity`, true);
+    if (last.start !== opportunity.stageSince || last.state !== stateOf(card) || (opportunity.enteredAt !== null) !== holding) throw stateError('阶段状态无效', `cards.${symbol}.opportunity.stages`);
     active.set(opportunity.id, opportunity);
   }
   for (const [index, record] of state.records.entries()) {
     if (!record || ids.has(record.id) || Object.hasOwn(record, 'zoneDraft') || !record.zone?.trim() || !ORDER.includes(record.symbol) || !own(BIASES, record.biasAtRegistration) || !own(STRUCTURES_3M, record.structure3mAtRegistration)) throw stateError('记录无效', `records.${index}`);
     ids.add(record.id);
+    if (!ATTENTION.includes(record.attention)) throw stateError('记录注意力状态无效', `records.${index}.attention`);
+    const last = assertTimeline(record, `records.${index}`, record.endedAt === null);
+    if (last.start !== record.stageSince || last.state !== (record.enteredAt === null ? record.attention : 'position')) throw stateError('记录阶段状态无效', `records.${index}.stages`);
     if (record.endedAt === null) { const current = active.get(record.id); if (!current || JSON.stringify(recordSnapshot(current)) !== JSON.stringify(record)) throw stateError('活动记录不一致', `records.${index}`); }
     else if (active.has(record.id) || !own(RESULTS, record.reason) || (record.reason === 'closed') !== (record.enteredAt !== null) || (record.invalidReason !== null && record.invalidReason !== 'structure_change')) throw stateError('结束记录无效', `records.${index}`);
   }
   return true;
+}
+
+function assertTimeline(item, path, active) {
+  if (!Array.isArray(item.stages) || !item.stages.length || !Number.isSafeInteger(item.stageSince)) throw stateError('阶段字段无效', `${path}.stages`);
+  for (let i = 0; i < item.stages.length; i += 1) {
+    const stage = item.stages[i];
+    if (!stage || !storedStage(stage.state) || !Number.isSafeInteger(stage.start) || (stage.end !== null && !Number.isSafeInteger(stage.end))) throw stateError('阶段字段无效', `${path}.stages.${i}`);
+    if (i === item.stages.length - 1) {
+      if ((active && stage.end !== null) || (!active && stage.end === null)) throw stateError('阶段结束状态无效', `${path}.stages.${i}`);
+    } else if (stage.end !== item.stages[i + 1].start || stage.state === item.stages[i + 1].state) throw stateError('阶段不连续', `${path}.stages.${i + 1}`);
+  }
+  return item.stages.at(-1);
 }
 
 
@@ -224,7 +238,7 @@ function reportDiagnostic(error, context) {
 
 
 const APP_ID = 'intraday-task-cards';
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 const STORE_KEY = 'intraday-task-cards:v1:state';
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
@@ -259,9 +273,16 @@ const fullTime = time => `${dateKey(time)} ${timeText(time)}`;
 const cell = value => String(value).replace(/\|/g, '&#124;').replace(/[\r\n]+/g, '<br>');
 
 function migrateEnvelope(envelope) {
-  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== 1) return envelope;
-  const migrated = copy(envelope); const state = migrated.state;
-  if (!state || !state.cards || !Array.isArray(state.records)) return envelope;
+  if (!envelope || envelope.app !== APP_ID || ![1, 2].includes(envelope.schemaVersion)) return envelope;
+  const migrated = copy(envelope);
+  if (migrated.schemaVersion === 1) migrateV1ToV2(migrated);
+  if (migrated.schemaVersion === 2) migrateV2ToV3(migrated);
+  return migrated;
+}
+
+function migrateV1ToV2(migrated) {
+  const state = migrated.state;
+  if (!state || !state.cards || !Array.isArray(state.records)) return;
   state.schemaVersion = 2;
   for (const card of Object.values(state.cards)) {
     card.bias = 'neutral'; card.structure3m = 'unjudged';
@@ -277,7 +298,30 @@ function migrateEnvelope(envelope) {
     record.biasAtRegistration = 'neutral'; record.structure3mAtRegistration = 'unjudged'; record.invalidReason = null;
   }
   migrated.schemaVersion = 2;
-  return migrated;
+}
+
+function migrateV2ToV3(migrated) {
+  const state = migrated.state;
+  if (!state || !state.cards || !Array.isArray(state.records)) return;
+  state.schemaVersion = 3;
+  for (const card of Object.values(state.cards)) if (card.opportunity) migrateOpportunity(card.opportunity);
+  for (const record of state.records) migrateOpportunity(record);
+  migrated.schemaVersion = 3;
+}
+
+function migrateOpportunity(opportunity) {
+  if (!opportunity || typeof opportunity !== 'object') return;
+  if (opportunity.attention === 'near') opportunity.attention = 'wait';
+  if (!Array.isArray(opportunity.stages)) return;
+  const stages = [];
+  for (const source of opportunity.stages) {
+    const stage = source && typeof source === 'object' ? { ...source, state: source.state === 'near' ? 'wait' : source.state } : source;
+    const previous = stages.at(-1);
+    if (previous?.state === 'wait' && stage?.state === 'wait' && previous.end === stage.start) previous.end = stage.end;
+    else stages.push(stage);
+  }
+  opportunity.stages = stages;
+  if (stages.length) opportunity.stageSince = stages.at(-1).start;
 }
 
 

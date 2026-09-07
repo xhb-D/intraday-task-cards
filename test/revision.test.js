@@ -75,7 +75,7 @@ test('revision: 未判断与不兼容结构不能创建机会；迁移审查完�
   const state = fresh(); assert.equal(chooseSetup(state, 'GC', 'pullback', later()).changed, false);
   changeStructure(state, 'GC', 'bullish', later()); assert.equal(changeDirection(state, 'GC', 'short', later()).reason, 'structure'); assert.equal(chooseSetup(state, 'GC', 'pullback', later()).changed, false);
   const oldActive = fresh(); active(oldActive); const migrated = deserialize(legacyEnvelope(oldActive)).state;
-  assert.equal(migrated.cards.GC.needsStructureReview, true); assert.equal(chooseSetup(migrated, 'GC', 'range', later()).changed, false);
+  assert.equal(migrated.schemaVersion, 3); assert.equal(migrated.cards.GC.needsStructureReview, true); assert.equal(chooseSetup(migrated, 'GC', 'range', later()).changed, false);
   assert.equal(changeStructure(migrated, 'GC', 'bullish', later()).changed, true); assert.equal(migrated.cards.GC.needsStructureReview, false); assertState(migrated);
 });
 
@@ -88,7 +88,7 @@ test('revision: 登记快照不可被随后偏见、结构或位置再确认改�
 
 test('revision: v1 迁移保留持仓和旧方向；无机会归无方向；旧活跃机会必须先审查结构', () => {
   const blank = fresh(); changeStructure(blank, 'CL', 'bullish', later()); changeDirection(blank, 'CL', 'long', later());
-  const blankMigrated = deserialize(legacyEnvelope(blank)).state; assert.equal(blankMigrated.cards.CL.bias, 'neutral'); assert.equal(blankMigrated.cards.CL.structure3m, 'unjudged'); assert.equal(blankMigrated.cards.CL.direction, 'none');
+  const blankMigratedEnvelope = deserialize(legacyEnvelope(blank)); const blankMigrated = blankMigratedEnvelope.state; assert.equal(blankMigratedEnvelope.schemaVersion, 3); assert.equal(blankMigrated.cards.CL.bias, 'neutral'); assert.equal(blankMigrated.cards.CL.structure3m, 'unjudged'); assert.equal(blankMigrated.cards.CL.direction, 'none');
   const holding = fresh(); registered(holding); markEntered(holding, 'GC', later(), true); const heldMigrated = deserialize(legacyEnvelope(holding)).state;
   assert.equal(stateOf(heldMigrated.cards.GC), 'position'); assert.equal(heldMigrated.cards.GC.direction, 'long'); assert.equal(heldMigrated.cards.GC.structure3m, 'unjudged');
   const oldActive = fresh(); active(oldActive); const activeMigrated = deserialize(legacyEnvelope(oldActive)).state;
