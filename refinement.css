@@ -1,18 +1,43 @@
-/* Frozen V1 hierarchy refinement: state remains visually dominant. */
-.card{grid-template-rows:34px 40px 46px 46px 108px 102px 34px 36px 34px;row-gap:6px}
-.card .field-label{margin-bottom:5px;font-size:11px}
-.classifier .segment{height:28px}
-.classifier .option{height:28px;font-size:11px;border-color:#2c3a4c;color:#9eacbd}
-.bias-field .option.selected{background:#24313e;border-color:#60788f;color:#d9e4ee}
+/* Frozen V1 visual hierarchy: state first, execution direction second. */
+.card{grid-template-rows:31px 35px 42px 43px 96px 112px 34px 36px 34px;row-gap:5px;padding:13px 14px 14px}
+.page-head{align-items:flex-start;margin-bottom:10px}
+.restore-note{margin-top:2px;font-size:11px;line-height:16px;color:#8492a3}
+.stamp strong{font-size:11px;padding:3px 8px}
+.stamp p{margin-top:6px}
+.card .field-label{margin-bottom:4px;font-size:10px;letter-spacing:.035em}
+.card-head{padding-bottom:2px;border-bottom:1px solid #25313f}
+.classifier .segment{height:26px;gap:4px}
+.classifier .option{height:26px;border-color:#263341;background:#151e29;color:#8e9daf;font-size:11px}
+.bias-field .option.selected{background:#202c38;border-color:#52687d;color:#d3dee9;font-weight:600}
 .structure-segment{grid-template-columns:repeat(4,minmax(0,1fr))}
-.structure-field .option.selected{background:#29394a;border-color:#7996b7;color:#e4effb}
-.direction-field .option{height:32px;font-size:12px;font-weight:600}
-.direction-field .option.selected{background:#2f4054;border-color:#8aa2bf;color:#f4f8fd}
-.option:disabled{opacity:.42;color:#8390a0;background:#151d27;border-color:#253142}
+.structure-field .option.selected{background:#263545;border-color:#718ba5;color:#e0eaf5;font-weight:650}
+.direction-field .option{height:32px;border-color:#394c61;background:#182330;color:#b8c6d6;font-size:12px;font-weight:600}
+.direction-field .option.selected{background:#30445a;border-color:#91a9c4;color:#f4f8fd;font-weight:700}
+.opportunity-field .option{height:30px;border-color:#2c3b4c;font-size:12px}
+.opportunity-field .option.selected{background:#223042;border-color:#657f99;color:#e5eef8;font-weight:650}
+.option:disabled{cursor:not-allowed;opacity:.64;background:#101720;border-color:#22303d;border-style:dashed;color:#77869a}
+.option:focus-visible,.stage:focus-visible,.entry:focus-visible,.exit:focus-visible,.ending:focus-visible,.zone-confirm:focus-visible,.link:focus-visible,.history summary:focus-visible{outline:2px solid #a9c4df;outline-offset:2px}
 .migration-note{margin:3px 0 0;color:#dfbf8e;font-size:10px;line-height:14px}
-.card .task{padding-top:8px}
-.card .state-title{font-size:30px;line-height:43px}
-.card .instruction{font-size:13px;line-height:19px}
-.card .instruction span{font-size:12px;line-height:18px}
+.zone{height:34px;border-color:#304155;background:#0e151e}
+.zone-confirm{height:26px;border-color:#536d89;background:#213247;color:#dce8f6}
+.zone-note{height:17px;font-size:10px;line-height:17px}
+.card .task{display:flex;flex-direction:column;justify-content:center;border:1px solid #2b3949;border-left:3px solid var(--accent);border-radius:7px;background:#101720;padding:8px 10px}
+.card .task-meta{font-size:10px;line-height:14px}
+.card .state-title{margin-top:1px;font-size:31px;line-height:38px;font-weight:720;letter-spacing:.01em}
+.card .instruction{font-size:13px;line-height:18px;font-weight:560}
+.card .instruction span{font-size:12px;line-height:17px;color:#b5c2d2}
+.state-wait .task{background:#111a25}
+.state-near .task{background:#1c1a17}
+.state-signal .task{border-color:#6e4d3d;border-left-color:#f3ab82;background:#211914}
+.state-position .task{border-color:#514c70;border-left-color:#b9b0ed;background:#191827}
 .card .stage,.card .entry,.card .exit,.card .ending{height:34px}
-@media(min-width:960px) and (max-width:1050px){.shell{padding-left:12px;padding-right:12px}.cards{gap:10px}.card{padding:12px;grid-template-rows:32px 39px 45px 45px 106px 100px 33px 35px 33px}.symbol{font-size:25px}.card .option{font-size:11px}.direction-field .option{font-size:11px}}
+.card .stage{border-color:#334354;background:#17212d;color:#aebdce}
+.card .stage.selected{font-weight:700}
+.card .entry{background:#26384c;border-color:#708aa7;color:#edf4fc;font-weight:700}
+.card .entry.hot{background:#493328;border-color:#d38a66;color:#fff0e7}
+.card .exit{font-weight:700}
+.card .ending{border-style:dashed;color:#93a4b7}
+.history{margin-top:12px;border-color:#293747}
+.history summary{min-height:40px;padding:10px 13px}
+.history-tools button,.delete{border-color:#314357}
+@media(min-width:960px) and (max-width:1050px){.shell{padding-left:12px;padding-right:12px}.cards{gap:10px}.card{padding:12px;grid-template-rows:30px 34px 41px 42px 95px 110px 33px 35px 33px}.symbol{font-size:25px}.card .option{font-size:11px}.direction-field .option{font-size:11px}.card .state-title{font-size:29px}}

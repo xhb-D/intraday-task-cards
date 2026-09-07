@@ -92,7 +92,8 @@ test('M: 静态 UI 合约固定 GC → CL → ES 三卡，并为入场/平仓保
   const refinement = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
   assert.match(app, /当前偏见/); assert.match(app, /当前 3M 市场结构/); assert.match(app, /交易方向/); assert.match(app, /disabled aria-disabled="true"/);
   assert.match(app, /let stages = '<div class="empty"[^]*?if \(opportunity && !holding\)[^]*?else if \(holding\) ending/);
-  assert.match(refinement, /grid-template-rows:34px 40px 46px 46px 108px 102px 34px 36px 34px/);
+  assert.match(refinement, /grid-template-rows:31px 35px 42px 43px 96px 112px 34px 36px 34px/);
+  assert.match(refinement, /\.option:disabled\{cursor:not-allowed/); assert.match(refinement, /\.card \.task\{display:flex/);
 });
 
 test('N: 1,000 次随机操作后始终满足不变量、身份唯一和跨卡隔离边界', () => {
