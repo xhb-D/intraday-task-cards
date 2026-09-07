@@ -1,10 +1,10 @@
 /* Frozen V1 visual hierarchy: state first, execution direction second. */
-.card{grid-template-rows:31px 35px 42px 43px 96px 112px 34px 36px 34px;row-gap:5px;padding:13px 14px 14px}
+.card{grid-template-rows:31px 43px 43px 49px 98px 112px 34px 36px 34px;row-gap:5px;padding:13px 14px 14px}
 .page-head{align-items:flex-start;margin-bottom:10px}
 .restore-note{margin-top:2px;font-size:11px;line-height:16px;color:#8492a3}
 .stamp strong{font-size:11px;padding:3px 8px}
 .stamp p{margin-top:6px}
-.card .field-label{margin-bottom:4px;font-size:10px;letter-spacing:.035em}
+.card .field-label{margin-bottom:5px;font-size:10px;line-height:12px;letter-spacing:.035em}
 .card-head{padding-bottom:2px;border-bottom:1px solid #25313f}
 .classifier .segment{height:26px;gap:4px}
 .classifier .option{height:26px;border-color:#263341;background:#151e29;color:#8e9daf;font-size:11px}
@@ -40,4 +40,4 @@
 .history{margin-top:12px;border-color:#293747}
 .history summary{min-height:40px;padding:10px 13px}
 .history-tools button,.delete{border-color:#314357}
-@media(min-width:960px) and (max-width:1050px){.shell{padding-left:12px;padding-right:12px}.cards{gap:10px}.card{padding:12px;grid-template-rows:30px 34px 41px 42px 95px 110px 33px 35px 33px}.symbol{font-size:25px}.card .option{font-size:11px}.direction-field .option{font-size:11px}.card .state-title{font-size:29px}}
+@media(min-width:960px) and (max-width:1050px){.shell{padding-left:12px;padding-right:12px}.cards{gap:10px}.card{padding:12px;grid-template-rows:30px 43px 43px 49px 98px 110px 33px 35px 33px}.symbol{font-size:25px}.card .option{font-size:11px}.direction-field .option{font-size:11px}.card .state-title{font-size:29px}}
