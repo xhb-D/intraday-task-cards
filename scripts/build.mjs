@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
-const modules = ['src/model.js', 'src/persistence.js', 'src/startup.js', 'src/app.js'];
+const modules = ['src/model.js', 'src/persistence.js', 'src/startup.js', 'src/banner.js', 'src/app.js'];
 const stripModuleSyntax = source => source
   .replace(/^import\s+[\s\S]*?;\n/gm, '')
   .replace(/^export\s+/gm, '');

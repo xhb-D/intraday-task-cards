@@ -1,6 +1,7 @@
 import { ORDER, DIRECTIONS, SETUPS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, hasRecord, instruction, registrationStatus, chooseSetup, changeDirection, updateDraft, confirmPosition, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy } from './model.js';
 import { STORE_KEY, deserialize, makeEnvelope, validateEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './persistence.js';
 import { loadInitialWorkspace, saveWorkspace } from './startup.js';
+import { renderBannerVisibility } from './banner.js';
 
 const cardsEl = document.querySelector('#cards');
 const historyBody = document.querySelector('#history-body');
@@ -41,12 +42,12 @@ function storageStatus() {
   document.querySelector('#export-today').disabled = corruption;
   document.querySelector('#export-all').disabled = corruption;
   if (corruption) {
-    label.textContent = '存档异常 · 未覆盖'; message.textContent = '本地存档未通过校验。GC / CL / ES 已显示，但原存档未被清空或覆盖；请导出原始存档、恢复有效备份，或明确开始空白工作区。'; banner.hidden = false; retry.hidden = true; startFresh.hidden = false; cardsEl.inert = true; return;
+    label.textContent = '存档异常 · 未覆盖'; message.textContent = '本地存档未通过校验。GC / CL / ES 已显示，但原存档未被清空或覆盖；请导出原始存档、恢复有效备份，或明确开始空白工作区。'; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = false; cardsEl.inert = true; return;
   }
   startFresh.hidden = true;
   cardsEl.inert = false;
-  if (saveError) { label.textContent = '尚未保存 · 请勿刷新'; message.textContent = '当前浏览器的本地文件模式无法可靠保存。页面仍可使用，当前内容保留在内存；请导出 JSON 备份，或用 localhost 模式获得更稳定持久化。'; banner.hidden = false; retry.hidden = false; return; }
-  label.textContent = state.lastSavedAt ? `已本地保存 ${timeText(state.lastSavedAt)}` : '本地保存就绪'; banner.hidden = true; retry.hidden = true;
+  if (saveError) { label.textContent = '尚未保存 · 请勿刷新'; message.textContent = saveError === 'Conflict' ? '其他页面修改了存档；本页请先导出 JSON，再刷新读取最新状态。' : '当前浏览器的本地文件模式无法可靠保存。页面仍可使用，当前内容保留在内存；请导出 JSON 备份，或用 localhost 模式获得更稳定持久化。'; renderBannerVisibility(banner, message.textContent); retry.hidden = false; return; }
+  label.textContent = state.lastSavedAt ? `已本地保存 ${timeText(state.lastSavedAt)}` : '本地保存就绪'; message.textContent = ''; renderBannerVisibility(banner, message.textContent); retry.hidden = true;
 }
 function persist() {
   if (corruption) return false;
@@ -148,8 +149,8 @@ document.querySelector('#import-json').addEventListener('click', () => { documen
 document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { const raw = await file.text(); const envelope = deserialize(raw); validateEnvelope(envelope); dataDialog.close(); openConfirmation({ kind: 'restore', envelope }, '确认恢复并替换当前本地数据？', `备份保存时间：${fullTime(envelope.savedAt)}\n将整体替换三张卡、草稿和全部记录，不合并。\n恢复不会产生订单，也不代表交易平台持仓已变化。`, '确认替换并恢复', '请先导出当前 JSON 备份。恢复后必须对照交易平台核对。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
 document.querySelector('#storage-retry').addEventListener('click', persist);
 document.querySelector('#start-fresh').addEventListener('click', () => openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'));
-window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { saveError = 'Conflict'; document.querySelector('#storage-message').textContent = '其他页面修改了存档；本页请先导出 JSON，再刷新读取最新状态。'; document.querySelector('#storage-banner').hidden = false; } });
+window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { saveError = 'Conflict'; storageStatus(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { ORDER.forEach(symbol => { const element = document.querySelector(`article[data-symbol="${symbol}"] .duration`); if (element) element.textContent = duration(state.cards[symbol]); }); if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
-function safe(fn) { try { fn(); } catch (error) { console.error(error); document.querySelector('#error-banner').hidden = false; document.querySelector('#error-banner').textContent = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; cardsEl.inert = true; } }
+function safe(fn) { try { fn(); } catch (error) { console.error(error); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; banner.textContent = message; renderBannerVisibility(banner, message); cardsEl.inert = true; } }
 
 load(); renderAll(); storageStatus();
