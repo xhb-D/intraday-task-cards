@@ -339,7 +339,13 @@ function hasBannerMessage(message) {
 function renderBannerVisibility(element, message) {
   const visible = hasBannerMessage(message);
   element.hidden = !visible;
-  if (!visible) element.textContent = '';
+  return visible;
+}
+
+// Visibility is safe for both text-only and structured banners: it never owns child content.
+function renderTextBanner(element, message) {
+  const visible = renderBannerVisibility(element, message);
+  element.textContent = visible ? message : '';
   return visible;
 }
 
@@ -513,7 +519,7 @@ document.querySelector('#storage-retry').addEventListener('click', persist);
 document.querySelector('#start-fresh').addEventListener('click', () => openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'));
 window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到外部页面写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); saveError = 'Conflict'; storageStatus(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { ORDER.forEach(symbol => { const element = document.querySelector(`article[data-symbol="${symbol}"] .duration`); if (element) element.textContent = duration(state.cards[symbol]); }); if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
-function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; banner.textContent = message; renderBannerVisibility(banner, message); cardsEl.inert = true; } }
+function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; renderTextBanner(banner, message); cardsEl.inert = true; } }
 
 load(); renderAll(); storageStatus();
 

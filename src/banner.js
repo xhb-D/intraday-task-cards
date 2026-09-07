@@ -5,6 +5,12 @@ export function hasBannerMessage(message) {
 export function renderBannerVisibility(element, message) {
   const visible = hasBannerMessage(message);
   element.hidden = !visible;
-  if (!visible) element.textContent = '';
+  return visible;
+}
+
+// Visibility is safe for both text-only and structured banners: it never owns child content.
+export function renderTextBanner(element, message) {
+  const visible = renderBannerVisibility(element, message);
+  element.textContent = visible ? message : '';
   return visible;
 }
