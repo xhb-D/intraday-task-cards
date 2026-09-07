@@ -417,6 +417,13 @@ function externalConflictPolicy(locked) {
 }
 
 
+function toggleCardCollapsed(collapsedCards, symbol) {
+  const next = new Set(collapsedCards);
+  if (next.has(symbol)) next.delete(symbol); else next.add(symbol);
+  return next;
+}
+
+
 
 const cardsEl = document.querySelector('#cards');
 const historyBody = document.querySelector('#history-body');
@@ -432,6 +439,7 @@ let externalConflict = false;
 let restoredNotice = '';
 let historyScope = 'today';
 let currentDay = '';
+let collapsedCards = new Set();
 let storage = null;
 try { storage = globalThis.localStorage; } catch (_) { storage = null; }
 
@@ -514,6 +522,7 @@ function option(symbol, action, value, text, selected, disabled = false) {
 }
 function renderCard(symbol) {
   const card = state.cards[symbol]; const opportunity = card.opportunity; const status = stateOf(card); const holding = status === 'position';
+  const collapsed = collapsedCards.has(symbol);
   const [action, prohibition] = instruction(card); const registration = registrationStatus(state, symbol);
   const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
   const structure = `<section class="classifier structure-field"><span class="field-label">当前 3M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 3M 市场结构">${Object.entries(STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 结构</p>' : ''}</section>`;
@@ -526,7 +535,11 @@ function renderCard(symbol) {
     entry = `<button class="entry${status === 'signal' ? ' hot' : ''}" data-action="entry" data-symbol="${symbol}" type="button">${symbol} 已入场</button>`;
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
-  return `<article class="card state-${status}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><span class="tf">3M</span></header>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section><section class="task"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></section>${stages}${entry}${ending}</article>`;
+  const confirmedZone = opportunity?.registeredAt !== null && opportunity?.zone ? `<span class="summary-zone">${escapeHtml(opportunity.zone)}</span>` : '';
+  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">当前 3M 市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
+  const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
+  const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
+  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></div>${summary}</div></section>${entry}${ending}</article>`;
 }
 function recordsForScope() {
   const day = dateKey(now()); return state.records.filter(record => historyScope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
@@ -562,8 +575,13 @@ function finishConfirmation(confirmed) {
   if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；保留方向，回到无机会`, action.symbol); }
 }
 function handleAction(button) {
-  if (pending || corruption || externalConflict || button.disabled) return;
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
+  if (action === 'toggle-collapse') {
+    if (pending || corruption || externalConflict || button.disabled) return;
+    collapsedCards = toggleCardCollapsed(collapsedCards, symbol); renderAll();
+    document.querySelector(`article[data-symbol="${symbol}"] .card-toggle`)?.focus({ preventScroll: true }); announce(`${symbol} 卡片已${collapsedCards.has(symbol) ? '收起' : '展开'}`); return;
+  }
+  if (pending || corruption || externalConflict || button.disabled) return;
   const card = state.cards[symbol];
   if (action === 'bias') { if (changeBias(state, symbol, value)) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol); return; }
   if (action === 'structure') {

@@ -40,3 +40,27 @@
 .history summary{min-height:40px;padding:10px 13px}
 .history-tools button,.delete{border-color:#314357}
 @media(min-width:960px) and (max-width:1050px){.shell{padding-left:12px;padding-right:12px}.cards{gap:10px}.card{padding:12px;grid-template-rows:30px 43px 43px 49px 98px 110px 33px 35px 33px}.symbol{font-size:25px}.card .option{font-size:11px}.direction-field .option{font-size:11px}.card .state-title{font-size:29px}}
+
+/* V3 compact card preference: controls can collapse without entering task data. */
+.cards{align-items:start}
+.card{grid-template-rows:unset;align-self:start;container-type:inline-size}
+.card-head-actions{display:flex;align-items:center;gap:7px}
+.card-toggle{width:30px;height:30px;padding:0;display:grid;place-items:center;border:1px solid #334354;border-radius:6px;background:#151e29;color:#b7c5d6}
+.card-toggle:hover{border-color:#60758d;color:#e5edf8}
+.card-toggle:focus-visible{outline:2px solid #a9c4df;outline-offset:2px}
+.card-chevron{width:8px;height:8px;border-left:2px solid currentColor;border-top:2px solid currentColor;transform:rotate(-135deg);margin-top:-4px}
+.is-collapsed .card-chevron{transform:rotate(45deg);margin-top:4px}
+.card-controls{display:grid;grid-template-rows:43px 43px 49px 98px 34px;gap:5px}
+.card-controls[hidden]{display:none}
+.card .task{min-height:132px;padding:10px 12px}
+.task-content{display:grid;grid-template-columns:minmax(0,1fr) minmax(154px,.95fr);gap:14px;align-items:end;flex:1}
+.task-copy{min-width:0}
+.task-summary{margin:0;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px 16px;align-self:stretch}
+.task-summary div{min-width:0}
+.task-summary div:nth-child(n+3){padding-top:9px;border-top:1px solid #483d33}
+.task-summary dd{margin:0;color:#edf2f9;font-size:18px;line-height:23px;font-weight:650}
+.summary-zone{display:block;margin-top:5px;color:#bac3d0;font-size:13px;line-height:18px;font-weight:500;overflow-wrap:anywhere}
+.is-collapsed .task{margin-top:0}
+@media(max-width:1050px){.card-controls{grid-template-rows:43px 43px 49px auto 34px}.card .task{min-height:unset}.task-content{grid-template-columns:1fr;gap:9px}.task-summary{gap:8px 14px}.task-summary dd{font-size:17px;line-height:22px}}
+@media(max-width:629px){.card-head-actions{gap:6px}.card-toggle{width:29px;height:29px}.card .task{padding:10px}.task-summary dd{font-size:16px}}
+@container (max-width:390px){.task-content{grid-template-columns:1fr;gap:10px}.task-summary{gap:9px 14px}.task-summary dd{white-space:normal;overflow-wrap:anywhere}.card .task{min-height:unset}.is-collapsed .task{min-height:0}}
