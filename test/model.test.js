@@ -1,13 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { createWorkspace, assertState, stateOf, changeDirection, chooseSetup, updateDraft, confirmPosition, setStage, markEntered, markExited, endOpportunity, deleteRecord, registrationStatus } from '../src/model.js';
+import { createWorkspace, assertState, stateOf, changeStructure, changeDirection, chooseSetup, updateDraft, confirmPosition, setStage, markEntered, markExited, endOpportunity, deleteRecord, registrationStatus } from '../src/model.js';
 import { deserialize, exportMarkdown, makeEnvelope, serialize, validateEnvelope } from '../src/persistence.js';
 
 let time = 1_700_000_000_000;
 const later = () => (time += 1_000);
 const fresh = () => createWorkspace(later());
 function setup(state, symbol = 'GC', direction = 'long', type = 'pullback') {
+  assert.equal(changeStructure(state, symbol, direction === 'long' ? 'bullish' : 'bearish', later()).changed, true);
   assert.equal(changeDirection(state, symbol, direction, later()).changed, true);
   assert.equal(chooseSetup(state, symbol, type, later()).changed, true);
   return state.cards[symbol].opportunity;
@@ -26,9 +27,9 @@ test('A: GC、CL、ES 完全隔离，单卡持仓不锁住其他卡', () => {
 
 test('B: 方向空机会一次完成；已选无副作用；活跃机会需确认并可正确结束', () => {
   const state = fresh(); const revision = state.revision;
-  assert.equal(changeDirection(state, 'GC', 'long', later()).changed, true); const after = state.revision;
+  assert.equal(changeStructure(state, 'GC', 'bullish', later()).changed, true); assert.equal(changeDirection(state, 'GC', 'long', later()).changed, true); const after = state.revision;
   assert.equal(changeDirection(state, 'GC', 'long', later()).changed, false); assert.equal(state.revision, after); assert.equal(chooseSetup(state, 'GC', 'pullback', later()).changed, true);
-  assert.equal(changeDirection(state, 'GC', 'short', later()).needsConfirmation, true); assert.equal(stateOf(state.cards.GC), 'wait');
+  assert.equal(changeStructure(state, 'GC', 'range', later()).changed, true); assert.equal(changeDirection(state, 'GC', 'short', later()).needsConfirmation, true); assert.equal(stateOf(state.cards.GC), 'wait');
   assert.equal(changeDirection(state, 'GC', 'short', later(), true).changed, true); assert.equal(state.cards.GC.opportunity, null); assert.equal(state.cards.GC.direction, 'short'); assert.ok(state.revision > revision); assertState(state);
 });
 
@@ -81,30 +82,33 @@ test('J: 删除记录不改变当前任务；普通状态、入场和平仓都�
 test('K/L: 序列化恢复草稿、状态、持仓和历史；导入验证失败不被接受；Markdown 纯导出', () => {
   const state = fresh(); setup(state); updateDraft(state, 'GC', '未确认草稿'); setStage(state, 'GC', 'signal', later()); registered(state, 'CL'); markEntered(state, 'CL', later(), true);
   const before = JSON.stringify(state); const raw = serialize(state, later()); const restored = deserialize(raw); assert.deepEqual(restored.state, JSON.parse(before)); assert.equal(stateOf(restored.state.cards.GC), 'signal'); assert.equal(restored.state.cards.GC.opportunity.zoneDraft, '未确认草稿'); assert.equal(restored.state.records.length, 1); assert.equal(stateOf(restored.state.cards.CL), 'position');
-  assert.throws(() => deserialize('{"app":"bad"}')); const markdown = exportMarkdown(state, 'all', later()); assert.match(markdown, /CL/); assert.equal(JSON.stringify(state), before); assert.throws(() => validateEnvelope({ ...makeEnvelope(state), schemaVersion: 2 }));
+  assert.throws(() => deserialize('{"app":"bad"}')); const markdown = exportMarkdown(state, 'all', later()); assert.match(markdown, /登记时偏见/); assert.equal(JSON.stringify(state), before); assert.throws(() => validateEnvelope({ ...makeEnvelope(state), schemaVersion: 3 }));
 });
 
 test('M: 静态 UI 合约固定 GC → CL → ES 三卡，并为入场/平仓保留不同操作行', () => {
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
   assert.match(app, /ORDER\.map\(renderCard\)/); assert.match(css, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  const refinement = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
+  assert.match(app, /当前偏见/); assert.match(app, /当前 3M 市场结构/); assert.match(app, /交易方向/); assert.match(app, /disabled aria-disabled="true"/);
   assert.match(app, /let stages = '<div class="empty"[^]*?if \(opportunity && !holding\)[^]*?else if \(holding\) ending/);
-  assert.match(css, /grid-template-rows:34px 58px 122px 122px 38px 42px 38px/);
+  assert.match(refinement, /grid-template-rows:34px 40px 46px 46px 108px 102px 34px 36px 34px/);
 });
 
 test('N: 1,000 次随机操作后始终满足不变量、身份唯一和跨卡隔离边界', () => {
   const state = fresh(); let seed = 1337; const rand = () => (seed = (seed * 1664525 + 1013904223) >>> 0) / 2 ** 32;
   for (let i = 0; i < 1000; i += 1) {
-    const symbol = ['GC', 'CL', 'ES'][Math.floor(rand() * 3)]; const action = Math.floor(rand() * 9); const card = state.cards[symbol];
-    if (action === 0) changeDirection(state, symbol, ['none', 'long', 'short'][Math.floor(rand() * 3)], later(), true);
-    if (action === 1) chooseSetup(state, symbol, ['pullback', 'range', 'reversal'][Math.floor(rand() * 3)], later());
-    if (action === 2) updateDraft(state, symbol, `Z${i}`);
-    if (action === 3 && card.opportunity) confirmPosition(state, symbol, later());
-    if (action === 4) setStage(state, symbol, ['wait', 'near', 'signal'][Math.floor(rand() * 3)], later());
-    if (action === 5) markEntered(state, symbol, later(), true);
-    if (action === 6) markExited(state, symbol, later(), true);
-    if (action === 7) endOpportunity(state, symbol, rand() > .5 ? 'invalid' : 'canceled', later());
-    if (action === 8 && state.records.length) deleteRecord(state, state.records[Math.floor(rand() * state.records.length)].id);
+    const symbol = ['GC', 'CL', 'ES'][Math.floor(rand() * 3)]; const action = Math.floor(rand() * 10); const card = state.cards[symbol];
+    if (action === 0) changeStructure(state, symbol, ['unjudged', 'bullish', 'range', 'bearish'][Math.floor(rand() * 4)], later(), true);
+    if (action === 1) changeDirection(state, symbol, ['none', 'long', 'short'][Math.floor(rand() * 3)], later(), true);
+    if (action === 2) chooseSetup(state, symbol, ['pullback', 'range', 'reversal'][Math.floor(rand() * 3)], later());
+    if (action === 3) updateDraft(state, symbol, `Z${i}`);
+    if (action === 4 && card.opportunity) confirmPosition(state, symbol, later());
+    if (action === 5) setStage(state, symbol, ['wait', 'near', 'signal'][Math.floor(rand() * 3)], later());
+    if (action === 6) markEntered(state, symbol, later(), true);
+    if (action === 7) markExited(state, symbol, later(), true);
+    if (action === 8) endOpportunity(state, symbol, rand() > .5 ? 'invalid' : 'canceled', later());
+    if (action === 9 && state.records.length) deleteRecord(state, state.records[Math.floor(rand() * state.records.length)].id);
     assertState(state); assert.equal(new Set(state.records.map(record => record.id)).size, state.records.length);
   }
 });

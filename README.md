@@ -15,18 +15,39 @@ Safari 的 `file://` 本地文件模式是否允许 localStorage 由浏览器策
 ## 结构
 
 - `src/model.js`：纯业务状态机、机会/记录 identity 和不变量。
-- `src/persistence.js`：V1 envelope、结构校验、localStorage 序列化和 Markdown 导出。
+- `src/persistence.js`：V2 envelope、V1 迁移、结构校验、localStorage 序列化和 Markdown 导出。
 - `src/startup.js`：存储故障隔离；保证先创建内存工作区，再尝试恢复。
 - `src/app.js`：DOM 渲染、确认对话框和浏览器 I/O。
 - `dist/app.bundle.js`：供直接双击 `index.html` 使用的 classic-script 生产 bundle。
-- `styles.css`：固定 GC / CL / ES 三卡桌面优先界面。
-- `test/model.test.js`：验收场景与随机不变量测试。
+- `styles.css` 与 `refinement.css`：固定 GC / CL / ES 三卡桌面优先界面与信息层级微调。
+- `test/model.test.js` 与 `test/revision.test.js`：验收场景、迁移、结构门控与随机不变量测试。
+
+## 偏见、3M 结构与交易方向
+
+每张卡独立维护三个不同的手动字段：
+
+- **当前偏见**：偏多 / 无偏见 / 偏空。它只记录主观看法，不会自动改变 3M 结构、交易方向、机会或持仓；持仓期间也可更新。
+- **当前 3M 市场结构**：未判断 / 多头 / 震荡 / 空头。它是交易方向和新机会的唯一门控依据。
+- **交易方向**：只找多 / 只找空 / 暂无交易方向。它是执行层选择，不会反向推断或改写 3M 结构。
+
+允许矩阵如下：
+
+| 当前 3M 市场结构 | 可选交易方向 |
+| --- | --- |
+| 未判断 | 暂无交易方向 |
+| 多头 | 只找多、暂无交易方向 |
+| 震荡 | 只找多、只找空、暂无交易方向 |
+| 空头 | 只找空、暂无交易方向 |
+
+界面会禁用非法方向，状态机也会再次拒绝非法调用。只有非“暂无交易方向”且与当前 3M 结构兼容时，才可建立新机会。
+
+未入场的活跃机会如因结构变更而不再兼容，会先要求确认；确认后机会以“失效”结束，内部原因记录为 `structure_change`。持仓期间可以更新偏见和 3M 结构，即使与本笔方向冲突也不会自动平仓或改写本笔方向；待用户确认“已平仓”时，再按当时结构决定是否保留方向。
 
 ## 数据与保存
 
-每张卡保存方向、当前机会和空闲状态起点。机会保存稳定 `id`、已确认位置 `zone`、未确认草稿 `zoneDraft`、登记/入场/结束时间、注意力阶段及阶段片段。历史记录是机会的无草稿快照；删除记录不会触碰当前机会，也不会自动复活。
+每张卡保存偏见、3M 结构、交易方向、当前机会和空闲状态起点。机会保存稳定 `id`、已确认位置 `zone`、未确认草稿 `zoneDraft`、登记/入场/结束时间、注意力阶段及阶段片段。首次登记会冻结 `biasAtRegistration` 与 `structure3mAtRegistration` 快照；后续修改偏见、结构或重新确认位置都不会改写它们。历史记录是机会的无草稿快照；删除记录不会触碰当前机会，也不会自动复活。
 
-localStorage key 为 `intraday-task-cards:v1:state`，schemaVersion 为 `1`。完整 JSON 备份包含 `app`、`schemaVersion`、`savedAt`、`timezone` 和整个工作区；导入先校验再二次确认。
+localStorage key 保持为 `intraday-task-cards:v1:state`，当前 envelope `schemaVersion` 为 `2`。V1 存档会在读取时迁移：无机会卡归为“无偏见 / 未判断 / 暂无交易方向”；旧持仓保留旧方向并标记未判断结构；旧的未入场活跃机会会要求先确认当前 3M 结构，期间不能继续执行或新建机会。完整 JSON 备份包含 `app`、`schemaVersion`、`savedAt`、`timezone` 和整个工作区；导入先校验再二次确认。
 
 ## 验证
 
@@ -34,7 +55,7 @@ localStorage key 为 `intraday-task-cards:v1:state`，schemaVersion 为 `1`。�
 npm test
 ```
 
-测试覆盖三品种隔离、方向/机会切换、位置确认、注意力阶段、未登记结束、入场/平仓语义、删除不复活、恢复/导出，以及 1,000 次随机状态转换不变量检查。
+测试覆盖三品种隔离、偏见独立性、3M 结构矩阵和确认失效、持仓期间结构冲突、位置确认与登记快照、V1 迁移、注意力阶段、入场/平仓语义、删除不复活、恢复/导出，以及 1,000 次随机状态转换不变量检查。
 
 ## 已知限制
 

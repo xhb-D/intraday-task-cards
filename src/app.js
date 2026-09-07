@@ -1,4 +1,4 @@
-import { ORDER, DIRECTIONS, SETUPS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, hasRecord, instruction, registrationStatus, chooseSetup, changeDirection, updateDraft, confirmPosition, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy } from './model.js';
+import { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, SETUPS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, hasRecord, isDirectionAllowed, instruction, registrationStatus, changeBias, changeStructure, chooseSetup, changeDirection, updateDraft, confirmPosition, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy } from './model.js';
 import { STORE_KEY, deserialize, makeEnvelope, validateEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './persistence.js';
 import { loadInitialWorkspace, saveWorkspace } from './startup.js';
 import { renderBannerVisibility } from './banner.js';
@@ -69,13 +69,15 @@ function mutate(message, symbol, focus = '.state-title') {
   announce(message);
 }
 function option(symbol, action, value, text, selected, disabled = false) {
-  return `<button type="button" class="option${selected ? ' selected' : ''}" data-action="${action}" data-symbol="${symbol}" data-value="${value}" aria-pressed="${selected}"${disabled ? ' disabled' : ''}>${text}</button>`;
+  return `<button type="button" class="option ${action}${selected ? ' selected' : ''}" data-action="${action}" data-symbol="${symbol}" data-value="${value}" aria-pressed="${selected}"${disabled ? ' disabled aria-disabled="true"' : ''}>${text}</button>`;
 }
 function renderCard(symbol) {
   const card = state.cards[symbol]; const opportunity = card.opportunity; const status = stateOf(card); const holding = status === 'position';
   const [action, prohibition] = instruction(card); const registration = registrationStatus(state, symbol);
-  const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction)).join('')}</div>`;
-  const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.direction === 'none')).join('')}</div>`;
+  const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
+  const structure = `<section class="classifier structure-field"><span class="field-label">当前 3M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 3M 市场结构">${Object.entries(STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 结构</p>' : ''}</section>`;
+  const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.structure3m, key))).join('')}</div>`;
+  const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || card.direction === 'none' || !isDirectionAllowed(card.structure3m, card.direction))).join('')}</div>`;
   const position = `<div class="zone"><label for="zone-${symbol}">关键位置</label><input id="zone-${symbol}" data-zone="${symbol}" maxlength="100" autocomplete="off" spellcheck="false" value="${escapeHtml(opportunity?.zoneDraft || '')}" placeholder="${opportunity ? '输入后点确认' : '先建立机会'}"${!opportunity ? ' disabled' : holding ? ' readonly' : ''}><button class="zone-confirm" data-action="confirm-zone" data-symbol="${symbol}" type="button"${registration.enabled ? '' : ' disabled'}>${registration.label}</button></div><p class="zone-note ${registration.kind}">${registration.text}</p>`;
   let stages = '<div class="empty" aria-hidden="true"></div>', entry = '<div class="empty" aria-hidden="true"></div>', ending = '<div class="empty" aria-hidden="true"></div>';
   if (opportunity && !holding) {
@@ -83,7 +85,7 @@ function renderCard(symbol) {
     entry = `<button class="entry${status === 'signal' ? ' hot' : ''}" data-action="entry" data-symbol="${symbol}" type="button">${symbol} 已入场</button>`;
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
-  return `<article class="card state-${status}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><span class="tf">3M</span></header><section><span class="field-label">${holding ? '本笔方向' : '当前方向'}</span>${direction}</section><section><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section><section class="task"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></section>${stages}${entry}${ending}</article>`;
+  return `<article class="card state-${status}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><span class="tf">3M</span></header>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section><section class="task"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></section>${stages}${entry}${ending}</article>`;
 }
 function recordsForScope() {
   const day = dateKey(now()); return state.records.filter(record => historyScope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
@@ -111,8 +113,9 @@ function finishConfirmation(confirmed) {
   if (action.revision !== state.revision) { announce('任务已变化，本次确认未应用'); return; }
   if (action.kind === 'restore') { state = copy(action.envelope.state); state.lastSavedAt = action.envelope.savedAt; corruption = false; saveError = ''; restoredNotice = '已恢复所选备份。仍须对照交易平台核对当前任务与持仓。'; mutate('备份已恢复；旧记录未合并，不发送任何订单'); return; }
   if (action.kind === 'fresh') { state = createWorkspace(now()); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档将由这次新保存替换。'; mutate('已开始空白工作区；请按实际交易状态重新建立任务', null, null); return; }
-  const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && action.kind !== 'direction') return;
+  const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['direction', 'structure'].includes(action.kind)) return;
   if (action.kind === 'direction') { const result = changeDirection(state, action.symbol, action.direction, now(), true); if (result.changed) mutate(`${action.symbol} 旧机会因方向改变结束；当前无机会`, action.symbol); }
+  if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now(), true); if (result.changed) mutate(`${action.symbol} 3M 市场结构已更新；当前不兼容机会已失效`, action.symbol); }
   if (action.kind === 'entry') { const result = markEntered(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认入场；本卡进入持仓`, action.symbol); }
   if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；保留方向，回到无机会`, action.symbol); }
 }
@@ -120,6 +123,12 @@ function handleAction(button) {
   if (pending || corruption || button.disabled) return;
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
   const card = state.cards[symbol];
+  if (action === 'bias') { if (changeBias(state, symbol, value)) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol); return; }
+  if (action === 'structure') {
+    const result = changeStructure(state, symbol, value, now(), false);
+    if (result.needsConfirmation) openConfirmation({ kind: 'structure', symbol, structure3m: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前 3M 市场结构？`, `${symbol} 当前仍有${directionShort(card.direction)}头交易机会「${SETUPS[card.opportunity.type]}」。\n\n${STRUCTURES_3M[card.structure3m]} → ${STRUCTURES_3M[value]} 后，交易方向「${DIRECTIONS[card.direction]}」将不再合法，当前机会将结束为失效。`, '确认改变');
+    else if (result.changed) mutate(`${symbol} 当前 3M 市场结构：${STRUCTURES_3M[value]}`, symbol); return;
+  }
   if (action === 'direction') {
     const result = changeDirection(state, symbol, value, now(), false);
     if (result.needsConfirmation) openConfirmation({ kind: 'direction', symbol, direction: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前方向？`, `${DIRECTIONS[card.direction]} → ${DIRECTIONS[value]}\n改变方向将结束该机会并清空关键位置。其他品种保持不变。`, '确认改变', recordWarning(card.opportunity));

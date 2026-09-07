@@ -2,7 +2,9 @@
 (() => {
 'use strict';
 const ORDER = Object.freeze(['GC', 'CL', 'ES']);
-const DIRECTIONS = Object.freeze({ long: '只找多', short: '只找空', none: '暂无方向' });
+const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' });
+const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' });
+const DIRECTIONS = Object.freeze({ long: '只找多', short: '只找空', none: '暂无交易方向' });
 const SETUPS = Object.freeze({ pullback: '趋势回调', range: '区间反转', reversal: '趋势反转' });
 const STAGES = Object.freeze({ none: '无机会', wait: '等待', near: '接近', signal: '找信号', position: '持仓' });
 const RESULTS = Object.freeze({ invalid: '失效', canceled: '已取消', direction: '方向改变结束', closed: '已平仓' });
@@ -12,121 +14,122 @@ const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
 const copy = value => JSON.parse(JSON.stringify(value));
 const stateOf = card => !card.opportunity ? 'none' : card.opportunity.enteredAt === null ? card.opportunity.attention : 'position';
 const hasRecord = (state, opportunity) => Boolean(opportunity && state.records.some(record => record.id === opportunity.id));
-const recordSnapshot = opportunity => {
-  const { zoneDraft, ...record } = opportunity;
-  return copy(record);
+const isDirectionAllowed = (structure3m, direction) => {
+  if (!own(STRUCTURES_3M, structure3m) || !own(DIRECTIONS, direction)) return false;
+  if (direction === 'none' || structure3m === 'range') return true;
+  return structure3m === 'bullish' ? direction === 'long' : structure3m === 'bearish' ? direction === 'short' : false;
 };
+const recordSnapshot = opportunity => { const { zoneDraft, ...record } = opportunity; return copy(record); };
 
 function createWorkspace(time = Date.now()) {
-  const cards = Object.fromEntries(ORDER.map(symbol => [symbol, { symbol, direction: 'none', opportunity: null, idleSince: time }]));
-  return { schemaVersion: 1, sequence: 0, revision: 0, lastSavedAt: null, cards, records: [] };
+  const cards = Object.fromEntries(ORDER.map(symbol => [symbol, {
+    symbol, bias: 'neutral', structure3m: 'unjudged', needsStructureReview: false,
+    direction: 'none', opportunity: null, idleSince: time
+  }]));
+  return { schemaVersion: 2, sequence: 0, revision: 0, lastSavedAt: null, cards, records: [] };
 }
 
-function cardFor(state, symbol) {
-  if (!ORDER.includes(symbol)) throw new Error('未知品种');
-  return state.cards[symbol];
-}
-function opportunityFor(card) {
-  if (!card.opportunity) throw new Error('当前没有机会');
-  return card.opportunity;
-}
+function cardFor(state, symbol) { if (!ORDER.includes(symbol)) throw new Error('未知品种'); return state.cards[symbol]; }
+function opportunityFor(card) { if (!card.opportunity) throw new Error('当前没有机会'); return card.opportunity; }
 function touch(state) { state.revision += 1; return state; }
-function syncRecord(state, opportunity) {
-  const index = state.records.findIndex(record => record.id === opportunity.id);
-  if (index >= 0) state.records[index] = recordSnapshot(opportunity);
-}
+function syncRecord(state, opportunity) { const index = state.records.findIndex(record => record.id === opportunity.id); if (index >= 0) state.records[index] = recordSnapshot(opportunity); }
 function nextId(state, time) { state.sequence += 1; return `op-${state.sequence}-${time.toString(36)}`; }
 function transition(state, opportunity, stage, time) {
-  const current = opportunity.stages.at(-1);
-  if (current.state === stage) return false;
-  current.end = time;
-  opportunity.stageSince = time;
-  if (stage === 'position') opportunity.enteredAt = time;
-  else opportunity.attention = stage;
-  opportunity.stages.push({ state: stage, start: time, end: null });
-  syncRecord(state, opportunity);
-  return true;
+  const current = opportunity.stages.at(-1); if (current.state === stage) return false;
+  current.end = time; opportunity.stageSince = time;
+  if (stage === 'position') opportunity.enteredAt = time; else opportunity.attention = stage;
+  opportunity.stages.push({ state: stage, start: time, end: null }); syncRecord(state, opportunity); return true;
+}
+function closeOpportunity(state, card, reason, time, invalidReason = null) {
+  const opportunity = opportunityFor(card);
+  if (!own(RESULTS, reason) || (reason === 'closed') !== (opportunity.enteredAt !== null)) throw new Error('非法结束机会');
+  opportunity.stages.at(-1).end = time; opportunity.endedAt = time; opportunity.reason = reason;
+  if (reason === 'invalid') opportunity.invalidReason = invalidReason;
+  syncRecord(state, opportunity); card.opportunity = null; card.idleSince = time;
 }
 
+function changeBias(state, symbol, bias) {
+  if (!own(BIASES, bias)) throw new Error('偏见无效');
+  const card = cardFor(state, symbol); if (card.bias === bias) return false;
+  card.bias = bias; touch(state); assertState(state); return true;
+}
 function changeDirection(state, symbol, direction, time = Date.now(), confirmed = false) {
-  if (!own(DIRECTIONS, direction)) throw new Error('方向无效');
+  if (!own(DIRECTIONS, direction)) throw new Error('交易方向无效');
   const card = cardFor(state, symbol);
   if (stateOf(card) === 'position') return { changed: false, reason: 'holding' };
+  if (card.needsStructureReview) return { changed: false, reason: 'needs-structure-review' };
+  if (!isDirectionAllowed(card.structure3m, direction)) return { changed: false, reason: 'structure' };
   if (card.direction === direction) return { changed: false, reason: 'same' };
   if (card.opportunity && !confirmed) return { changed: false, needsConfirmation: true };
   if (card.opportunity) closeOpportunity(state, card, 'direction', time);
-  card.direction = direction;
-  touch(state); assertState(state);
-  return { changed: true };
+  card.direction = direction; touch(state); assertState(state); return { changed: true };
 }
-
+function changeStructure(state, symbol, structure3m, time = Date.now(), confirmed = false) {
+  if (!own(STRUCTURES_3M, structure3m)) throw new Error('3M 市场结构无效');
+  const card = cardFor(state, symbol); const status = stateOf(card);
+  if (card.structure3m === structure3m && !card.needsStructureReview) return { changed: false, reason: 'same' };
+  if (status === 'position') { card.structure3m = structure3m; card.needsStructureReview = false; touch(state); assertState(state); return { changed: true }; }
+  if (!card.opportunity) {
+    card.structure3m = structure3m; card.needsStructureReview = false;
+    if (!isDirectionAllowed(structure3m, card.direction)) card.direction = 'none';
+    touch(state); assertState(state); return { changed: true };
+  }
+  if (isDirectionAllowed(structure3m, card.direction)) { card.structure3m = structure3m; card.needsStructureReview = false; touch(state); assertState(state); return { changed: true }; }
+  if (!confirmed) return { changed: false, needsConfirmation: true };
+  closeOpportunity(state, card, 'invalid', time, 'structure_change');
+  card.structure3m = structure3m; card.needsStructureReview = false; card.direction = 'none';
+  touch(state); assertState(state); return { changed: true, invalidated: true };
+}
 function chooseSetup(state, symbol, type, time = Date.now()) {
   if (!own(SETUPS, type)) throw new Error('机会类型无效');
   const card = cardFor(state, symbol);
-  if (card.direction === 'none' || stateOf(card) === 'position' || card.opportunity?.type === type) return { changed: false };
+  if (card.needsStructureReview || card.direction === 'none' || !isDirectionAllowed(card.structure3m, card.direction) || stateOf(card) === 'position' || card.opportunity?.type === type) return { changed: false };
   if (card.opportunity) closeOpportunity(state, card, 'canceled', time);
   card.opportunity = {
     id: nextId(state, time), symbol, direction: card.direction, type,
     zone: '', zoneDraft: '', createdAt: time, registeredAt: null, zoneConfirmedAt: null,
+    biasAtRegistration: null, structure3mAtRegistration: null, invalidReason: null,
     enteredAt: null, endedAt: null, reason: null, attention: 'wait', stageSince: time,
     stages: [{ state: 'wait', start: time, end: null }]
   };
-  touch(state); assertState(state);
-  return { changed: true, opportunity: card.opportunity };
+  touch(state); assertState(state); return { changed: true, opportunity: card.opportunity };
 }
-
 function updateDraft(state, symbol, value) {
   const card = cardFor(state, symbol);
   if (!card.opportunity || stateOf(card) === 'position') return false;
   if (typeof value !== 'string' || value.length > 100) throw new Error('关键位置格式无效');
   if (card.opportunity.zoneDraft === value) return false;
-  card.opportunity.zoneDraft = value;
-  touch(state); assertState(state);
-  return true;
+  card.opportunity.zoneDraft = value; touch(state); assertState(state); return true;
 }
-
 function registrationStatus(state, symbol) {
   const opportunity = cardFor(state, symbol).opportunity;
   if (!opportunity) return { enabled: false, label: '确认', text: '先建立机会，再确认关键位置', kind: 'empty' };
-  const value = opportunity.zoneDraft.trim();
-  const present = hasRecord(state, opportunity);
+  const value = opportunity.zoneDraft.trim(); const present = hasRecord(state, opportunity);
   if (!present) return { enabled: Boolean(value), label: opportunity.registeredAt === null ? '确认' : '重新登记', text: opportunity.registeredAt === null ? '未登记 · 点击确认后写入记录' : '记录已删除 · 不会自动恢复', kind: opportunity.registeredAt === null ? 'draft' : 'removed' };
-  if (value !== opportunity.zone) return { enabled: Boolean(value), label: '确认', text: '修改待确认 · 记录保留原位置', kind: 'dirty' };
+  if (value !== opportunity.zone) return { enabled: Boolean(value), label: '修改待确认', text: '修改待确认 · 记录保留原位置', kind: 'dirty' };
   return { enabled: false, label: '已确认', text: '已登记 · 状态变化更新同一行', kind: 'confirmed' };
 }
-
 function confirmPosition(state, symbol, time = Date.now()) {
   const card = cardFor(state, symbol); const opportunity = opportunityFor(card);
   if (stateOf(card) === 'position') return false;
-  const value = opportunity.zoneDraft.trim();
-  if (!value) return false;
+  const value = opportunity.zoneDraft.trim(); if (!value) return false;
   const exists = hasRecord(state, opportunity);
   opportunity.zone = value; opportunity.zoneDraft = value; opportunity.zoneConfirmedAt = time;
-  if (exists) syncRecord(state, opportunity);
-  else { opportunity.registeredAt = time; state.records.push(recordSnapshot(opportunity)); }
-  touch(state); assertState(state);
-  return true;
+  if (!exists && opportunity.biasAtRegistration === null) { opportunity.biasAtRegistration = card.bias; opportunity.structure3mAtRegistration = card.structure3m; }
+  if (exists) syncRecord(state, opportunity); else { opportunity.registeredAt = time; state.records.push(recordSnapshot(opportunity)); }
+  touch(state); assertState(state); return true;
 }
-
 function setStage(state, symbol, stage, time = Date.now()) {
   if (!ATTENTION.includes(stage)) throw new Error('注意力状态无效');
   const card = cardFor(state, symbol);
-  if (!card.opportunity || stateOf(card) === 'position' || stateOf(card) === stage) return false;
+  if (!card.opportunity || card.needsStructureReview || stateOf(card) === 'position' || stateOf(card) === stage) return false;
   transition(state, card.opportunity, stage, time); touch(state); assertState(state); return true;
 }
-
 function markEntered(state, symbol, time = Date.now(), confirmed = false) {
   const card = cardFor(state, symbol);
-  if (!card.opportunity || !ATTENTION.includes(stateOf(card))) return { changed: false };
+  if (!card.opportunity || card.needsStructureReview || !ATTENTION.includes(stateOf(card))) return { changed: false };
   if (!confirmed) return { changed: false, needsConfirmation: true };
   transition(state, card.opportunity, 'position', time); touch(state); assertState(state); return { changed: true };
-}
-
-function closeOpportunity(state, card, reason, time) {
-  const opportunity = opportunityFor(card);
-  if (!own(RESULTS, reason) || (reason === 'closed') !== (opportunity.enteredAt !== null)) throw new Error('非法结束机会');
-  opportunity.stages.at(-1).end = time; opportunity.endedAt = time; opportunity.reason = reason;
-  syncRecord(state, opportunity); card.opportunity = null; card.idleSince = time;
 }
 function endOpportunity(state, symbol, reason, time = Date.now()) {
   if (!['invalid', 'canceled'].includes(reason)) throw new Error('结束原因无效');
@@ -138,46 +141,47 @@ function markExited(state, symbol, time = Date.now(), confirmed = false) {
   const card = cardFor(state, symbol);
   if (stateOf(card) !== 'position') return { changed: false };
   if (!confirmed) return { changed: false, needsConfirmation: true };
-  closeOpportunity(state, card, 'closed', time); touch(state); assertState(state); return { changed: true };
+  closeOpportunity(state, card, 'closed', time);
+  if (!isDirectionAllowed(card.structure3m, card.direction)) card.direction = 'none';
+  touch(state); assertState(state); return { changed: true };
 }
-function deleteRecord(state, id) {
-  const index = state.records.findIndex(record => record.id === id);
-  if (index < 0) return false;
-  state.records.splice(index, 1); touch(state); assertState(state); return true;
-}
+function deleteRecord(state, id) { const index = state.records.findIndex(record => record.id === id); if (index < 0) return false; state.records.splice(index, 1); touch(state); assertState(state); return true; }
 
 function recordProgress(record) { return record.endedAt !== null ? RESULTS[record.reason] : record.enteredAt !== null ? '持仓中' : '已登记'; }
 function instruction(card) {
   const state = stateOf(card);
-  if (state === 'none') return card.direction === 'none' ? ['先确定方向', '不找入场'] : ['等具体机会', '不找入场'];
+  if (card.needsStructureReview) return ['先确认当前 3M 市场结构', '旧版本机会暂不可继续执行'];
+  if (state === 'none') return card.direction === 'none' ? ['先确认 3M 结构与交易方向', '不找入场'] : ['等具体机会', '不找入场'];
   if (state === 'wait') return ['等价格到关键位置', '不追价'];
   if (state === 'near') return ['把注意力转回图表', '不提前入场'];
   if (state === 'signal') return ['按既定规则找入场信号', '不临时更换入场理由'];
   return ['只管理当前持仓', '本卡不找新入场'];
 }
-
 function assertState(state) {
-  if (!state || state.schemaVersion !== 1 || !Array.isArray(state.records) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw new Error('状态结构无效');
+  if (!state || state.schemaVersion !== 2 || !Array.isArray(state.records) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw new Error('状态结构无效');
   const active = new Map(); const ids = new Set();
   for (const symbol of ORDER) {
     const card = state.cards?.[symbol];
-    if (!card || card.symbol !== symbol || !own(DIRECTIONS, card.direction) || !Number.isSafeInteger(card.idleSince)) throw new Error('卡片结构无效');
-    const o = card.opportunity; if (!o) continue;
-    if (card.direction === 'none' || o.symbol !== symbol || o.direction !== card.direction || !own(SETUPS, o.type) || !ATTENTION.includes(o.attention) || o.endedAt !== null || o.reason !== null || active.has(o.id)) throw new Error('活动机会无效');
-    if (typeof o.zone !== 'string' || typeof o.zoneDraft !== 'string' || o.zone.length > 100 || o.zoneDraft.length > 100 || !Array.isArray(o.stages) || !o.stages.length) throw new Error('机会字段无效');
-    if ((o.registeredAt === null) !== (o.zone === '')) throw new Error('登记状态无效');
-    const last = o.stages.at(-1);
-    if (last.end !== null || last.start !== o.stageSince || last.state !== stateOf(card) || (o.enteredAt !== null) !== (stateOf(card) === 'position')) throw new Error('阶段状态无效');
-    for (let i = 1; i < o.stages.length; i += 1) if (o.stages[i - 1].end !== o.stages[i].start || o.stages[i - 1].state === o.stages[i].state) throw new Error('阶段不连续');
-    active.set(o.id, o);
+    if (!card || card.symbol !== symbol || !own(BIASES, card.bias) || !own(STRUCTURES_3M, card.structure3m) || typeof card.needsStructureReview !== 'boolean' || !own(DIRECTIONS, card.direction) || !Number.isSafeInteger(card.idleSince)) throw new Error('卡片结构无效');
+    const opportunity = card.opportunity; if (!opportunity) { if (!isDirectionAllowed(card.structure3m, card.direction)) throw new Error('空闲交易方向不兼容'); continue; }
+    const holding = stateOf(card) === 'position';
+    if (card.direction === 'none' || opportunity.symbol !== symbol || opportunity.direction !== card.direction || !own(SETUPS, opportunity.type) || !ATTENTION.includes(opportunity.attention) || opportunity.endedAt !== null || opportunity.reason !== null || active.has(opportunity.id)) throw new Error('活动机会无效');
+    if (card.needsStructureReview && holding) throw new Error('持仓不应等待结构审查');
+    if (!holding && !card.needsStructureReview && !isDirectionAllowed(card.structure3m, card.direction)) throw new Error('活动交易方向不兼容');
+    if (typeof opportunity.zone !== 'string' || typeof opportunity.zoneDraft !== 'string' || opportunity.zone.length > 100 || opportunity.zoneDraft.length > 100 || !Array.isArray(opportunity.stages) || !opportunity.stages.length) throw new Error('机会字段无效');
+    if ((opportunity.registeredAt === null) !== (opportunity.zone === '')) throw new Error('登记状态无效');
+    if (opportunity.registeredAt === null ? opportunity.biasAtRegistration !== null || opportunity.structure3mAtRegistration !== null : !own(BIASES, opportunity.biasAtRegistration) || !own(STRUCTURES_3M, opportunity.structure3mAtRegistration)) throw new Error('登记快照无效');
+    if (opportunity.invalidReason !== null && opportunity.invalidReason !== 'structure_change') throw new Error('失效原因无效');
+    const last = opportunity.stages.at(-1);
+    if (last.end !== null || last.start !== opportunity.stageSince || last.state !== stateOf(card) || (opportunity.enteredAt !== null) !== holding) throw new Error('阶段状态无效');
+    for (let i = 1; i < opportunity.stages.length; i += 1) if (opportunity.stages[i - 1].end !== opportunity.stages[i].start || opportunity.stages[i - 1].state === opportunity.stages[i].state) throw new Error('阶段不连续');
+    active.set(opportunity.id, opportunity);
   }
   for (const record of state.records) {
-    if (!record || ids.has(record.id) || Object.hasOwn(record, 'zoneDraft') || !record.zone?.trim() || !ORDER.includes(record.symbol)) throw new Error('记录无效');
+    if (!record || ids.has(record.id) || Object.hasOwn(record, 'zoneDraft') || !record.zone?.trim() || !ORDER.includes(record.symbol) || !own(BIASES, record.biasAtRegistration) || !own(STRUCTURES_3M, record.structure3mAtRegistration)) throw new Error('记录无效');
     ids.add(record.id);
-    if (record.endedAt === null) {
-      const current = active.get(record.id);
-      if (!current || JSON.stringify(recordSnapshot(current)) !== JSON.stringify(record)) throw new Error('活动记录不一致');
-    } else if (active.has(record.id) || !own(RESULTS, record.reason) || (record.reason === 'closed') !== (record.enteredAt !== null)) throw new Error('结束记录无效');
+    if (record.endedAt === null) { const current = active.get(record.id); if (!current || JSON.stringify(recordSnapshot(current)) !== JSON.stringify(record)) throw new Error('活动记录不一致'); }
+    else if (active.has(record.id) || !own(RESULTS, record.reason) || (record.reason === 'closed') !== (record.enteredAt !== null) || (record.invalidReason !== null && record.invalidReason !== 'structure_change')) throw new Error('结束记录无效');
   }
   return true;
 }
@@ -185,7 +189,7 @@ function assertState(state) {
 
 
 const APP_ID = 'intraday-task-cards';
-const SCHEMA_VERSION = 1;
+const SCHEMA_VERSION = 2;
 const STORE_KEY = 'intraday-task-cards:v1:state';
 const MAX_FILE_BYTES = 8 * 1024 * 1024;
 
@@ -200,13 +204,13 @@ function validateEnvelope(envelope) {
 function serialize(state, savedAt = Date.now()) { return JSON.stringify(makeEnvelope(state, savedAt)); }
 function deserialize(raw) {
   if (typeof raw !== 'string' || raw.length > MAX_FILE_BYTES) throw new Error('存档为空或超过 8 MB');
-  const envelope = JSON.parse(raw); validateEnvelope(envelope); return envelope;
+  const envelope = migrateEnvelope(JSON.parse(raw)); validateEnvelope(envelope); return envelope;
 }
 function exportMarkdown(state, scope = 'today', now = Date.now()) {
   assertState(state); const day = dateKey(now);
   const rows = state.records.filter(record => scope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
-  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 方向 | 机会 | 已确认关键位置 | 进展／结果 |', '| --- | --- | --- | --- | --- | --- |'];
-  for (const r of rows) lines.push(`| ${fullTime(r.registeredAt)} | ${r.symbol} | ${r.direction === 'long' ? '多' : '空'} | ${({pullback:'趋势回调',range:'区间反转',reversal:'趋势反转'})[r.type]} | ${cell(r.zone)} | ${r.endedAt !== null ? ({invalid:'失效',canceled:'已取消',direction:'方向改变结束',closed:'已平仓'})[r.reason] : r.enteredAt !== null ? '持仓中' : '已登记'} |`);
+  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 3M结构 | 进展／结果 |', '| --- | --- | --- | --- | --- | --- | --- |'];
+  for (const r of rows) lines.push(`| ${fullTime(r.registeredAt)} | ${r.symbol} | ${r.direction === 'long' ? '多' : '空'} | ${({pullback:'趋势回调',range:'区间反转',reversal:'趋势反转'})[r.type]} | ${cell(r.zone)} | 偏见：${({bullish:'偏多',neutral:'无偏见',bearish:'偏空'})[r.biasAtRegistration]}<br>3M结构：${({unjudged:'未判断',bullish:'多头',range:'震荡',bearish:'空头'})[r.structure3mAtRegistration]} | ${r.endedAt !== null ? ({invalid:'失效',canceled:'已取消',direction:'方向改变结束',closed:'已平仓'})[r.reason] : r.enteredAt !== null ? '持仓中' : '已登记'} |`);
   if (!rows.length) lines.push('', '本范围内尚无已登记且仍保留的记录。');
   return lines.concat(['', '---', '阶段起止时间和当前任务草稿保存在完整 JSON 备份中。']).join('\n');
 }
@@ -214,6 +218,28 @@ const dateKey = time => { const d = new Date(time); return `${d.getFullYear()}-$
 const timeText = time => { const d = new Date(time); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(value => String(value).padStart(2,'0')).join(':'); };
 const fullTime = time => `${dateKey(time)} ${timeText(time)}`;
 const cell = value => String(value).replace(/\|/g, '&#124;').replace(/[\r\n]+/g, '<br>');
+
+function migrateEnvelope(envelope) {
+  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== 1) return envelope;
+  const migrated = copy(envelope); const state = migrated.state;
+  if (!state || !state.cards || !Array.isArray(state.records)) return envelope;
+  state.schemaVersion = 2;
+  for (const card of Object.values(state.cards)) {
+    card.bias = 'neutral'; card.structure3m = 'unjudged';
+    card.needsStructureReview = Boolean(card.opportunity && card.opportunity.enteredAt === null);
+    if (!card.opportunity) card.direction = 'none';
+    if (card.opportunity) {
+      card.opportunity.biasAtRegistration = card.opportunity.registeredAt === null ? null : 'neutral';
+      card.opportunity.structure3mAtRegistration = card.opportunity.registeredAt === null ? null : 'unjudged';
+      card.opportunity.invalidReason = null;
+    }
+  }
+  for (const record of state.records) {
+    record.biasAtRegistration = 'neutral'; record.structure3mAtRegistration = 'unjudged'; record.invalidReason = null;
+  }
+  migrated.schemaVersion = 2;
+  return migrated;
+}
 
 
 
@@ -334,13 +360,15 @@ function mutate(message, symbol, focus = '.state-title') {
   announce(message);
 }
 function option(symbol, action, value, text, selected, disabled = false) {
-  return `<button type="button" class="option${selected ? ' selected' : ''}" data-action="${action}" data-symbol="${symbol}" data-value="${value}" aria-pressed="${selected}"${disabled ? ' disabled' : ''}>${text}</button>`;
+  return `<button type="button" class="option ${action}${selected ? ' selected' : ''}" data-action="${action}" data-symbol="${symbol}" data-value="${value}" aria-pressed="${selected}"${disabled ? ' disabled aria-disabled="true"' : ''}>${text}</button>`;
 }
 function renderCard(symbol) {
   const card = state.cards[symbol]; const opportunity = card.opportunity; const status = stateOf(card); const holding = status === 'position';
   const [action, prohibition] = instruction(card); const registration = registrationStatus(state, symbol);
-  const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction)).join('')}</div>`;
-  const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.direction === 'none')).join('')}</div>`;
+  const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
+  const structure = `<section class="classifier structure-field"><span class="field-label">当前 3M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 3M 市场结构">${Object.entries(STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 结构</p>' : ''}</section>`;
+  const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.structure3m, key))).join('')}</div>`;
+  const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || card.direction === 'none' || !isDirectionAllowed(card.structure3m, card.direction))).join('')}</div>`;
   const position = `<div class="zone"><label for="zone-${symbol}">关键位置</label><input id="zone-${symbol}" data-zone="${symbol}" maxlength="100" autocomplete="off" spellcheck="false" value="${escapeHtml(opportunity?.zoneDraft || '')}" placeholder="${opportunity ? '输入后点确认' : '先建立机会'}"${!opportunity ? ' disabled' : holding ? ' readonly' : ''}><button class="zone-confirm" data-action="confirm-zone" data-symbol="${symbol}" type="button"${registration.enabled ? '' : ' disabled'}>${registration.label}</button></div><p class="zone-note ${registration.kind}">${registration.text}</p>`;
   let stages = '<div class="empty" aria-hidden="true"></div>', entry = '<div class="empty" aria-hidden="true"></div>', ending = '<div class="empty" aria-hidden="true"></div>';
   if (opportunity && !holding) {
@@ -348,7 +376,7 @@ function renderCard(symbol) {
     entry = `<button class="entry${status === 'signal' ? ' hot' : ''}" data-action="entry" data-symbol="${symbol}" type="button">${symbol} 已入场</button>`;
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
-  return `<article class="card state-${status}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><span class="tf">3M</span></header><section><span class="field-label">${holding ? '本笔方向' : '当前方向'}</span>${direction}</section><section><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section><section class="task"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></section>${stages}${entry}${ending}</article>`;
+  return `<article class="card state-${status}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><span class="tf">3M</span></header>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section><section class="task"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></section>${stages}${entry}${ending}</article>`;
 }
 function recordsForScope() {
   const day = dateKey(now()); return state.records.filter(record => historyScope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
@@ -376,8 +404,9 @@ function finishConfirmation(confirmed) {
   if (action.revision !== state.revision) { announce('任务已变化，本次确认未应用'); return; }
   if (action.kind === 'restore') { state = copy(action.envelope.state); state.lastSavedAt = action.envelope.savedAt; corruption = false; saveError = ''; restoredNotice = '已恢复所选备份。仍须对照交易平台核对当前任务与持仓。'; mutate('备份已恢复；旧记录未合并，不发送任何订单'); return; }
   if (action.kind === 'fresh') { state = createWorkspace(now()); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档将由这次新保存替换。'; mutate('已开始空白工作区；请按实际交易状态重新建立任务', null, null); return; }
-  const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && action.kind !== 'direction') return;
+  const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['direction', 'structure'].includes(action.kind)) return;
   if (action.kind === 'direction') { const result = changeDirection(state, action.symbol, action.direction, now(), true); if (result.changed) mutate(`${action.symbol} 旧机会因方向改变结束；当前无机会`, action.symbol); }
+  if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now(), true); if (result.changed) mutate(`${action.symbol} 3M 市场结构已更新；当前不兼容机会已失效`, action.symbol); }
   if (action.kind === 'entry') { const result = markEntered(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认入场；本卡进入持仓`, action.symbol); }
   if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；保留方向，回到无机会`, action.symbol); }
 }
@@ -385,6 +414,12 @@ function handleAction(button) {
   if (pending || corruption || button.disabled) return;
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
   const card = state.cards[symbol];
+  if (action === 'bias') { if (changeBias(state, symbol, value)) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol); return; }
+  if (action === 'structure') {
+    const result = changeStructure(state, symbol, value, now(), false);
+    if (result.needsConfirmation) openConfirmation({ kind: 'structure', symbol, structure3m: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前 3M 市场结构？`, `${symbol} 当前仍有${directionShort(card.direction)}头交易机会「${SETUPS[card.opportunity.type]}」。\n\n${STRUCTURES_3M[card.structure3m]} → ${STRUCTURES_3M[value]} 后，交易方向「${DIRECTIONS[card.direction]}」将不再合法，当前机会将结束为失效。`, '确认改变');
+    else if (result.changed) mutate(`${symbol} 当前 3M 市场结构：${STRUCTURES_3M[value]}`, symbol); return;
+  }
   if (action === 'direction') {
     const result = changeDirection(state, symbol, value, now(), false);
     if (result.needsConfirmation) openConfirmation({ kind: 'direction', symbol, direction: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前方向？`, `${DIRECTIONS[card.direction]} → ${DIRECTIONS[value]}\n改变方向将结束该机会并清空关键位置。其他品种保持不变。`, '确认改变', recordWarning(card.opportunity));

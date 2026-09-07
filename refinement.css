@@ -1,0 +1,18 @@
+/* Frozen V1 hierarchy refinement: state remains visually dominant. */
+.card{grid-template-rows:34px 40px 46px 46px 108px 102px 34px 36px 34px;row-gap:6px}
+.card .field-label{margin-bottom:5px;font-size:11px}
+.classifier .segment{height:28px}
+.classifier .option{height:28px;font-size:11px;border-color:#2c3a4c;color:#9eacbd}
+.bias-field .option.selected{background:#24313e;border-color:#60788f;color:#d9e4ee}
+.structure-segment{grid-template-columns:repeat(4,minmax(0,1fr))}
+.structure-field .option.selected{background:#29394a;border-color:#7996b7;color:#e4effb}
+.direction-field .option{height:32px;font-size:12px;font-weight:600}
+.direction-field .option.selected{background:#2f4054;border-color:#8aa2bf;color:#f4f8fd}
+.option:disabled{opacity:.42;color:#8390a0;background:#151d27;border-color:#253142}
+.migration-note{margin:3px 0 0;color:#dfbf8e;font-size:10px;line-height:14px}
+.card .task{padding-top:8px}
+.card .state-title{font-size:30px;line-height:43px}
+.card .instruction{font-size:13px;line-height:19px}
+.card .instruction span{font-size:12px;line-height:18px}
+.card .stage,.card .entry,.card .exit,.card .ending{height:34px}
+@media(min-width:960px) and (max-width:1050px){.shell{padding-left:12px;padding-right:12px}.cards{gap:10px}.card{padding:12px;grid-template-rows:32px 39px 45px 45px 106px 100px 33px 35px 33px}.symbol{font-size:25px}.card .option{font-size:11px}.direction-field .option{font-size:11px}}
