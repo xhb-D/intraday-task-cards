@@ -8,6 +8,7 @@ export const RESULTS = Object.freeze({ invalid: '失效', canceled: '已取消',
 export const ATTENTION = Object.freeze(['wait', 'near', 'signal']);
 
 const own = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const stateError = (message, path) => Object.assign(new Error(message), { code: 'STATE_VALIDATION_ERROR', path });
 export const copy = value => JSON.parse(JSON.stringify(value));
 export const stateOf = card => !card.opportunity ? 'none' : card.opportunity.enteredAt === null ? card.opportunity.attention : 'position';
 export const hasRecord = (state, opportunity) => Boolean(opportunity && state.records.some(record => record.id === opportunity.id));
@@ -155,30 +156,30 @@ export function instruction(card) {
   return ['只管理当前持仓', '本卡不找新入场'];
 }
 export function assertState(state) {
-  if (!state || state.schemaVersion !== 2 || !Array.isArray(state.records) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw new Error('状态结构无效');
+  if (!state || state.schemaVersion !== 2 || !Array.isArray(state.records) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw stateError('状态结构无效', 'state');
   const active = new Map(); const ids = new Set();
   for (const symbol of ORDER) {
     const card = state.cards?.[symbol];
-    if (!card || card.symbol !== symbol || !own(BIASES, card.bias) || !own(STRUCTURES_3M, card.structure3m) || typeof card.needsStructureReview !== 'boolean' || !own(DIRECTIONS, card.direction) || !Number.isSafeInteger(card.idleSince)) throw new Error('卡片结构无效');
-    const opportunity = card.opportunity; if (!opportunity) { if (!isDirectionAllowed(card.structure3m, card.direction)) throw new Error('空闲交易方向不兼容'); continue; }
+    if (!card || card.symbol !== symbol || !own(BIASES, card.bias) || !own(STRUCTURES_3M, card.structure3m) || typeof card.needsStructureReview !== 'boolean' || !own(DIRECTIONS, card.direction) || !Number.isSafeInteger(card.idleSince)) throw stateError('卡片结构无效', `cards.${symbol}`);
+    const opportunity = card.opportunity; if (!opportunity) { if (!isDirectionAllowed(card.structure3m, card.direction)) throw stateError('空闲交易方向不兼容', `cards.${symbol}.direction`); continue; }
     const holding = stateOf(card) === 'position';
-    if (card.direction === 'none' || opportunity.symbol !== symbol || opportunity.direction !== card.direction || !own(SETUPS, opportunity.type) || !ATTENTION.includes(opportunity.attention) || opportunity.endedAt !== null || opportunity.reason !== null || active.has(opportunity.id)) throw new Error('活动机会无效');
-    if (card.needsStructureReview && holding) throw new Error('持仓不应等待结构审查');
-    if (!holding && !card.needsStructureReview && !isDirectionAllowed(card.structure3m, card.direction)) throw new Error('活动交易方向不兼容');
-    if (typeof opportunity.zone !== 'string' || typeof opportunity.zoneDraft !== 'string' || opportunity.zone.length > 100 || opportunity.zoneDraft.length > 100 || !Array.isArray(opportunity.stages) || !opportunity.stages.length) throw new Error('机会字段无效');
-    if ((opportunity.registeredAt === null) !== (opportunity.zone === '')) throw new Error('登记状态无效');
-    if (opportunity.registeredAt === null ? opportunity.biasAtRegistration !== null || opportunity.structure3mAtRegistration !== null : !own(BIASES, opportunity.biasAtRegistration) || !own(STRUCTURES_3M, opportunity.structure3mAtRegistration)) throw new Error('登记快照无效');
-    if (opportunity.invalidReason !== null && opportunity.invalidReason !== 'structure_change') throw new Error('失效原因无效');
+    if (card.direction === 'none' || opportunity.symbol !== symbol || opportunity.direction !== card.direction || !own(SETUPS, opportunity.type) || !ATTENTION.includes(opportunity.attention) || opportunity.endedAt !== null || opportunity.reason !== null || active.has(opportunity.id)) throw stateError('活动机会无效', `cards.${symbol}.opportunity`);
+    if (card.needsStructureReview && holding) throw stateError('持仓不应等待结构审查', `cards.${symbol}.needsStructureReview`);
+    if (!holding && !card.needsStructureReview && !isDirectionAllowed(card.structure3m, card.direction)) throw stateError('活动交易方向不兼容', `cards.${symbol}.direction`);
+    if (typeof opportunity.zone !== 'string' || typeof opportunity.zoneDraft !== 'string' || opportunity.zone.length > 100 || opportunity.zoneDraft.length > 100 || !Array.isArray(opportunity.stages) || !opportunity.stages.length) throw stateError('机会字段无效', `cards.${symbol}.opportunity`);
+    if ((opportunity.registeredAt === null) !== (opportunity.zone === '')) throw stateError('登记状态无效', `cards.${symbol}.opportunity.registeredAt`);
+    if (opportunity.registeredAt === null ? opportunity.biasAtRegistration !== null || opportunity.structure3mAtRegistration !== null : !own(BIASES, opportunity.biasAtRegistration) || !own(STRUCTURES_3M, opportunity.structure3mAtRegistration)) throw stateError('登记快照无效', `cards.${symbol}.opportunity`);
+    if (opportunity.invalidReason !== null && opportunity.invalidReason !== 'structure_change') throw stateError('失效原因无效', `cards.${symbol}.opportunity.invalidReason`);
     const last = opportunity.stages.at(-1);
-    if (last.end !== null || last.start !== opportunity.stageSince || last.state !== stateOf(card) || (opportunity.enteredAt !== null) !== holding) throw new Error('阶段状态无效');
-    for (let i = 1; i < opportunity.stages.length; i += 1) if (opportunity.stages[i - 1].end !== opportunity.stages[i].start || opportunity.stages[i - 1].state === opportunity.stages[i].state) throw new Error('阶段不连续');
+    if (last.end !== null || last.start !== opportunity.stageSince || last.state !== stateOf(card) || (opportunity.enteredAt !== null) !== holding) throw stateError('阶段状态无效', `cards.${symbol}.opportunity.stages`);
+    for (let i = 1; i < opportunity.stages.length; i += 1) if (opportunity.stages[i - 1].end !== opportunity.stages[i].start || opportunity.stages[i - 1].state === opportunity.stages[i].state) throw stateError('阶段不连续', `cards.${symbol}.opportunity.stages.${i}`);
     active.set(opportunity.id, opportunity);
   }
-  for (const record of state.records) {
-    if (!record || ids.has(record.id) || Object.hasOwn(record, 'zoneDraft') || !record.zone?.trim() || !ORDER.includes(record.symbol) || !own(BIASES, record.biasAtRegistration) || !own(STRUCTURES_3M, record.structure3mAtRegistration)) throw new Error('记录无效');
+  for (const [index, record] of state.records.entries()) {
+    if (!record || ids.has(record.id) || Object.hasOwn(record, 'zoneDraft') || !record.zone?.trim() || !ORDER.includes(record.symbol) || !own(BIASES, record.biasAtRegistration) || !own(STRUCTURES_3M, record.structure3mAtRegistration)) throw stateError('记录无效', `records.${index}`);
     ids.add(record.id);
-    if (record.endedAt === null) { const current = active.get(record.id); if (!current || JSON.stringify(recordSnapshot(current)) !== JSON.stringify(record)) throw new Error('活动记录不一致'); }
-    else if (active.has(record.id) || !own(RESULTS, record.reason) || (record.reason === 'closed') !== (record.enteredAt !== null) || (record.invalidReason !== null && record.invalidReason !== 'structure_change')) throw new Error('结束记录无效');
+    if (record.endedAt === null) { const current = active.get(record.id); if (!current || JSON.stringify(recordSnapshot(current)) !== JSON.stringify(record)) throw stateError('活动记录不一致', `records.${index}`); }
+    else if (active.has(record.id) || !own(RESULTS, record.reason) || (record.reason === 'closed') !== (record.enteredAt !== null) || (record.invalidReason !== null && record.invalidReason !== 'structure_change')) throw stateError('结束记录无效', `records.${index}`);
   }
   return true;
 }

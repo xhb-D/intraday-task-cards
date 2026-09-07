@@ -1,0 +1,18 @@
+{
+  "app": "intraday-task-cards",
+  "schemaVersion": 2,
+  "savedAt": 1788749842978,
+  "state": {
+    "schemaVersion": 2,
+    "sequence": 0,
+    "revision": 2,
+    "lastSavedAt": 1788749828227,
+    "cards": {
+      "GC": { "symbol": "GC", "direction": "none", "opportunity": null, "idleSince": 1788745837120, "bias": "bullish", "structure3m": "range", "needsStructureReview": false },
+      "CL": { "symbol": "CL", "direction": "none", "opportunity": null, "idleSince": 1788745837120, "bias": "neutral", "structure3m": "unjudged", "needsStructureReview": false },
+      "ES": { "symbol": "ES", "direction": "none", "opportunity": null, "idleSince": 1788745837120, "bias": "neutral", "structure3m": "unjudged", "needsStructureReview": false }
+    },
+    "records": []
+  },
+  "timezone": "Asia/Shanghai"
+}

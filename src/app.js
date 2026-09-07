@@ -2,6 +2,7 @@ import { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, SETUPS, STAGES, ATTENTION, RE
 import { STORE_KEY, deserialize, makeEnvelope, validateEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './persistence.js';
 import { loadInitialWorkspace, saveWorkspace } from './startup.js';
 import { renderBannerVisibility } from './banner.js';
+import { reportDiagnostic } from './diagnostics.js';
 
 const cardsEl = document.querySelector('#cards');
 const historyBody = document.querySelector('#history-body');
@@ -53,11 +54,22 @@ function persist() {
   if (corruption) return false;
   const saved = saveWorkspace(storage, state, now());
   if (saved.ok) { state.lastSavedAt = saved.savedAt; lastRaw = saved.raw; saveError = ''; storageStatus(); return true; }
-  saveError = saved.error; storageStatus(); return false;
+  const failure = Object.assign(new Error(saved.diagnostic?.message || saved.error), {
+    code: saved.diagnostic?.errorCode,
+    path: saved.diagnostic?.validationPath
+  });
+  reportDiagnostic(failure, saved.diagnostic || { phase: 'storage_write' }); saveError = saved.error; storageStatus(); return false;
 }
 function load() {
   const startup = loadInitialWorkspace(storage, now());
   state = startup.state; lastRaw = startup.lastRaw;
+  if (startup.diagnostic) {
+    const failure = Object.assign(new Error(startup.diagnostic.message), {
+      code: startup.diagnostic.errorCode,
+      path: startup.diagnostic.validationPath
+    });
+    reportDiagnostic(failure, startup.diagnostic);
+  }
   if (startup.mode === 'blank') persist();
   if (startup.mode === 'storage-unavailable') saveError = startup.error;
   if (startup.mode === 'recovery-required') corruption = true;
@@ -97,7 +109,7 @@ function renderHistory() {
   document.querySelectorAll('[data-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === historyScope)));
   historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUPS[record.type]}</td><td class="position">${escapeHtml(record.zone)}</td><td>${recordProgress(record)}</td><td><button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button></td></tr>`).join('');
 }
-function renderAll() { cardsEl.innerHTML = ORDER.map(renderCard).join(''); renderHistory(); storageStatus(); }
+function renderAll() { try { cardsEl.innerHTML = ORDER.map(renderCard).join(''); renderHistory(); storageStatus(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }
 function recordWarning(opportunity) {
   if (!hasRecord(state, opportunity)) return opportunity.registeredAt === null ? '关键位置尚未确认登记：这次操作不会自动新增机会记录。' : '本条记录已删除：这次操作不会把它自动恢复。';
   return opportunity.zoneDraft.trim() !== opportunity.zone ? `位置修改待确认：记录继续保留「${opportunity.zone}」。` : '';
@@ -110,7 +122,7 @@ function openConfirmation(action, title, message, confirm, warning = '') {
 function finishConfirmation(confirmed) {
   const action = pending; pending = null; dialog.close();
   if (!confirmed) { announce('已取消；任务、计时和机会记录保持不变'); return; }
-  if (action.revision !== state.revision) { announce('任务已变化，本次确认未应用'); return; }
+  if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
   if (action.kind === 'restore') { state = copy(action.envelope.state); state.lastSavedAt = action.envelope.savedAt; corruption = false; saveError = ''; restoredNotice = '已恢复所选备份。仍须对照交易平台核对当前任务与持仓。'; mutate('备份已恢复；旧记录未合并，不发送任何订单'); return; }
   if (action.kind === 'fresh') { state = createWorkspace(now()); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档将由这次新保存替换。'; mutate('已开始空白工作区；请按实际交易状态重新建立任务', null, null); return; }
   const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['direction', 'structure'].includes(action.kind)) return;
@@ -143,10 +155,10 @@ function handleAction(button) {
 }
 function download(text, filename, type) { const url = URL.createObjectURL(new Blob([text], { type })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
 
-cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button)); });
-cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }); });
+cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
+cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
 cardsEl.addEventListener('keydown', event => { if (event.target.matches('input[data-zone]') && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); event.target.closest('article').querySelector('.zone-confirm:not(:disabled)')?.focus(); } });
-historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }); });
+historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
 document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => finishConfirmation(true)); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });
 document.querySelector('#data-tools').addEventListener('click', () => { document.querySelector('#data-feedback').textContent = ''; dataDialog.showModal(); }); document.querySelector('#data-close').addEventListener('click', () => dataDialog.close());
@@ -158,8 +170,8 @@ document.querySelector('#import-json').addEventListener('click', () => { documen
 document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { const raw = await file.text(); const envelope = deserialize(raw); validateEnvelope(envelope); dataDialog.close(); openConfirmation({ kind: 'restore', envelope }, '确认恢复并替换当前本地数据？', `备份保存时间：${fullTime(envelope.savedAt)}\n将整体替换三张卡、草稿和全部记录，不合并。\n恢复不会产生订单，也不代表交易平台持仓已变化。`, '确认替换并恢复', '请先导出当前 JSON 备份。恢复后必须对照交易平台核对。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
 document.querySelector('#storage-retry').addEventListener('click', persist);
 document.querySelector('#start-fresh').addEventListener('click', () => openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'));
-window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { saveError = 'Conflict'; storageStatus(); } });
+window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到外部页面写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); saveError = 'Conflict'; storageStatus(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { ORDER.forEach(symbol => { const element = document.querySelector(`article[data-symbol="${symbol}"] .duration`); if (element) element.textContent = duration(state.cards[symbol]); }); if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
-function safe(fn) { try { fn(); } catch (error) { console.error(error); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; banner.textContent = message; renderBannerVisibility(banner, message); cardsEl.inert = true; } }
+function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; banner.textContent = message; renderBannerVisibility(banner, message); cardsEl.inert = true; } }
 
 load(); renderAll(); storageStatus();

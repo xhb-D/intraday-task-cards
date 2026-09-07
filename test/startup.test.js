@@ -31,7 +31,7 @@ test('startup: JSON parse 或 schema 不兼容不覆盖原始存档，转入明�
 test('startup: setItem 抛异常不丢失当前内存状态，保存结果明确失败且后续状态机仍可用', () => {
   const initial = loadInitialWorkspace(null, time); const before = JSON.stringify(initial.state);
   const saved = saveWorkspace({ setItem() { throw new DOMException('quota', 'QuotaExceededError'); }, getItem() { return null; } }, initial.state, time + 1);
-  assert.deepEqual(saved, { ok: false, error: 'QuotaExceededError' }); assert.equal(JSON.stringify(initial.state), before);
+  assert.equal(saved.ok, false); assert.equal(saved.error, 'STORAGE_WRITE_ERROR'); assert.equal(saved.diagnostic.errorCode, 'STORAGE_WRITE_ERROR'); assert.equal(saved.diagnostic.phase, 'storage_write'); assert.equal(JSON.stringify(initial.state), before);
   changeStructure(initial.state, 'CL', 'bearish', time + 2);
   assert.equal(changeDirection(initial.state, 'CL', 'short', time + 3).changed, true);
 });

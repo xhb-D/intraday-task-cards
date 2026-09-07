@@ -10,13 +10,17 @@ export function makeEnvelope(state, savedAt = Date.now()) {
   return { app: APP_ID, schemaVersion: SCHEMA_VERSION, savedAt, state: copy(state), timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || 'browser-local' };
 }
 export function validateEnvelope(envelope) {
-  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== SCHEMA_VERSION || !Number.isSafeInteger(envelope.savedAt) || typeof envelope.timezone !== 'string') throw new Error('不是受支持的状态卡备份，或版本不兼容');
+  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== SCHEMA_VERSION || !Number.isSafeInteger(envelope.savedAt) || typeof envelope.timezone !== 'string') throw Object.assign(new Error('不是受支持的状态卡备份，或版本不兼容'), { code: 'SCHEMA_ERROR', path: 'envelope' });
   assertState(envelope.state); return true;
 }
 export function serialize(state, savedAt = Date.now()) { return JSON.stringify(makeEnvelope(state, savedAt)); }
 export function deserialize(raw) {
   if (typeof raw !== 'string' || raw.length > MAX_FILE_BYTES) throw new Error('存档为空或超过 8 MB');
-  const envelope = migrateEnvelope(JSON.parse(raw)); validateEnvelope(envelope); return envelope;
+  let parsed;
+  try { parsed = JSON.parse(raw); } catch (error) { throw Object.assign(new Error('存档 JSON 无法解析', { cause: error }), { code: 'JSON_PARSE_ERROR', path: 'raw' }); }
+  let envelope;
+  try { envelope = migrateEnvelope(parsed); } catch (error) { throw Object.assign(new Error('存档迁移失败', { cause: error }), { code: 'MIGRATION_ERROR', path: 'envelope' }); }
+  validateEnvelope(envelope); return envelope;
 }
 export function exportMarkdown(state, scope = 'today', now = Date.now()) {
   assertState(state); const day = dateKey(now);

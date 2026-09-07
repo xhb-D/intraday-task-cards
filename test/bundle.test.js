@@ -11,4 +11,5 @@ test('production bundle: index 使用 classic script，bundle 没有 ES module �
   assert.doesNotMatch(bundle, /^import\s/m);
   assert.doesNotMatch(bundle, /https?:\/\//);
   assert.match(bundle, /loadInitialWorkspace/);
+  assert.match(bundle, /diagnosticFromError/);
 });
