@@ -3,6 +3,7 @@ import { STORE_KEY, deserialize, makeEnvelope, validateEnvelope, exportMarkdown,
 import { loadInitialWorkspace, saveWorkspace } from './startup.js';
 import { renderBannerVisibility, renderTextBanner } from './banner.js';
 import { reportDiagnostic } from './diagnostics.js';
+import { externalConflictPolicy } from './conflict.js';
 
 const cardsEl = document.querySelector('#cards');
 const historyBody = document.querySelector('#history-body');
@@ -14,6 +15,7 @@ let pending = null;
 let lastRaw = null;
 let saveError = '';
 let corruption = false;
+let externalConflict = false;
 let restoredNotice = '';
 let historyScope = 'today';
 let currentDay = '';
@@ -36,14 +38,27 @@ function storageStatus() {
   const message = document.querySelector('#storage-message');
   const retry = document.querySelector('#storage-retry');
   const startFresh = document.querySelector('#start-fresh');
+  const importJson = document.querySelector('#import-json');
+  const importFile = document.querySelector('#import-file');
+  const confirm = document.querySelector('#dialog-confirm');
+  const policy = externalConflictPolicy(externalConflict);
   document.querySelector('#restore-note').textContent = restoredNotice;
   document.querySelector('#restore-note').hidden = !restoredNotice;
   document.querySelector('#export-raw').hidden = !corruption;
   document.querySelector('#export-json').disabled = corruption;
   document.querySelector('#export-today').disabled = corruption;
   document.querySelector('#export-all').disabled = corruption;
+  importJson.disabled = policy.disableDangerousDataActions;
+  importFile.disabled = policy.disableDangerousDataActions;
+  startFresh.disabled = policy.disableDangerousDataActions;
+  confirm.disabled = policy.disableDangerousDataActions;
+  historyBody.inert = policy.historyInert;
+  document.querySelectorAll('[data-delete]').forEach(button => { button.disabled = policy.historyInert; });
   if (corruption) {
     label.textContent = '存档异常 · 未覆盖'; message.textContent = '本地存档未通过校验。GC / CL / ES 已显示，但原存档未被清空或覆盖；请导出原始存档、恢复有效备份，或明确开始空白工作区。'; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = false; cardsEl.inert = true; return;
+  }
+  if (externalConflict) {
+    label.textContent = '检测到外部修改 · 当前页面只读'; message.textContent = policy.message; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; cardsEl.inert = policy.cardsInert; return;
   }
   startFresh.hidden = true;
   cardsEl.inert = false;
@@ -52,7 +67,8 @@ function storageStatus() {
 }
 function persist() {
   if (corruption) return false;
-  const saved = saveWorkspace(storage, state, now());
+  const policy = externalConflictPolicy(externalConflict);
+  const saved = saveWorkspace(storage, state, now(), { allowWrite: policy.allowPersist });
   if (saved.ok) { state.lastSavedAt = saved.savedAt; lastRaw = saved.raw; saveError = ''; storageStatus(); return true; }
   const failure = Object.assign(new Error(saved.diagnostic?.message || saved.error), {
     code: saved.diagnostic?.errorCode,
@@ -122,6 +138,7 @@ function openConfirmation(action, title, message, confirm, warning = '') {
 function finishConfirmation(confirmed) {
   const action = pending; pending = null; dialog.close();
   if (!confirmed) { announce('已取消；任务、计时和机会记录保持不变'); return; }
+  if (externalConflict) { announce('检测到其他页面修改；当前页面已锁定，本次确认未应用'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
   if (action.kind === 'restore') { state = copy(action.envelope.state); state.lastSavedAt = action.envelope.savedAt; corruption = false; saveError = ''; restoredNotice = '已恢复所选备份。仍须对照交易平台核对当前任务与持仓。'; mutate('备份已恢复；旧记录未合并，不发送任何订单'); return; }
   if (action.kind === 'fresh') { state = createWorkspace(now()); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档将由这次新保存替换。'; mutate('已开始空白工作区；请按实际交易状态重新建立任务', null, null); return; }
@@ -132,7 +149,7 @@ function finishConfirmation(confirmed) {
   if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；保留方向，回到无机会`, action.symbol); }
 }
 function handleAction(button) {
-  if (pending || corruption || button.disabled) return;
+  if (pending || corruption || externalConflict || button.disabled) return;
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
   const card = state.cards[symbol];
   if (action === 'bias') { if (changeBias(state, symbol, value)) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol); return; }
@@ -156,9 +173,9 @@ function handleAction(button) {
 function download(text, filename, type) { const url = URL.createObjectURL(new Blob([text], { type })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
 
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
-cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
+cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption || externalConflict) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
 cardsEl.addEventListener('keydown', event => { if (event.target.matches('input[data-zone]') && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); event.target.closest('article').querySelector('.zone-confirm:not(:disabled)')?.focus(); } });
-historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
+historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || externalConflict || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
 document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => finishConfirmation(true)); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });
 document.querySelector('#data-tools').addEventListener('click', () => { document.querySelector('#data-feedback').textContent = ''; dataDialog.showModal(); }); document.querySelector('#data-close').addEventListener('click', () => dataDialog.close());
@@ -166,11 +183,11 @@ document.querySelector('#export-today').addEventListener('click', () => { downlo
 document.querySelector('#export-all').addEventListener('click', () => { download(exportMarkdown(state, 'all'), '日内机会_全部.md', 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
 document.querySelector('#export-json').addEventListener('click', () => { download(JSON.stringify(makeEnvelope(state), null, 2), `日内状态卡_完整备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成完整备份下载。'; });
 document.querySelector('#export-raw').addEventListener('click', () => { download(lastRaw || '', `日内状态卡_原始存档_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始存档；原数据未修改。'; });
-document.querySelector('#import-json').addEventListener('click', () => { document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
-document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { const raw = await file.text(); const envelope = deserialize(raw); validateEnvelope(envelope); dataDialog.close(); openConfirmation({ kind: 'restore', envelope }, '确认恢复并替换当前本地数据？', `备份保存时间：${fullTime(envelope.savedAt)}\n将整体替换三张卡、草稿和全部记录，不合并。\n恢复不会产生订单，也不代表交易平台持仓已变化。`, '确认替换并恢复', '请先导出当前 JSON 备份。恢复后必须对照交易平台核对。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
-document.querySelector('#storage-retry').addEventListener('click', persist);
-document.querySelector('#start-fresh').addEventListener('click', () => openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'));
-window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到外部页面写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); saveError = 'Conflict'; storageStatus(); } });
+document.querySelector('#import-json').addEventListener('click', () => { if (externalConflict) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
+document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (externalConflict) { document.querySelector('#data-feedback').textContent = '检测到其他页面修改；请刷新读取最新状态后再恢复备份。'; return; } const raw = await file.text(); const envelope = deserialize(raw); validateEnvelope(envelope); if (externalConflict) { document.querySelector('#data-feedback').textContent = '检测到其他页面修改；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', envelope }, '确认恢复并替换当前本地数据？', `备份保存时间：${fullTime(envelope.savedAt)}\n将整体替换三张卡、草稿和全部记录，不合并。\n恢复不会产生订单，也不代表交易平台持仓已变化。`, '确认替换并恢复', '请先导出当前 JSON 备份。恢复后必须对照交易平台核对。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
+document.querySelector('#storage-retry').addEventListener('click', () => { if (!externalConflict) persist(); });
+document.querySelector('#start-fresh').addEventListener('click', () => { if (!externalConflict) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
+window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到外部页面写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); externalConflict = true; saveError = 'Conflict'; storageStatus(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { ORDER.forEach(symbol => { const element = document.querySelector(`article[data-symbol="${symbol}"] .duration`); if (element) element.textContent = duration(state.cards[symbol]); }); if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
 function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; renderTextBanner(banner, message); cardsEl.inert = true; } }
 

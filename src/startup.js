@@ -29,7 +29,11 @@ export function loadInitialWorkspace(storage, time = Date.now()) {
 }
 
 // Saving is isolated too: failed browser storage never mutates the workspace.
-export function saveWorkspace(storage, state, time = Date.now()) {
+export function saveWorkspace(storage, state, time = Date.now(), { allowWrite = true } = {}) {
+  if (!allowWrite) {
+    const diagnostic = diagnosticFromError(Object.assign(new Error('外部页面已写入较新存档'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' });
+    return { ok: false, error: 'Conflict', diagnostic };
+  }
   if (!storage || typeof storage.setItem !== 'function' || typeof storage.getItem !== 'function') {
     const diagnostic = diagnosticFromError(new Error('StorageUnavailable'), { phase: 'storage_write' });
     return { ok: false, error: diagnostic.errorCode, diagnostic };
