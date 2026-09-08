@@ -5,6 +5,8 @@ import { renderBannerVisibility, renderTextBanner } from './banner.js';
 import { reportDiagnostic } from './diagnostics.js';
 import { externalConflictPolicy } from './conflict.js';
 import { toggleCardCollapsed } from './ui-preferences.js';
+import { initRiskDashboard } from './risk-dashboard.js';
+import { initAppearance } from './appearance.js';
 
 const cardsEl = document.querySelector('#cards');
 const historyBody = document.querySelector('#history-body');
@@ -203,4 +205,10 @@ window.addEventListener('storage', event => { if (event.key === STORE_KEY && eve
 window.addEventListener('focus', () => renderAll()); setInterval(() => { ORDER.forEach(symbol => { const element = document.querySelector(`article[data-symbol="${symbol}"] .duration`); if (element) element.textContent = duration(state.cards[symbol]); }); if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
 function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; renderTextBanner(banner, message); cardsEl.inert = true; } }
 
+initAppearance(document.querySelector('#appearance-select'));
+try { initRiskDashboard(document.querySelector('#risk-dashboard-host')); } catch (error) {
+  reportDiagnostic(error, { phase: 'risk_dashboard_init' });
+  const riskHost = document.querySelector('#risk-dashboard-host');
+  if (riskHost) riskHost.textContent = 'Trading Risk Manager 风险看板暂不可用；GC / CL / ES 状态卡仍可正常使用。';
+}
 load(); renderAll(); storageStatus();

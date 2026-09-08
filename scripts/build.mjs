@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 
-const modules = ['src/model.js', 'src/diagnostics.js', 'src/persistence.js', 'src/startup.js', 'src/banner.js', 'src/conflict.js', 'src/ui-preferences.js', 'src/app.js'];
+const modules = ['src/appearance.js', 'src/risk-manager/utils.js', 'src/risk-manager/risk-snapshot.js', 'src/risk-manager/risk-engine.js', 'src/risk-manager/account-service.js', 'src/risk-manager/session-service.js', 'src/risk-manager/migration.js', 'src/risk-manager/storage/local-storage-adapter.js', 'src/risk-dashboard.js', 'src/model.js', 'src/diagnostics.js', 'src/persistence.js', 'src/startup.js', 'src/banner.js', 'src/conflict.js', 'src/ui-preferences.js', 'src/app.js'];
 const stripModuleSyntax = source => source
   .replace(/^import\s+[\s\S]*?;\n/gm, '')
   .replace(/^export\s+/gm, '');

@@ -1,0 +1,114 @@
+/* Shared visual language with Trading Risk Manager. */
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg-page: #0f1420;
+  --bg-surface: #1a2233;
+  --bg-surface-secondary: #232e45;
+  --text-primary: #e8ecf4;
+  --text-secondary: #93a1b8;
+  --text-tertiary: #6b7a94;
+  --border-primary: #33415e;
+  --border-secondary: #232e45;
+  --theme-accent: #4a9eff;
+  --on-accent: #0b1220;
+  --success: #2ecc71;
+  --warning: #f1c40f;
+  --danger: #e74c3c;
+  --overlay-bg: rgba(0, 0, 0, .6);
+  --shadow-card: none;
+  --bg: var(--bg-page);
+  --panel: var(--bg-surface);
+  --line: var(--border-primary);
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --control: var(--bg-surface-secondary);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --bg-page: #f5f5f7;
+  --bg-surface: #ffffff;
+  --bg-surface-secondary: #f2f2f7;
+  --text-primary: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #86868b;
+  --border-primary: rgba(0, 0, 0, .14);
+  --border-secondary: rgba(0, 0, 0, .08);
+  --theme-accent: #007aff;
+  --on-accent: #ffffff;
+  --success: #248a3d;
+  --warning: #b25000;
+  --danger: #d70015;
+  --overlay-bg: rgba(0, 0, 0, .25);
+  --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.06);
+  --bg: var(--bg-page);
+  --panel: var(--bg-surface);
+  --line: var(--border-primary);
+  --text: var(--text-primary);
+  --muted: var(--text-secondary);
+  --control: var(--bg-surface-secondary);
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme]) {
+    color-scheme: light;
+    --bg-page: #f5f5f7;
+    --bg-surface: #ffffff;
+    --bg-surface-secondary: #f2f2f7;
+    --text-primary: #1d1d1f;
+    --text-secondary: #6e6e73;
+    --text-tertiary: #86868b;
+    --border-primary: rgba(0, 0, 0, .14);
+    --border-secondary: rgba(0, 0, 0, .08);
+    --theme-accent: #007aff;
+    --on-accent: #ffffff;
+    --success: #248a3d;
+    --warning: #b25000;
+    --danger: #d70015;
+    --overlay-bg: rgba(0, 0, 0, .25);
+    --shadow-card: 0 1px 2px rgba(0,0,0,.04), 0 4px 14px rgba(0,0,0,.06);
+    --bg: var(--bg-page);
+    --panel: var(--bg-surface);
+    --line: var(--border-primary);
+    --text: var(--text-primary);
+    --muted: var(--text-secondary);
+    --control: var(--bg-surface-secondary);
+  }
+}
+
+.stamp-controls{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.appearance-label{color:var(--text-secondary);font-size:11px}
+.appearance-select{min-height:29px;padding:3px 8px;border:1px solid var(--border-primary);border-radius:7px;background:var(--bg-surface-secondary);color:var(--text-primary);font:inherit;font-size:11px}
+.appearance-select:focus-visible{outline:2px solid color-mix(in srgb,var(--theme-accent) 60%,transparent);outline-offset:2px}
+
+body{background:var(--bg-page);color:var(--text-primary)}
+.stamp strong,.tf{color:var(--text-primary);background:var(--bg-surface-secondary);border-color:var(--border-primary)}
+.stamp p,.link,.subtitle,.restore-note,.field-label,.zone label,.zone-note,.task-meta,.instruction span,.history-body>p,.feedback,.caution{color:var(--text-secondary)}
+.card,.history,.dialog,.risk-dialog{background:var(--bg-surface);border-color:var(--border-primary);box-shadow:var(--shadow-card);color:var(--text-primary)}
+.card-head,.task,.history summary,th,td{border-color:var(--border-secondary)}
+.classifier .option,.option,.stage,.entry,.ending,.card-toggle,.history-tools button,.delete,.dialog-actions button,.data-grid button,.banner button{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-secondary)}
+.option.selected,.stage.selected,.history-tools button[aria-pressed=true]{background:color-mix(in srgb,var(--accent) 14%,var(--bg-surface));border-color:var(--accent);color:var(--text-primary)}
+.option:disabled{background:color-mix(in srgb,var(--bg-surface-secondary) 45%,var(--bg-page));border-color:var(--border-primary);color:var(--text-tertiary)}
+.readonly,.zone,.card .task,.state-wait .task,.state-signal .task,.state-position .task{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-primary)}
+.zone input,.task-summary dd,.instruction,.history summary,.data-grid button{color:var(--text-primary)}
+.zone-confirm,.card .entry{background:color-mix(in srgb,var(--theme-accent) 16%,var(--bg-surface));border-color:color-mix(in srgb,var(--theme-accent) 45%,var(--border-primary));color:var(--text-primary)}
+.dialog::backdrop,.risk-dialog::backdrop{background:var(--overlay-bg)}
+.dialog p,.dialog-actions button,.data-grid span,th,td{color:var(--text-secondary)}
+.dialog-actions .primary{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--on-accent)}
+.warning,.banner{background:color-mix(in srgb,var(--warning) 10%,var(--bg-surface));border-color:color-mix(in srgb,var(--warning) 45%,var(--border-primary));color:var(--warning)}
+
+.risk-dashboard{background:var(--bg-surface);border-color:var(--border-primary);box-shadow:var(--shadow-card)}
+.risk-summary{border-color:var(--border-primary)}
+.risk-kicker,.risk-base,.risk-title-row h2,.risk-link,.risk-entry,.risk-balance,.risk-account-type,.risk-feedback{color:var(--text-secondary)}
+.risk-account-card,.risk-add-account,.risk-button,.risk-mobile-picker,.risk-field input,.risk-field select,.risk-list-row{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-primary)}
+.risk-account-card:hover,.risk-account-card.selected,.risk-list-row.selected{background:color-mix(in srgb,var(--theme-accent) 8%,var(--bg-surface));border-color:var(--theme-accent);box-shadow:0 0 0 1px var(--theme-accent)}
+.risk-account-risk,.risk-dialog-body,.risk-dialog-body h2{color:var(--text-primary)}
+.risk-actions{border-color:var(--border-secondary)}
+.risk-button.primary{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--on-accent)}
+.risk-button:hover:not(:disabled){background:color-mix(in srgb,var(--theme-accent) 12%,var(--bg-surface-secondary));border-color:var(--theme-accent)}
+.risk-dialog-note,.risk-field,.risk-field small,.risk-empty{color:var(--text-secondary)}
+.risk-form-error,.risk-feedback[data-kind=error]{color:var(--danger)}
+.risk-feedback[data-kind=success]{color:var(--success)}
+
+@media(max-width:629px){.stamp-controls{justify-content:flex-end;gap:6px}.appearance-label{display:none}.appearance-select{max-width:98px}}

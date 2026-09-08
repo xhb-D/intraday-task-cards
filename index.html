@@ -6,19 +6,26 @@
   <meta name="description" content="GC、CL、ES 独立任务卡；只在本地保存，手动记录，不读取行情或发送订单。">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src data:; font-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <title>日内交易状态卡 · GC / CL / ES · V1</title>
+  <script src="appearance-bootstrap.js"></script>
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="banner.css">
   <link rel="stylesheet" href="refinement.css">
+  <link rel="stylesheet" href="risk-dashboard.css">
+  <link rel="stylesheet" href="appearance.css">
 </head>
 <body>
   <main class="shell">
     <header class="page-head">
       <div><h1>日内交易状态卡</h1><p class="subtitle">3M · GC → CL → ES · 手动记录</p><p id="restore-note" class="restore-note" hidden></p></div>
-      <div class="stamp"><strong>本地记录 V1</strong><p id="save-status" role="status">正在检查本地保存…</p><button class="link" id="data-tools" type="button">导出 / 备份</button></div>
+      <div class="stamp">
+        <div class="stamp-controls"><strong>本地记录 V1</strong><label class="appearance-label" for="appearance-select">外观</label><select id="appearance-select" class="appearance-select" aria-label="外观"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
+        <p id="save-status" role="status">正在检查本地保存…</p><button class="link" id="data-tools" type="button">导出 / 备份</button>
+      </div>
     </header>
     <div id="storage-banner" class="banner" hidden><span id="storage-message"></span><button id="storage-retry" type="button" hidden>重试保存</button><button id="start-fresh" type="button" hidden>开始空白工作区</button></div>
     <p id="error-banner" class="banner error" role="alert" hidden></p>
     <noscript><p class="banner error">请在启用 JavaScript 的浏览器中打开。本工具不读取行情、不下单。</p></noscript>
+    <div id="risk-dashboard-host"></div>
     <section id="cards" class="cards" aria-label="GC、CL、ES 独立任务卡"></section>
     <details class="history" id="history"><summary><span class="chevron" aria-hidden="true"></span>今日机会记录 <span id="history-count">0 条 · 今日及未结束</span></summary>
       <div class="history-body"><p>确认关键位置后登记；同一机会更新同一行。删除只移除记录，不结束任务或持仓。</p>
