@@ -35,7 +35,7 @@ test('revision: 偏见为独立三态，允许持仓期间更新且不改写方�
   assert.equal(state.cards.CL.bias, 'neutral'); assertState(state);
 });
 
-test('revision: 3M 结构矩阵在 UI 之外由业务层强制执行', () => {
+test('revision: 3M 市场结构矩阵在 UI 之外由业务层强制执行', () => {
   const expected = { unjudged: ['none'], bullish: ['long', 'none'], bearish: ['short', 'none'], range: ['long', 'short', 'none'] };
   for (const structure of Object.keys(STRUCTURES_3M)) {
     for (const direction of ['long', 'short', 'none']) {
@@ -83,7 +83,7 @@ test('revision: 登记快照不可被随后偏见、结构或位置再确认改�
   const state = fresh(); const opportunity = registered(state); const snapshot = { bias: opportunity.biasAtRegistration, structure: opportunity.structure3mAtRegistration };
   changeBias(state, 'GC', 'bearish'); changeStructure(state, 'GC', 'range', later()); updateDraft(state, 'GC', '更新后的关键位置'); confirmPosition(state, 'GC', later());
   assert.deepEqual({ bias: opportunity.biasAtRegistration, structure: opportunity.structure3mAtRegistration }, snapshot); assert.deepEqual({ bias: state.records[0].biasAtRegistration, structure: state.records[0].structure3mAtRegistration }, snapshot);
-  assert.deepEqual(deserialize(serialize(state, later())).state.records[0].biasAtRegistration, snapshot.bias); assert.match(exportMarkdown(state, 'all', later()), /登记时偏见 \/ 3M结构/); assertState(state);
+  assert.deepEqual(deserialize(serialize(state, later())).state.records[0].biasAtRegistration, snapshot.bias); assert.match(exportMarkdown(state, 'all', later()), /登记时偏见 \/ 3M市场结构/); assertState(state);
 });
 
 test('revision: v1 迁移保留持仓和旧方向；无机会归无方向；旧活跃机会必须先审查结构', () => {

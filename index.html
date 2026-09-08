@@ -16,7 +16,7 @@
 <body>
   <main class="shell">
     <header class="page-head">
-      <div><h1>日内交易状态卡</h1><p class="subtitle">3M · GC → CL → ES · 手动记录</p><p id="restore-note" class="restore-note" hidden></p></div>
+      <div><h1>统一交易控制中心</h1><p class="subtitle">GC / CL / ES 手动状态与风险约束</p><nav class="app-nav" aria-label="主导航"><a href="#/home" data-route-link="home">日内交易状态卡</a><a href="#/risk" data-route-link="risk">Trading Risk Manager</a></nav><p id="restore-note" class="restore-note" hidden></p></div>
       <div class="stamp">
         <div class="stamp-controls"><strong>本地记录 V1</strong><label class="appearance-label" for="appearance-select">外观</label><select id="appearance-select" class="appearance-select" aria-label="外观"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
         <p id="save-status" role="status">正在检查本地保存…</p><button class="link" id="data-tools" type="button">导出 / 备份</button>
@@ -25,7 +25,7 @@
     <div id="storage-banner" class="banner" hidden><span id="storage-message"></span><button id="storage-retry" type="button" hidden>重试保存</button><button id="start-fresh" type="button" hidden>开始空白工作区</button></div>
     <p id="error-banner" class="banner error" role="alert" hidden></p>
     <noscript><p class="banner error">请在启用 JavaScript 的浏览器中打开。本工具不读取行情、不下单。</p></noscript>
-    <div id="risk-dashboard-host"></div>
+    <section data-route-view="home"><div id="risk-dashboard-host"></div>
     <section id="cards" class="cards" aria-label="GC、CL、ES 独立任务卡"></section>
     <details class="history" id="history"><summary><span class="chevron" aria-hidden="true"></span>今日机会记录 <span id="history-count">0 条 · 今日及未结束</span></summary>
       <div class="history-body"><p>确认关键位置后登记；同一机会更新同一行。删除只移除记录，不结束任务或持仓。</p>
@@ -33,10 +33,12 @@
         <p id="history-empty">尚无已登记的机会。填写关键位置并点击「确认」后，这里才会新增记录。</p>
         <table id="history-table" hidden><thead><tr><th>登记时间</th><th>品种</th><th>方向</th><th>机会</th><th>已确认关键位置</th><th>进展 / 结果</th><th>操作</th></tr></thead><tbody id="history-body"></tbody></table>
       </div>
-    </details>
+    </details></section>
+    <section data-route-view="risk" hidden><div id="risk-full-host"><header class="risk-full-head"><a href="#/home">← 返回日内交易状态卡</a><h2>Trading Risk Manager</h2></header><div id="risk-manager-host"></div></div></section>
+    <section data-route-view="error" class="route-error" hidden aria-labelledby="route-error-title"><h2 id="route-error-title" data-route-error-heading tabindex="-1">找不到页面</h2><p data-route-error></p><a href="#/home" class="link route-error-home">返回日内交易状态卡</a></section>
   </main>
   <dialog id="confirm-dialog" class="dialog" aria-labelledby="dialog-title"><h2 id="dialog-title"></h2><p id="dialog-message"></p><p id="dialog-warning" class="warning" hidden></p><div class="dialog-actions"><button id="dialog-cancel" type="button" autofocus>取消</button><button id="dialog-confirm" class="primary" type="button">确认</button></div></dialog>
-  <dialog id="data-dialog" class="dialog data-dialog"><h2>导出与本地备份</h2><p>Markdown 用于复盘；JSON 保存全部卡片、草稿、记录和阶段时间，可用于恢复。</p><div class="data-grid"><button id="export-today" type="button"><b>今日 Markdown</b><span>今日及未结束的已登记机会</span></button><button id="export-all" type="button"><b>全部 Markdown</b><span>全部仍保留的机会记录</span></button><button id="export-json" type="button"><b>完整备份 JSON</b><span>保存完整本地数据</span></button><button id="import-json" type="button"><b>恢复 JSON 备份</b><span>校验后确认替换，不合并</span></button></div><button id="export-raw" class="link raw-export" type="button" hidden>导出原始存档（用于排查异常）</button><input id="import-file" type="file" accept=".json,application/json" hidden><p id="data-feedback" class="feedback" role="status"></p><p class="caution">数据只保存在本浏览器。恢复完成后，请对照真实交易平台核对当前任务与持仓。</p><div class="dialog-actions"><button id="data-close" type="button">关闭</button></div></dialog>
+  <dialog id="data-dialog" class="dialog data-dialog"><h2>导出与本地备份</h2><p>默认完整备份包含状态卡、风险管理器和外观偏好；分项备份可兼容旧工具。</p><div class="data-grid"><button id="export-today" type="button"><b>今日 Markdown</b><span>今日及未结束的已登记机会</span></button><button id="export-all" type="button"><b>全部 Markdown</b><span>全部仍保留的机会记录</span></button><button id="export-json" type="button"><b>完整备份 JSON</b><span>保存状态卡、风险管理器和外观</span></button><button id="export-intraday-json" type="button"><b>状态卡 JSON</b><span>仅导出 GC / CL / ES 状态卡</span></button><button id="export-risk-json" type="button"><b>风险管理器 JSON</b><span>仅导出账户与风险记录</span></button><button id="import-json" type="button"><b>导入 JSON 备份</b><span>预览影响范围后确认；8 MB 上限</span></button></div><button id="export-raw" class="link raw-export" type="button" hidden>导出原始存档（用于排查异常）</button><input id="import-file" type="file" accept=".json,application/json" hidden><p id="data-feedback" class="feedback" role="status"></p><p class="caution">数据只保存在本浏览器。恢复完成后，请对照真实交易平台核对当前任务与持仓。</p><div class="dialog-actions"><button id="data-close" type="button">关闭</button></div></dialog>
   <div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
   <script src="dist/app.bundle.js"></script>
 </body>

@@ -1,9 +1,10 @@
 # 统一交易控制中心 — Architecture / Technical Spec
 
 - 状态：APPROVED / FROZEN
-- 版本：1.0
+- 版本：1.1
 - 日期：2026-09-08
 - 对应 Business Spec：`UNIFIED_BUSINESS_SPEC.md`
+- 修订：用户于 2026-09-08 明确授权将当前市场结构展示恢复为 3M；仅更新文案，不改变 schema、字段名或迁移路径。
 
 ## 1. 架构决策
 
@@ -91,7 +92,7 @@ index.html
 
 - 顶层 `schemaVersion` 管理组合容器迁移。
 - 每个 section 继续由自己的迁移器和验证器负责。
-- 不因用户界面显示 15M 而在本次合并中重命名旧 `structure3m` 字段。
+- 用户界面显示 3M；不重命名旧 `structure3m` 字段，也不为本次展示语义修订新增数据迁移。
 - 未知或更高版本不得猜测迁移。
 
 ### 4.2 规范化规则

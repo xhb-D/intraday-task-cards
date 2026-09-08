@@ -20,18 +20,22 @@ function applyAppearance(mode, root = document.documentElement) {
   return normalized;
 }
 
-function initAppearance(select, storage = globalThis.localStorage, root = document.documentElement) {
-  if (!select || typeof select.addEventListener !== 'function') return;
+function initAppearance(select, storage = globalThis.localStorage, root = document.documentElement, onChange = null) {
+  if (!select || typeof select.addEventListener !== 'function') return { render: value => applyAppearance(value, root) };
   const render = value => { select.value = applyAppearance(value, root); };
   render(readAppearance(storage));
   select.addEventListener('change', () => {
     const next = normalizeAppearance(select.value);
+    // Unified storage is authoritative when a controller is supplied.  The
+    // legacy appearance key remains read-only for first-run migration.
+    if (onChange) { if (onChange(next) !== false) render(next); return; }
     try { storage?.setItem(APPEARANCE_STORAGE_KEY, next); } catch (_) { /* session-only appearance */ }
     render(next);
   });
   globalThis.window?.addEventListener?.('storage', event => {
     if (event.key === APPEARANCE_STORAGE_KEY) render(event.newValue);
   });
+  return { render };
 }
 
 
@@ -864,6 +868,7 @@ function updateHardLossFloor(state, accountId, newFloor) {
 
 
 const RISK_MANAGER_SCHEMA_VERSION = 2;
+// Compatibility name retained for the imported V2 regression suite.
 
 /**
  * Upgrade one V1 account object to the V2 shape (in place on a deep copy).
@@ -957,221 +962,170 @@ function clearAppState(storage, key = STORAGE_KEY) {
 
 
 
-// Homepage shell for the locked Trading Risk Manager V2 services.
-// This file owns presentation only; account/session/risk decisions remain in
-// src/risk-manager/* and persist under the existing manager storage key.
-
-const RISK_EMPTY_STATE = { schemaVersion: RISK_MANAGER_SCHEMA_VERSION, selectedAccountId: null, accounts: [] };
-let riskDashboardHost = null;
-let riskDashboardState = null;
-let riskDashboardStorage = null;
-
-const riskEl = (tag, className, text) => {
-  const node = document.createElement(tag);
-  if (className) node.className = className;
-  if (text !== undefined) node.textContent = text;
-  return node;
-};
-const riskAccount = () => riskDashboardState?.accounts.find(account => account.id === riskDashboardState.selectedAccountId) || null;
-const riskDecision = account => account ? deriveDecision(account) : null;
-const riskStatus = decision => decision?.status === 'ALLOWED' ? ['可以交易', 'green'] : decision?.status === 'TAIL_RISK' ? ['尾部风险', 'yellow'] : decision?.status === 'BLOCKED' ? ['禁止开仓', 'red'] : ['需要配置', 'muted'];
-const riskAllowed = decision => decision?.status === 'TAIL_RISK' ? decision.finalRisk : decision?.allowedR;
-
-function riskStorage() {
-  try { return globalThis.localStorage; } catch (_) { return null; }
+// The homepage is a compact mount of the exact same controller used by #/risk.
+function initRiskDashboard(host, controller = {}) {
+  return mountRiskManager(host, controller, { compact: true });
 }
 
-function riskNormalizeState(raw) {
-  const migrated = migrateState(raw);
-  if (!migrated || !Array.isArray(migrated.accounts)) return { ...RISK_EMPTY_STATE, accounts: [] };
-  const selected = migrated.accounts.some(account => account.id === migrated.selectedAccountId) ? migrated.selectedAccountId : migrated.accounts[0]?.id || null;
-  return { ...migrated, schemaVersion: RISK_MANAGER_SCHEMA_VERSION, selectedAccountId: selected };
-}
 
-function riskNotice(message, kind = 'info') {
-  const region = riskDashboardHost?.querySelector('.risk-feedback');
-  if (!region) return;
-  region.textContent = message;
-  region.dataset.kind = kind;
-}
 
-function riskMutate(nextState, message) {
-  riskDashboardState = nextState;
-  if (!saveAppState(riskDashboardState, riskDashboardStorage)) riskNotice('风险管理器数据尚未保存；请勿刷新，并检查浏览器本地保存权限。', 'error');
-  else riskNotice(message || '风险管理器已本地保存。', 'success');
-  renderRiskDashboard();
-}
+// Both routes mount this component separately. It never owns business state:
+// the injected controller is the sole read/write authority.
+const el = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
+const button = (text, className = 'risk-button') => { const node = el('button', className, text); node.type = 'button'; return node; };
+const status = decision => decision?.status === 'ALLOWED' ? ['可以交易', 'green'] : decision?.status === 'TAIL_RISK' ? ['尾部风险', 'yellow'] : decision?.status === 'BLOCKED' ? ['禁止开仓', 'red'] : ['需要配置', 'muted'];
+function field(form, { label, name, value = '', type = 'text', required = false, hint = '' }) { const wrap = el('label', 'risk-field'); wrap.appendChild(el('span', null, label)); const input = document.createElement(type === 'select' ? 'select' : 'input'); input.name = name; if (type !== 'select') { input.type = type; input.value = value ?? ''; } if (type === 'number') { input.inputMode = 'decimal'; input.step = '0.01'; input.min = '0.01'; } input.required = required; wrap.appendChild(input); if (hint) wrap.appendChild(el('small', null, hint)); form.appendChild(wrap); return input; }
+let activeRiskDialog = null;
+function riskDialog(title, build) { if (activeRiskDialog) return; const node = el('dialog', 'risk-dialog'); activeRiskDialog = node; const form = el('form', 'risk-dialog-body'); form.method = 'dialog'; form.appendChild(el('h2', null, title)); const close = () => { node.close(); node.remove(); if (activeRiskDialog === node) activeRiskDialog = null; }; build(form, close); node.appendChild(form); document.body.appendChild(node); node.showModal(); }
 
-function riskCloseDialog(dialog) { dialog?.close(); dialog?.remove(); }
-
-function riskDialog(title, build) {
-  const dialog = document.createElement('dialog');
-  dialog.className = 'risk-dialog';
-  const form = riskEl('form', 'risk-dialog-body');
-  form.method = 'dialog';
-  form.appendChild(riskEl('h2', null, title));
-  const close = () => riskCloseDialog(dialog);
-  build(form, close);
-  dialog.appendChild(form);
-  document.body.appendChild(dialog);
-  dialog.showModal();
-  return dialog;
-}
-
-function riskButton(text, className = 'risk-button') {
-  const button = riskEl('button', className, text);
-  button.type = 'button';
-  return button;
-}
-
-function riskField(form, { label, name, value = '', type = 'text', required = false, hint = '' }) {
-  const wrap = riskEl('label', 'risk-field');
-  wrap.appendChild(riskEl('span', null, label));
-  const input = document.createElement(type === 'select' ? 'select' : 'input');
-  input.name = name;
-  if (type !== 'select') { input.type = type; input.value = value; }
-  if (required) input.required = true;
-  if (type === 'number') { input.inputMode = 'decimal'; input.step = '0.01'; input.min = '0.01'; }
-  wrap.appendChild(input);
-  if (hint) wrap.appendChild(riskEl('small', null, hint));
-  form.appendChild(wrap);
-  return input;
-}
-
-function riskAccountForm(account = null) {
-  const editing = Boolean(account);
-  riskDialog(editing ? '编辑账户' : '添加账户', (form, close) => {
-    form.appendChild(riskEl('p', 'risk-dialog-note', editing ? '风险参考余额和最大亏损额度将在下一交易时段生效；当前时段的 Base R 保持冻结。' : '只记录已实现余额；不读取行情，也不下单。'));
-    const name = riskField(form, { label: '账户名称', name: 'name', value: account?.name, required: true });
-    const firm = riskField(form, { label: 'Prop Firm（可选）', name: 'firm', value: account?.propFirm || '' });
-    const type = riskField(form, { label: '账户类型（可选）', name: 'type', value: account?.accountType || '' });
-    const nominal = riskField(form, { label: '名义账户规模', name: 'nominal', value: account?.nominalAccountSize || '', type: 'number', required: true });
-    const reference = riskField(form, { label: '风险参考余额', name: 'reference', value: account?.riskReferenceBalance || '', type: 'number', required: true });
-    const hardLoss = riskField(form, { label: '最大亏损额度', name: 'hardLoss', value: account?.hardLossAmount || '', type: 'number', required: true });
-    const drawdownLabel = riskEl('label', 'risk-field'); drawdownLabel.appendChild(riskEl('span', null, '回撤类型'));
-    const drawdown = document.createElement('select'); drawdown.name = 'drawdown';
-    [['EOD_TRAILING', 'EOD 日终跟踪回撤'], ['INTRADAY_TRAILING', '盘中实时跟踪回撤'], ['STATIC', '静态回撤'], ['NONE', '无外部回撤限制']].forEach(([value, text]) => { const option = new Option(text, value); option.selected = (account?.drawdownType || 'EOD_TRAILING') === value; drawdown.add(option); });
-    drawdownLabel.appendChild(drawdown); form.appendChild(drawdownLabel);
-    const floor = riskField(form, { label: 'Hard Loss Floor', name: 'floor', value: account?.defaultHardLossFloor || '', type: 'number', hint: '无外部回撤限制时留空。' });
-    const initial = editing ? null : riskField(form, { label: '初始已实现余额', name: 'initial', type: 'number', required: true });
-    const error = riskEl('p', 'risk-form-error'); form.appendChild(error);
-    const actions = riskEl('div', 'risk-dialog-actions'); const cancel = riskButton('取消'); const save = riskButton(editing ? '保存账户' : '添加账户', 'risk-button primary'); save.type = 'submit';
-    cancel.addEventListener('click', close); actions.append(cancel, save); form.appendChild(actions);
-    form.addEventListener('submit', event => {
-      event.preventDefault();
-      const read = field => Number(field.value);
-      const floorValue = floor.value.trim() === '' ? null : Number(floor.value);
-      const payload = { name: name.value, propFirm: firm.value, accountType: type.value, nominalAccountSize: read(nominal), riskReferenceBalance: read(reference), hardLossAmount: read(hardLoss), drawdownType: drawdown.value, defaultHardLossFloor: floorValue };
-      try {
-        if (editing) riskMutate(updateAccountMeta(riskDashboardState, account.id, payload), `已更新 ${account.name}；配置规则按既有时段规则处理。`);
-        else riskMutate(createAccount(riskDashboardState, { ...payload, initialBalance: read(initial) }), `已添加 ${name.value.trim()}。`);
-        close();
-      } catch (errorValue) { error.textContent = errorValue.message; }
+function mountRiskManager(host, controller, { compact = false } = {}) {
+  if (!host || typeof host.appendChild !== 'function') return { render() {}, destroy() {} };
+  let disposed = false;
+  let rolloverCommitting = false;
+  const current = () => controller.getState();
+  const selected = () => current().accounts.find(item => item.id === current().selectedAccountId) || null;
+  const locked = () => controller.isLocked?.() === true;
+  const notice = (message, kind = 'info') => { const region = host.querySelector?.('.risk-feedback'); if (region) { region.textContent = message; region.dataset.kind = kind; } };
+  const mutate = (next, message) => { if (locked()) { notice('检测到其他标签页更新；风险修改已锁定。', 'error'); return false; } try { controller.commit(next); render(); notice(message || '已保存。', 'success'); return true; } catch (error) { notice(`未保存：${error.message || '本地存储不可用'}。请勿刷新。`, 'error'); return false; } };
+  function accountForm(existing = null) {
+    riskDialog(existing ? '编辑账户' : '添加账户', (form, close) => {
+      form.appendChild(el('p', 'risk-dialog-note', existing ? '风险参考余额和最大亏损额度将在下一交易时段生效；当前时段的 Base R 保持冻结。' : '只记录已实现余额；不读取行情，也不下单。'));
+      const name = field(form, { label: '账户名称', name: 'name', value: existing?.name, required: true }); const firm = field(form, { label: 'Prop Firm（可选）', name: 'firm', value: existing?.propFirm }); const type = field(form, { label: '账户类型（可选）', name: 'type', value: existing?.accountType }); const nominal = field(form, { label: '名义账户规模', name: 'nominal', type: 'number', value: existing?.nominalAccountSize, required: true }); const reference = field(form, { label: '风险参考余额', name: 'reference', type: 'number', value: existing?.riskReferenceBalance, required: true }); const loss = field(form, { label: '最大亏损额度', name: 'hardLoss', type: 'number', value: existing?.hardLossAmount, required: !existing });
+      const drawdown = field(form, { label: '回撤类型', name: 'drawdown', type: 'select' }); [['EOD_TRAILING','EOD 日终跟踪回撤'], ['INTRADAY_TRAILING','盘中实时跟踪回撤'], ['STATIC','静态回撤'], ['NONE','无外部回撤限制']].forEach(([value, label]) => { const option = new Option(label, value); option.selected = (existing?.drawdownType || 'EOD_TRAILING') === value; drawdown.add(option); });
+      const floor = field(form, { label: '默认 Hard Loss Floor', name: 'floor', type: 'number', value: existing?.defaultHardLossFloor, hint: '无外部回撤限制时留空。' }); const initial = existing ? null : field(form, { label: '初始已实现余额', name: 'initial', type: 'number', required: true }); const error = el('p', 'risk-form-error'); form.appendChild(error);
+      const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const save = button(existing ? '保存账户' : '添加账户', 'risk-button primary'); save.type = 'submit'; cancel.addEventListener('click', close); actions.append(cancel, save); if (existing) { const remove = button('删除账户', 'risk-button danger'); remove.addEventListener('click', () => deleteConfirm(existing, close)); actions.appendChild(remove); } form.appendChild(actions);
+      form.addEventListener('submit', event => { event.preventDefault(); const money = item => Number(item.value); const floorValue = floor.value.trim() ? Number(floor.value) : null; const payload = { name: name.value, propFirm: firm.value, accountType: type.value, nominalAccountSize: money(nominal), riskReferenceBalance: money(reference), hardLossAmount: existing && loss.value.trim() === '' ? null : money(loss), drawdownType: drawdown.value, defaultHardLossFloor: floorValue }; try { const next = existing ? updateAccountMeta(current(), existing.id, payload) : createAccount(current(), { ...payload, initialBalance: money(initial) }); if (mutate(next, existing ? '账户已更新；新配置按既有时段规则生效。' : '账户已添加。')) close(); } catch (failure) { error.textContent = failure.message; } });
     });
-  });
-}
-
-function riskBalanceForm(account) {
-  riskDialog('更新余额', (form, close) => {
-    form.appendChild(riskEl('p', 'risk-dialog-note', `当前余额：${fmtUSD(deriveCurrentBalance(account.currentSession))}。仅输入最新已实现余额，不包含浮盈/浮亏。`));
-    const balance = riskField(form, { label: '最新已实现账户余额', name: 'balance', type: 'number', required: true });
-    const error = riskEl('p', 'risk-form-error'); form.appendChild(error);
-    const actions = riskEl('div', 'risk-dialog-actions'); const cancel = riskButton('取消'); const save = riskButton('确认更新', 'risk-button primary'); save.type = 'submit'; cancel.addEventListener('click', close); actions.append(cancel, save); form.appendChild(actions);
-    form.addEventListener('submit', event => { event.preventDefault(); try { riskMutate(addBalanceUpdate(riskDashboardState, account.id, Number(balance.value)), '余额已更新，风险结论已重新计算。'); close(); } catch (errorValue) { error.textContent = errorValue.message; } });
-  });
-}
-
-function riskConfirmUndo(account) {
-  const last = account.currentSession.balanceEvents.at(-1);
-  if (!last) return;
-  riskDialog('撤销上一条余额更新', (form, close) => {
-    form.appendChild(riskEl('p', 'risk-dialog-note', `${fmtUSD(last.previousBalance)} → ${fmtUSD(last.newBalance)} 将被移除，风险状态会从历史记录重新计算。`));
-    const actions = riskEl('div', 'risk-dialog-actions'); const cancel = riskButton('取消'); const confirm = riskButton('确认撤销', 'risk-button danger'); cancel.addEventListener('click', close); confirm.addEventListener('click', () => { riskMutate(undoLastBalanceUpdate(riskDashboardState, account.id), '已撤销上一条余额更新，并已重新计算风险。'); close(); }); actions.append(cancel, confirm); form.appendChild(actions);
-  });
-}
-
-function riskAllAccounts() {
-  riskDialog('全部账户', (form, close) => {
-    const search = riskField(form, { label: '搜索账户', name: 'search' });
-    const list = riskEl('div', 'risk-account-list'); form.appendChild(list);
-    const refresh = () => {
-      list.textContent = ''; const query = search.value.trim().toLowerCase();
-      riskDashboardState.accounts.filter(account => account.name.toLowerCase().includes(query)).forEach(account => {
-        const row = riskButton(account.name, `risk-list-row${account.id === riskDashboardState.selectedAccountId ? ' selected' : ''}`);
-        row.appendChild(riskEl('small', null, fmtUSD(deriveCurrentBalance(account.currentSession))));
-        row.addEventListener('click', () => { riskMutate(selectAccount(riskDashboardState, account.id), `已切换至 ${account.name}。`); close(); }); list.appendChild(row);
-      });
-      if (!list.children.length) list.appendChild(riskEl('p', 'risk-empty', '没有匹配账户。'));
+  }
+  function deleteConfirm(item, closeParent) { riskDialog('删除账户', (form, close) => { form.appendChild(el('p', 'risk-dialog-note', `确定删除「${item.name}」吗？此操作会移除此账户的本地余额历史。`)); const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const confirm = button('确认删除', 'risk-button danger'); cancel.addEventListener('click', close); confirm.addEventListener('click', () => { if (mutate(deleteAccount(current(), item.id), '账户已删除。')) { close(); closeParent(); } }); actions.append(cancel, confirm); form.appendChild(actions); }); }
+  function balanceForm(item) { riskDialog('更新余额', (form, close) => { form.appendChild(el('p', 'risk-dialog-note', `当前余额：${fmtUSD(deriveCurrentBalance(item.currentSession))}。仅输入最新已实现余额。`)); const balance = field(form, { label: '最新已实现账户余额', name: 'balance', type: 'number', required: true }); const error = el('p', 'risk-form-error'); form.appendChild(error); const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const save = button('确认更新', 'risk-button primary'); save.type = 'submit'; cancel.addEventListener('click', close); actions.append(cancel, save); form.appendChild(actions); form.addEventListener('submit', event => { event.preventDefault(); try { if (mutate(addBalanceUpdate(current(), item.id, Number(balance.value)), '余额已更新，风险结论已重新计算。')) close(); } catch (failure) { error.textContent = failure.message; } }); }); }
+  function floorForm(item) { riskDialog('Hard Loss Floor', (form, close) => { form.appendChild(el('p', 'risk-dialog-note', '该余额线按既有回撤类型规则立即生效；EOD Trailing 在当前时段内冻结。')); const floor = field(form, { label: 'Hard Loss Floor', name: 'floor', type: 'number', value: item.currentSession.hardLossFloor }); const error = el('p', 'risk-form-error'); form.appendChild(error); const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const save = button('保存 Floor', 'risk-button primary'); save.type = 'submit'; cancel.addEventListener('click', close); actions.append(cancel, save); form.appendChild(actions); form.addEventListener('submit', event => { event.preventDefault(); try { if (mutate(updateHardLossFloor(current(), item.id, floor.value.trim() ? Number(floor.value) : null), 'Hard Loss Floor 已更新。')) close(); } catch (failure) { error.textContent = failure.message; } }); }); }
+  function undoConfirm(item) { const event = item.currentSession.balanceEvents.at(-1); if (!event) return; riskDialog('撤销上一条余额更新', (form, close) => { form.appendChild(el('p', 'risk-dialog-note', `${fmtUSD(event.previousBalance)} → ${fmtUSD(event.newBalance)} 将被移除，风险状态会重新计算。`)); const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const confirm = button('确认撤销', 'risk-button danger'); cancel.addEventListener('click', close); confirm.addEventListener('click', () => { if (mutate(undoLastBalanceUpdate(current(), item.id), '已撤销上一条余额更新。')) close(); }); actions.append(cancel, confirm); form.appendChild(actions); }); }
+  function rolloverConfirm() {
+    const check = preflightRollover(current());
+    riskDialog('开始新交易日', (form, close) => {
+      form.appendChild(el('p', 'risk-dialog-note', check.ok
+        ? `将同时结束并重新开始 ${check.preview.length} 个账户的交易时段。该操作不可按账户拆分。`
+        : `以下账户尚未满足条件：${check.issues.map(item => `${item.name}（${item.reason}）`).join('；')}`));
+      const actions = el('div', 'risk-dialog-actions');
+      const cancel = button('取消');
+      cancel.addEventListener('click', close);
+      actions.appendChild(cancel);
+      if (check.ok) {
+        const confirm = button('确认开始新交易日', 'risk-button primary');
+        confirm.addEventListener('click', () => {
+          if (rolloverCommitting) return;
+          rolloverCommitting = true;
+          confirm.disabled = true;
+          try {
+            if (mutate(rolloverAllAccounts(current()), '全部账户已开始新交易日。')) {
+              close();
+              return;
+            }
+            rolloverCommitting = false;
+            confirm.disabled = false;
+          } catch (failure) {
+            notice(failure.message, 'error');
+            rolloverCommitting = false;
+            close();
+          }
+        });
+        actions.appendChild(confirm);
+      }
+      form.appendChild(actions);
+    });
+  }
+  function cards(state) { const row = el('div','risk-rail-row'); const previous = button('‹','risk-arrow'); previous.setAttribute('aria-label','向左查看更多账户'); const rail = el('div', 'risk-rail'); const next = button('›','risk-arrow'); next.setAttribute('aria-label','向右查看更多账户'); previous.addEventListener('click',()=>rail.scrollBy?.({left:-300,behavior:'smooth'})); next.addEventListener('click',()=>rail.scrollBy?.({left:300,behavior:'smooth'})); state.accounts.forEach(item => { const decision = deriveDecision(item); const [label, color] = status(decision); const card = button('', `risk-account-card${item.id === state.selectedAccountId ? ' selected' : ''}`); card.setAttribute('aria-pressed', String(item.id === state.selectedAccountId)); card.append(el('span','risk-account-name',item.name), el('span','risk-balance',fmtUSD(deriveCurrentBalance(item.currentSession))), el('span',`risk-account-risk ${color}`, `${label} · ${fmtUSD(decision.finalRisk ?? decision.allowedR)}`), el('span','risk-account-type',drawdownTypeLabel(item.drawdownType))); card.addEventListener('click', () => mutate(selectAccount(current(), item.id), '已切换账户。')); rail.appendChild(card); }); const add = button('+ 添加账户','risk-add-account'); add.addEventListener('click',()=>accountForm()); rail.appendChild(add); row.append(previous,rail,next); return row; }
+  function details(item) {
+    const detail = el('section', 'risk-manager-detail');
+    if (!item) {
+      const empty = el('div', 'decision-card');
+      empty.append(el('div', 'status-badge', '尚未选择账户'), el('p', null, '创建或选择一个账户以查看风险决策。'));
+      detail.appendChild(empty);
+      return detail;
+    }
+    const d = deriveDecision(item);
+    const snap = item.currentSession.riskSnapshot;
+    const [label, color] = status(d);
+    const reasonMap = {
+      TRADE_ALLOWED: '风险空间充足，可按当前允许额度执行。',
+      RISK_REDUCED: '风险空间限制了标准档位，已自动降至可用档位。',
+      FINAL_RISK: '剩余风险低于 Low R，下一单仅可使用剩余可用风险。',
+      HARD_LOSS_FLOOR_REACHED: '当前余额已触及外部 Hard Loss Floor，禁止开新仓。',
+      PROTECTION_LINE_BREACHED: '当前余额已触及有效保护线，禁止开新仓。',
     };
-    search.addEventListener('input', refresh); refresh(); const closeButton = riskButton('关闭'); closeButton.addEventListener('click', close); form.appendChild(closeButton);
-  });
+    const floorMap = {
+      DAILY_CAPITAL_FLOOR: '当日本金保护线',
+      PROFIT_PROTECTION_LINE: '50% 盈利保护线',
+      HARD_LOSS_FLOOR: '外部 Hard Loss Floor',
+    };
+    const decision = el('section', 'decision-card');
+    decision.append(
+      el('span', `status-badge ${color}`, label),
+      el('div', 'next-r-label', d.status === 'BLOCKED' ? '最大允许风险' : d.status === 'TAIL_RISK' ? '尾部最大允许风险' : '下一单最大允许 1R'),
+      el('div', `next-r-value ${color}`, fmtUSD(d.status === 'BLOCKED' ? 0 : (d.finalRisk ?? d.allowedR))),
+      el('div', 'next-r-sub', `日初 Base R: ${fmtUSD(d.baseR)}`),
+      el('div', 'decision-reason', reasonMap[d.reason] || '风险条件不允许新开仓。')
+    );
+    if (d.status === 'TAIL_RISK') {
+      const warning = el('div', 'tail-warning');
+      warning.append(
+        el('strong', null, '注意：当前可用风险低于 Low R。'),
+        el('span', null, `完整止损不得超过 ${fmtUSD(d.finalRisk)}；不可按标准 R 加仓或放宽止损。`)
+      );
+      detail.appendChild(decision);
+      detail.appendChild(warning);
+    } else {
+      if (d.status === 'BLOCKED') {
+        decision.appendChild(el('div', 'blocked-reason', `绑定保护线：${floorMap[d.bindingFloor] || '当前有效保护线'}`));
+      }
+      detail.appendChild(decision);
+    }
+    const grid = el('dl', 'risk-diagnostics diagnostics');
+    [
+      ['当前已实现余额', fmtUSD(d.currentRealizedBalance)],
+      ['本时段起始余额', fmtUSD(item.currentSession.sessionStartBalance)],
+      ['上一交易日 EOD 余额', fmtUSD(item.currentSession.previousEodBalance)],
+      ['本时段最高已实现余额', fmtUSD(d.peakRealizedBalance)],
+      ['本时段最高已实现盈利', fmtDelta(d.peakRealizedProfit)],
+      ['名义账户规模', fmtUSD(item.nominalAccountSize, 0)],
+      ['本时段风险参考余额', snap?.version === 2 ? fmtUSD(snap.sessionRiskReferenceBalance, 0) : '—'],
+      ['本时段最大亏损额度', snap?.version === 2 ? fmtUSD(snap.sessionHardLossAmount, 0) : '—（V1 快照）'],
+      ['低 / 中 / 高 R 档位', `${fmtUSD(d.lowR)} / ${fmtUSD(d.midR)} / ${fmtUSD(d.highR)}`],
+      ['Base 升级门槛', fmtUSD(d.baseUpgradeThreshold)],
+      ['日初 Base R', fmtUSD(d.baseR)],
+      ['盈利保护触发值', fmtUSD(d.profitLockTrigger)],
+      ['盈利保护状态', d.profitLockActive ? '已启用' : '未启用'],
+      ['当日本金保护线', fmtUSD(d.dailyCapitalFloor)],
+      ['50% 盈利保护线', d.profitProtectionLine === null ? '—' : fmtUSD(d.profitProtectionLine)],
+      ['外部账户失败线', d.hardLossFloor === null ? '无' : fmtUSD(d.hardLossFloor)],
+      ['当前有效保护线', fmtUSD(d.effectiveProtectionLine)],
+      ['当前可用风险空间', fmtUSD(d.availableRisk)],
+      ['已配置风险参考余额（下一时段）', fmtUSD(item.riskReferenceBalance, 0)],
+      ['已配置最大亏损额度（下一时段）', item.hardLossAmount === null ? '未设置' : fmtUSD(item.hardLossAmount, 0)],
+      ['回撤类型', drawdownTypeLabel(item.drawdownType)],
+    ].forEach(([key, value]) => {
+      const row = el('div', 'diag-item');
+      row.append(el('dt', 'label', key), el('dd', 'value', value));
+      grid.appendChild(row);
+    });
+    detail.appendChild(grid);
+    const pending = snap?.sessionRiskReferenceBalance !== item.riskReferenceBalance || snap?.sessionHardLossAmount !== item.hardLossAmount;
+    if (pending) detail.appendChild(el('p', 'pending-badge', '下一时段生效：风险参考余额或最大亏损额度已修改；当前 Base R 保持冻结。'));
+    const history = el('details', 'history-panel');
+    history.appendChild(el('summary', null, `余额历史（${item.currentSession.balanceEvents.length}）`));
+    const list = el('ul', 'history-list');
+    item.currentSession.balanceEvents.forEach(event => list.appendChild(el('li', event.delta >= 0 ? 'pos' : 'neg', `${event.timestamp} · ${fmtUSD(event.previousBalance)} → ${fmtUSD(event.newBalance)}（${fmtDelta(event.delta)}）`)));
+    if (!item.currentSession.balanceEvents.length) list.appendChild(el('li', 'empty-note', '本时段暂无余额更新。'));
+    history.appendChild(list);
+    detail.appendChild(history);
+    return detail;
+  }
+  function render() { if (disposed) return; const state = current(); const item = selected(); host.textContent = ''; const decision = item ? deriveDecision(item) : null; const [label,color] = status(decision); const section = el('section', compact ? 'risk-dashboard' : 'risk-manager'); if (compact) { const summary = el('section','risk-summary'); summary.append(el('p',`risk-status ${color}`,label),el('p','risk-kicker',decision?.status === 'TAIL_RISK' ? '下一单尾部最大允许 1R' : '下一单最大允许 1R'),el('p',`risk-amount ${color}`,decision ? fmtUSD(decision.finalRisk ?? decision.allowedR) : '—'),el('p','risk-base',`日初 Base R: ${decision ? fmtUSD(decision.baseR) : '—'}`)); section.appendChild(summary); } const accounts = el('section','risk-accounts'); const title = el('div','risk-title-row'); title.appendChild(el('h2',null,compact ? '账户' : '账户与交易时段')); if (compact) { const entry = document.createElement('a'); entry.className = 'risk-entry'; entry.href = '#/risk'; entry.textContent = '进入 Trading Risk Manager →'; title.appendChild(entry); } accounts.append(title,cards(state)); const picker = document.createElement('select'); picker.className='risk-mobile-picker'; picker.setAttribute('aria-label','选择账户'); const placeholder=new Option('选择账户','',!item,!item); placeholder.disabled=true; picker.add(placeholder); state.accounts.forEach(account=>picker.add(new Option(account.name,account.id,false,account.id===state.selectedAccountId))); picker.add(new Option('+ 添加账户','__add__')); picker.addEventListener('change',()=>picker.value==='__add__'?accountForm():picker.value&&mutate(selectAccount(current(),picker.value),'已切换账户。')); accounts.appendChild(picker); const actions = el('div','risk-actions'); const add = button('添加账户'); add.addEventListener('click',() => accountForm()); const balance = button('更新余额','risk-button primary'); balance.disabled = !item; balance.addEventListener('click',() => item && balanceForm(item)); const undo = button('撤销上一条余额更新'); undo.disabled = !item || !item.currentSession.balanceEvents.length; undo.addEventListener('click',() => item && undoConfirm(item)); const edit = button('编辑账户'); edit.disabled = !item; edit.addEventListener('click',() => item && accountForm(item)); actions.append(add,balance,undo,edit); if (!compact) { if (item && ['INTRADAY_TRAILING','STATIC'].includes(item.drawdownType)) { const floor = button('Hard Loss Floor'); floor.addEventListener('click',() => floorForm(item)); actions.appendChild(floor); } const rollover = button('结束当前并开始新交易日'); rollover.addEventListener('click',rolloverConfirm); actions.appendChild(rollover); } accounts.appendChild(actions); section.appendChild(accounts); host.appendChild(section); if (!compact) host.appendChild(details(item)); host.appendChild(el('p','risk-feedback',locked() ? '检测到外部修改：风险写入已锁定，仍可导出。' : '风险数据由统一交易控制中心保存。')); }
+  render(); return { render, destroy() { disposed = true; host.textContent = ''; } };
 }
 
-function riskRailCard(account) {
-  const decision = riskDecision(account); const [label, color] = riskStatus(decision);
-  const card = riskButton('', `risk-account-card${account.id === riskDashboardState.selectedAccountId ? ' selected' : ''}`);
-  card.setAttribute('aria-pressed', String(account.id === riskDashboardState.selectedAccountId));
-  const name = riskEl('span', 'risk-account-name'); name.append(riskEl('i', `risk-dot ${color}`), riskEl('span', null, account.name));
-  card.append(name, riskEl('span', 'risk-balance', fmtUSD(deriveCurrentBalance(account.currentSession))), riskEl('span', 'risk-account-risk', decision.status === 'ALLOWED' ? `最大 1R: ${fmtUSD(decision.allowedR)}` : `${label}: ${fmtUSD(riskAllowed(decision))}`), riskEl('span', 'risk-account-type', drawdownTypeLabel(account.drawdownType)));
-  card.addEventListener('click', () => riskMutate(selectAccount(riskDashboardState, account.id), `已切换至 ${account.name}。`));
-  return card;
-}
-
-function renderRiskDashboard() {
-  const host = riskDashboardHost; if (!host) return;
-  host.textContent = '';
-  const account = riskAccount(); const decision = riskDecision(account); const [statusLabel, statusColor] = riskStatus(decision);
-  const panel = riskEl('section', 'risk-dashboard'); panel.setAttribute('aria-label', 'Trading Risk Manager 风险看板');
-  const summary = riskEl('section', 'risk-summary');
-  const status = riskEl('p', `risk-status ${statusColor}`); status.append(riskEl('i', 'risk-dot'), riskEl('span', null, statusLabel)); summary.appendChild(status);
-  summary.appendChild(riskEl('p', 'risk-kicker', decision?.status === 'TAIL_RISK' ? '下一单尾部最大允许 1R' : '下一单最大允许 1R'));
-  summary.appendChild(riskEl('p', `risk-amount ${statusColor}`, decision ? fmtUSD(riskAllowed(decision)) : '—'));
-  summary.appendChild(riskEl('p', 'risk-base', `日初 Base R: ${decision ? fmtUSD(decision.baseR) : '—'}`));
-  panel.appendChild(summary);
-  const accounts = riskEl('section', 'risk-accounts');
-  const titleRow = riskEl('div', 'risk-title-row'); titleRow.appendChild(riskEl('h2', null, '账户'));
-  const all = riskButton('查看全部', 'risk-link'); all.addEventListener('click', riskAllAccounts); titleRow.appendChild(all);
-  const entry = document.createElement('a'); entry.className = 'risk-entry'; entry.href = 'https://xhb-d.github.io/trading-risk-manager/'; entry.target = '_blank'; entry.rel = 'noopener'; entry.textContent = '进入 Trading Risk Manager →'; titleRow.appendChild(entry); accounts.appendChild(titleRow);
-  const railRow = riskEl('div', 'risk-rail-row'); const previous = riskButton('‹', 'risk-arrow'); previous.setAttribute('aria-label', '向左查看更多账户'); const rail = riskEl('div', 'risk-rail'); rail.tabIndex = 0;
-  previous.addEventListener('click', () => rail.scrollBy({ left: -300, behavior: 'smooth' })); railRow.append(previous, rail);
-  riskDashboardState.accounts.forEach(item => rail.appendChild(riskRailCard(item)));
-  const add = riskButton('+ 添加账户', 'risk-add-account'); add.addEventListener('click', () => riskAccountForm()); rail.appendChild(add);
-  const next = riskButton('›', 'risk-arrow'); next.setAttribute('aria-label', '向右查看更多账户'); next.addEventListener('click', () => rail.scrollBy({ left: 300, behavior: 'smooth' })); railRow.appendChild(next); accounts.appendChild(railRow);
-  const picker = document.createElement('select'); picker.className = 'risk-mobile-picker'; picker.setAttribute('aria-label', '选择账户');
-  const placeholder = new Option('选择账户', '', !account, !account);
-  placeholder.disabled = true;
-  picker.add(placeholder);
-  riskDashboardState.accounts.forEach(item => picker.add(new Option(item.name, item.id, false, item.id === riskDashboardState.selectedAccountId)));
-  picker.add(new Option('+ 添加账户', '__add__'));
-  picker.addEventListener('change', () => {
-    if (picker.value === '__add__') {
-      // Reset before opening: canceling the dialog must leave a value from
-      // which selecting “+ 添加账户” is a new change event next time.
-      picker.value = riskDashboardState.selectedAccountId || '';
-      riskAccountForm();
-    } else if (picker.value) riskMutate(selectAccount(riskDashboardState, picker.value), '已切换账户。');
-  });
-  accounts.appendChild(picker);
-  const actions = riskEl('div', 'risk-actions'); const update = riskButton('更新余额', 'risk-button primary'); update.disabled = !account; update.addEventListener('click', () => account && riskBalanceForm(account)); const undo = riskButton('撤销上一条余额更新'); undo.disabled = !account || account.currentSession.balanceEvents.length === 0; undo.addEventListener('click', () => account && riskConfirmUndo(account)); const edit = riskButton('编辑账户'); edit.disabled = !account; edit.addEventListener('click', () => account && riskAccountForm(account)); actions.append(update, undo, edit); accounts.appendChild(actions);
-  panel.appendChild(accounts); host.appendChild(panel);
-  host.appendChild(riskEl('p', 'risk-feedback', '风险数据沿用 Trading Risk Manager 本地记录。'));
-}
-
-function initRiskDashboard(host) {
-  // The existing production-bundle smoke test supplies a deliberately tiny
-  // DOM shim. Do not make the state-card boot path depend on dashboard DOM.
-  if (!host || typeof host.appendChild !== 'function') return;
-  riskDashboardHost = host;
-  riskDashboardStorage = riskStorage();
-  riskDashboardState = riskNormalizeState(loadAppState(riskDashboardStorage));
-  window.addEventListener('storage', event => {
-    if (event.key !== STORAGE_KEY) return;
-    riskDashboardState = riskNormalizeState(loadAppState(riskDashboardStorage));
-    renderRiskDashboard();
-    riskNotice('已读取其他页面更新的风险管理器数据。');
-  });
-  renderRiskDashboard();
-}
+function initRiskManagerView(host, controller) { return mountRiskManager(host, controller, { compact: false }); }
 
 
 const ORDER = Object.freeze(['GC', 'CL', 'ES']);
@@ -1435,8 +1389,8 @@ function deserialize(raw) {
 function exportMarkdown(state, scope = 'today', now = Date.now()) {
   assertState(state); const day = dateKey(now);
   const rows = state.records.filter(record => scope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
-  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 3M结构 | 进展／结果 |', '| --- | --- | --- | --- | --- | --- | --- |'];
-  for (const r of rows) lines.push(`| ${fullTime(r.registeredAt)} | ${r.symbol} | ${r.direction === 'long' ? '多' : '空'} | ${({pullback:'趋势回调',range:'区间反转',reversal:'趋势反转'})[r.type]} | ${cell(r.zone)} | 偏见：${({bullish:'偏多',neutral:'无偏见',bearish:'偏空'})[r.biasAtRegistration]}<br>3M结构：${({unjudged:'未判断',bullish:'多头',range:'震荡',bearish:'空头'})[r.structure3mAtRegistration]} | ${r.endedAt !== null ? ({invalid:'失效',canceled:'已取消',direction:'方向改变结束',closed:'已平仓'})[r.reason] : r.enteredAt !== null ? '持仓中' : '已登记'} |`);
+  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 3M市场结构 | 进展／结果 |', '| --- | --- | --- | --- | --- | --- | --- |'];
+  for (const r of rows) lines.push(`| ${fullTime(r.registeredAt)} | ${r.symbol} | ${r.direction === 'long' ? '多' : '空'} | ${({pullback:'趋势回调',range:'区间反转',reversal:'趋势反转'})[r.type]} | ${cell(r.zone)} | 偏见：${({bullish:'偏多',neutral:'无偏见',bearish:'偏空'})[r.biasAtRegistration]}<br>3M市场结构：${({unjudged:'未判断',bullish:'多头',range:'震荡',bearish:'空头'})[r.structure3mAtRegistration]} | ${r.endedAt !== null ? ({invalid:'失效',canceled:'已取消',direction:'方向改变结束',closed:'已平仓'})[r.reason] : r.enteredAt !== null ? '持仓中' : '已登记'} |`);
   if (!rows.length) lines.push('', '本范围内尚无已登记且仍保留的记录。');
   return lines.concat(['', '---', '阶段起止时间和当前任务草稿保存在完整 JSON 备份中。']).join('\n');
 }
@@ -1495,6 +1449,150 @@ function migrateOpportunity(opportunity) {
   }
   opportunity.stages = stages;
   if (stages.length) opportunity.stageSince = stages.at(-1).start;
+}
+
+
+
+const UNIFIED_KEY = 'trading-control-center:v1';
+const PRE_IMPORT_KEY = 'trading-control-center:v1:pre-import';
+const LEGACY_INTRADAY_KEY = 'intraday-task-cards:v1:state';
+const LEGACY_RISK_KEY = 'trading-risk-manager:v1';
+const LEGACY_APPEARANCE_KEY = 'trading-risk-manager:appearance';
+const blankRisk = () => ({ schemaVersion: RISK_MANAGER_SCHEMA_VERSION, selectedAccountId: null, accounts: [] });
+const appearance = value => value === 'light' || value === 'dark' ? value : 'system';
+
+function makeUnified(intraday = makeEnvelope(createWorkspace()), riskManager = blankRisk(), preferences = {}) {
+  assertState(intraday.state); validateRisk(riskManager);
+  return { app: 'trading-control-center', schemaVersion: 1, savedAt: Date.now(), timezone: 'Asia/Shanghai', revision: 0, sections: { intraday: copy(intraday), riskManager: copy(riskManager) }, preferences: { appearance: appearance(preferences.appearance) } };
+}
+
+const fail = (message, path, code = 'RISK_VALIDATION_ERROR') => { throw Object.assign(new Error(message), { path, code }); };
+const iso = (value, path) => { if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}T/.test(value) || Number.isNaN(Date.parse(value))) fail('时间戳无效', path); };
+const finite = (value, path) => { if (!(typeof value === 'number' && Number.isFinite(value))) fail('金额无效', path); };
+const positive = (value, path) => { finite(value, path); if (value <= 0) fail('金额必须为正数', path); };
+const nullablePositive = (value, path) => { if (value !== null) positive(value, path); };
+const nonEmptyId = (value, path, label) => { if (typeof value !== 'string' || value.trim() === '') fail(`${label} ID 无效`, path); };
+const string = (value, path, label, required = false) => { if (typeof value !== 'string' || (required && value.trim() === '')) fail(`${label}无效`, path); };
+
+function validateSnapshot(snapshot, path) {
+  if (!snapshot || typeof snapshot !== 'object' || ![1, 2].includes(snapshot.version)) fail('风险快照无效', path);
+  ['lowR', 'midR', 'highR', 'baseUpgradeThreshold', 'baseR'].forEach(key => positive(snapshot[key], `${path}.${key}`));
+  if (!(snapshot.lowR <= snapshot.midR && snapshot.midR <= snapshot.highR)) fail('风险快照档位顺序无效', `${path}.lowR`);
+  if (snapshot.baseR !== snapshot.lowR && snapshot.baseR !== snapshot.midR) fail('风险快照 Base R 无效', `${path}.baseR`);
+  if (snapshot.version === 1) {
+    positive(snapshot.sessionRiskBaseCapital, `${path}.sessionRiskBaseCapital`);
+    if (snapshot.baseUpgradeCushion !== null) fail('V1 快照升级缓冲应为 null', `${path}.baseUpgradeCushion`);
+  } else {
+    positive(snapshot.sessionRiskReferenceBalance, `${path}.sessionRiskReferenceBalance`);
+    positive(snapshot.sessionHardLossAmount, `${path}.sessionHardLossAmount`);
+    positive(snapshot.baseUpgradeCushion, `${path}.baseUpgradeCushion`);
+  }
+}
+function validateRisk(state) {
+  if (!state || state.schemaVersion !== RISK_MANAGER_SCHEMA_VERSION || !Array.isArray(state.accounts)) fail('风险管理器版本或账户数据无效', 'sections.riskManager');
+  if (state.selectedAccountId !== null && typeof state.selectedAccountId !== 'string') fail('选中账户 ID 无效', 'sections.riskManager.selectedAccountId');
+  const ids = new Set(); const sessionIds = new Set(); const eventIds = new Set();
+  state.accounts.forEach((account, accountIndex) => {
+    const base = `sections.riskManager.accounts[${accountIndex}]`;
+    if (!account || typeof account !== 'object') fail('账户无效', base);
+    nonEmptyId(account.id, `${base}.id`, '账户'); if (ids.has(account.id)) fail('账户 ID 重复或无效', `${base}.id`);
+    ids.add(account.id); const session = account.currentSession;
+    string(account.name, `${base}.name`, '账户名称', true); string(account.propFirm, `${base}.propFirm`, 'Prop Firm'); string(account.accountType, `${base}.accountType`, '账户类型');
+    positive(account.nominalAccountSize, `${base}.nominalAccountSize`); positive(account.riskReferenceBalance, `${base}.riskReferenceBalance`); nullablePositive(account.hardLossAmount, `${base}.hardLossAmount`);
+    if (!DRAW_DOWN_TYPES.includes(account.drawdownType)) fail('回撤类型无效', `${base}.drawdownType`);
+    nullablePositive(account.defaultHardLossFloor, `${base}.defaultHardLossFloor`);
+    if (account.drawdownType === 'NONE' && account.defaultHardLossFloor !== null) fail('无回撤限制账户的默认 Floor 必须为 null', `${base}.defaultHardLossFloor`);
+    if (!session || typeof session !== 'object') fail('当前时段无效', `${base}.currentSession`);
+    nonEmptyId(session.id, `${base}.currentSession.id`, '当前时段'); if (sessionIds.has(session.id)) fail('当前时段 ID 重复或无效', `${base}.currentSession.id`);
+    sessionIds.add(session.id);
+    iso(session.startedAt, `${base}.currentSession.startedAt`);
+    ['previousEodBalance', 'sessionStartBalance'].forEach(key => positive(session[key], `${base}.currentSession.${key}`));
+    nullablePositive(session.hardLossFloor, `${base}.currentSession.hardLossFloor`);
+    if (account.drawdownType === 'NONE' && session.hardLossFloor !== null) fail('无回撤限制账户的当前 Floor 必须为 null', `${base}.currentSession.hardLossFloor`);
+    validateSnapshot(session.riskSnapshot, `${base}.currentSession.riskSnapshot`);
+    if (!Array.isArray(session.balanceEvents)) fail('余额事件必须为数组', `${base}.currentSession.balanceEvents`);
+    if (account.previousSession !== null && account.previousSession !== undefined) {
+      const previous = account.previousSession;
+      if (!previous || typeof previous !== 'object') fail('历史时段无效', `${base}.previousSession`);
+      nonEmptyId(previous.id, `${base}.previousSession.id`, '历史时段'); if (sessionIds.has(previous.id)) fail('历史时段 ID 重复或无效', `${base}.previousSession.id`);
+      sessionIds.add(previous.id); iso(previous.endedAt, `sections.riskManager.accounts[${accountIndex}].previousSession.endedAt`);
+      ['endBalance', 'peakRealizedBalance'].forEach(key => positive(previous[key], `sections.riskManager.accounts[${accountIndex}].previousSession.${key}`));
+      finite(previous.peakRealizedProfit, `${base}.previousSession.peakRealizedProfit`);
+    }
+    let balance = session.sessionStartBalance;
+    session.balanceEvents.forEach((event, eventIndex) => {
+      const eventPath = `${base}.currentSession.balanceEvents[${eventIndex}]`;
+      if (!event || typeof event !== 'object') fail('余额事件无效', eventPath);
+      nonEmptyId(event.id, `${eventPath}.id`, '余额事件'); if (eventIds.has(event.id)) fail('余额事件 ID 重复或无效', `${eventPath}.id`); eventIds.add(event.id); iso(event.timestamp, `${eventPath}.timestamp`);
+      ['previousBalance', 'newBalance'].forEach(key => positive(event[key], `${eventPath}.${key}`)); finite(event.delta, `${eventPath}.delta`);
+      if (Math.abs(event.previousBalance - balance) > 1e-9) fail('余额事件链断裂', `${eventPath}.previousBalance`);
+      if (Math.abs(event.delta - (event.newBalance - event.previousBalance)) > 1e-9) fail('余额事件 delta 无效', `${eventPath}.delta`); balance = event.newBalance;
+    });
+  });
+  if (state.selectedAccountId !== null && !ids.has(state.selectedAccountId)) fail('选中账户不存在', 'sections.riskManager.selectedAccountId');
+  return true;
+}
+
+function validateUnified(value) {
+  if (!value || value.app !== 'trading-control-center' || value.schemaVersion !== 1 || !value.sections) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
+  if (!Number.isSafeInteger(value.revision) || value.revision < 0) throw Object.assign(new Error('revision 无效'), { path: 'revision' });
+  if (!(typeof value.savedAt === 'number' && Number.isFinite(value.savedAt)) || typeof value.timezone !== 'string') throw Object.assign(new Error('统一存档时间或时区无效'), { path: 'envelope' });
+  validateEnvelope(value.sections.intraday); assertState(value.sections.intraday?.state); validateRisk(value.sections.riskManager); if (!value.preferences || !['system', 'light', 'dark'].includes(value.preferences.appearance)) throw Object.assign(new Error('外观偏好无效'), { path: 'preferences.appearance' }); return true;
+}
+
+function classifyBackup(value) {
+  const matches = [value?.app === 'trading-control-center' && !!value.sections, value?.app === 'intraday-task-cards' && !!value.state, (value?.app === undefined || value?.app === 'intraday-task-cards') && Number.isInteger(value?.schemaVersion) && Array.isArray(value?.accounts) && Object.hasOwn(value, 'selectedAccountId')].filter(Boolean).length;
+  if (matches !== 1) throw new Error(matches ? '备份格式歧义' : '无法识别备份格式');
+  return value.app === 'trading-control-center' ? 'unified' : value.app === 'intraday-task-cards' ? 'intraday' : 'risk';
+}
+
+function parseBackupRaw(raw) {
+  if (typeof raw !== 'string') throw Object.assign(new Error('备份内容必须是文本'), { code: 'JSON_PARSE_ERROR', path: 'raw' });
+  if (new TextEncoder().encode(raw).byteLength > MAX_FILE_BYTES) throw Object.assign(new Error('文件超过 8 MB 限制'), { code: 'FILE_TOO_LARGE', path: 'raw' });
+  try { return JSON.parse(raw); } catch (cause) { throw Object.assign(new Error('备份 JSON 无法解析'), { code: 'JSON_PARSE_ERROR', path: 'raw', cause }); }
+}
+
+function normalizeImport(value, current) {
+  const kind = classifyBackup(value); let next;
+  if (kind === 'unified') { validateUnified(value); next = copy(value); }
+  else if (kind === 'intraday') { const intraday = deserialize(JSON.stringify(value)); next = copy(current); next.sections.intraday = intraday; }
+  else { const risk = migrateState(value); validateRisk(risk); next = copy(current); next.sections.riskManager = risk; }
+  next.preferences = { appearance: appearance(next.preferences?.appearance) }; validateUnified(next); return { kind, state: next, summary: importSummary(kind, next) };
+}
+
+function importSummary(kind, state) {
+  const cards = Object.keys(state.sections.intraday.state.cards || {}).length;
+  const records = state.sections.intraday.state.records?.length || 0;
+  const accounts = state.sections.riskManager.accounts?.length || 0;
+  return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好。` : kind === 'intraday' ? `将只替换状态卡（${cards} 张、${records} 条记录）；账户和外观保持不变。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
+}
+
+function loadUnified(storage) {
+  if (!storage?.getItem) return { state: makeUnified(), source: 'storage-unavailable' };
+  let raw; try { raw = storage.getItem(UNIFIED_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
+  if (raw !== null && raw !== undefined) { try { const parsed = JSON.parse(raw); validateUnified(parsed); let notice = ''; try { const legacyRaw = storage.getItem(LEGACY_INTRADAY_KEY); const legacy = legacyRaw ? JSON.parse(legacyRaw) : null; if (Number.isSafeInteger(legacy?.savedAt) && legacy.savedAt > parsed.savedAt) notice = '检测到时间更新的旧状态卡存档；为避免双源覆盖，当前仍只读取统一存档。'; } catch (_) {} return { state: parsed, source: 'canonical', raw, notice }; } catch (error) { return { state: null, source: 'recovery-required', error, raw }; } }
+  let intradayRaw; let riskRaw; let preference;
+  try { intradayRaw = storage.getItem(LEGACY_INTRADAY_KEY); riskRaw = storage.getItem(LEGACY_RISK_KEY); preference = storage.getItem(LEGACY_APPEARANCE_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
+  if (intradayRaw === null && riskRaw === null) return { state: makeUnified(undefined, blankRisk(), { appearance: preference }), source: 'blank' };
+  try { const intraday = intradayRaw === null ? makeEnvelope(createWorkspace()) : deserialize(intradayRaw); const risk = riskRaw === null ? blankRisk() : migrateState(JSON.parse(riskRaw)); validateRisk(risk); return { state: makeUnified(intraday, risk, { appearance: preference }), source: 'legacy' }; }
+  catch (error) { return { state: null, source: 'recovery-required', error, raw: JSON.stringify({ intradayRaw, riskRaw, preference }) }; }
+}
+
+function commitUnified(storage, state, { preImport = false, expectedRaw } = {}) {
+  validateUnified(state); const next = copy(state); next.revision += 1; next.savedAt = Date.now(); const raw = JSON.stringify(next);
+  if (!storage?.setItem || !storage?.getItem) throw Object.assign(new Error('本地存储不可用'), { code: 'STORAGE_UNAVAILABLE' });
+  let prior;
+  try { prior = storage.getItem(UNIFIED_KEY); } catch (cause) { throw Object.assign(new Error('读取统一存档失败'), { code: 'STORAGE_READ_FAILED', cause }); }
+  if (expectedRaw !== undefined && prior !== expectedRaw) throw Object.assign(new Error('导入确认期间存档已被其他页面修改'), { code: 'REVISION_CONFLICT' });
+  if (preImport) {
+    try { storage.setItem(PRE_IMPORT_KEY, prior ?? ''); } catch (cause) { throw Object.assign(new Error('导入前快照写入失败'), { code: 'PRE_IMPORT_SNAPSHOT_FAILED', cause }); }
+    try { if (storage.getItem(PRE_IMPORT_KEY) !== (prior ?? '')) throw new Error('导入前快照回读失败'); } catch (cause) { throw Object.assign(new Error('导入前快照回读失败'), { code: 'PRE_IMPORT_SNAPSHOT_FAILED', cause }); }
+  }
+  try { storage.setItem(UNIFIED_KEY, raw); } catch (cause) { throw Object.assign(new Error('统一存档写入失败'), { code: 'CANONICAL_WRITE_FAILED', cause }); }
+  let stored;
+  try { stored = storage.getItem(UNIFIED_KEY); } catch (cause) { throw Object.assign(new Error('统一存档回读失败'), { code: 'POST_WRITE_MISMATCH', cause }); }
+  if (stored !== raw) throw Object.assign(new Error('统一存档回读失败；已安全停止继续修改'), { code: 'POST_WRITE_MISMATCH' });
+  return next;
 }
 
 
@@ -1597,6 +1695,35 @@ function toggleCardCollapsed(collapsedCards, symbol) {
 }
 
 
+const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk' });
+
+function parseRoute(hash) {
+  return hash === ROUTES.risk ? 'risk' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
+}
+
+function normalizeRoute(hash) {
+  return hash === '' || hash === '#' ? ROUTES.home : hash;
+}
+
+function applyRoute(root, hash = globalThis.location?.hash || '') {
+  const route = parseRoute(hash);
+  const active = route === 'unknown' ? 'error' : route;
+  root?.querySelectorAll?.('[data-route-view]').forEach(view => { view.hidden = view.dataset.routeView !== active; });
+  root?.querySelectorAll?.('[data-route-link]').forEach(link => {
+    const selected = link.dataset.routeLink === active;
+    link.setAttribute('aria-current', selected ? 'page' : 'false');
+  });
+  if (route === 'unknown') {
+    const message = root?.querySelector?.('[data-route-error]');
+    if (message) message.textContent = `无法打开地址「${hash || '空地址'}」。数据仍保留在当前页面。`;
+    const heading = root?.querySelector?.('[data-route-error-heading]');
+    heading?.focus?.();
+  }
+  if (globalThis.document) document.title = active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
+  return { route: active, unknown: route === 'unknown' };
+}
+
+
 
 const cardsEl = document.querySelector('#cards');
 const historyBody = document.querySelector('#history-body');
@@ -1609,11 +1736,16 @@ let lastRaw = null;
 let saveError = '';
 let corruption = false;
 let externalConflict = false;
+let storageUnsafe = false;
 let restoredNotice = '';
 let historyScope = 'today';
 let currentDay = '';
 let collapsedCards = new Set();
 let storage = null;
+let unified = null;
+let dashboardView = null;
+let fullRiskView = null;
+let appearanceView = null;
 try { storage = globalThis.localStorage; } catch (_) { storage = null; }
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -1625,6 +1757,16 @@ const duration = card => {
 };
 const announce = text => { live.textContent = text; };
 const directionShort = direction => direction === 'long' ? '多' : direction === 'short' ? '空' : '—';
+const writeLocked = () => externalConflict || storageUnsafe;
+function saveUnified(candidate, options = {}, phase = 'unified_storage_write') {
+  try { return commitUnified(storage, candidate, options); }
+  catch (error) {
+    if (error.code === 'POST_WRITE_MISMATCH') storageUnsafe = true;
+    reportDiagnostic(error, { phase });
+    storageStatus();
+    throw error;
+  }
+}
 
 function storageStatus() {
   const label = document.querySelector('#save-status');
@@ -1635,11 +1777,11 @@ function storageStatus() {
   const importJson = document.querySelector('#import-json');
   const importFile = document.querySelector('#import-file');
   const confirm = document.querySelector('#dialog-confirm');
-  const policy = externalConflictPolicy(externalConflict);
+  const policy = externalConflictPolicy(writeLocked());
   document.querySelector('#restore-note').textContent = restoredNotice;
   document.querySelector('#restore-note').hidden = !restoredNotice;
   document.querySelector('#export-raw').hidden = !corruption;
-  document.querySelector('#export-json').disabled = corruption;
+  document.querySelector('#export-json').disabled = corruption && !lastRaw;
   document.querySelector('#export-today').disabled = corruption;
   document.querySelector('#export-all').disabled = corruption;
   importJson.disabled = policy.disableDangerousDataActions;
@@ -1647,12 +1789,17 @@ function storageStatus() {
   startFresh.disabled = policy.disableDangerousDataActions;
   confirm.disabled = policy.disableDangerousDataActions;
   historyBody.inert = policy.historyInert;
+  document.querySelector('#risk-dashboard-host').inert = policy.cardsInert;
+  document.querySelector('#risk-manager-host').inert = policy.cardsInert;
   document.querySelectorAll('[data-delete]').forEach(button => { button.disabled = policy.historyInert; });
   if (corruption) {
     label.textContent = '存档异常 · 未覆盖'; message.textContent = '本地存档未通过校验。GC / CL / ES 已显示，但原存档未被清空或覆盖；请导出原始存档、恢复有效备份，或明确开始空白工作区。'; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = false; cardsEl.inert = true; return;
   }
   if (externalConflict) {
     label.textContent = '检测到外部修改 · 当前页面只读'; message.textContent = policy.message; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; cardsEl.inert = policy.cardsInert; return;
+  }
+  if (storageUnsafe) {
+    label.textContent = '存档回读不一致 · 当前页面只读'; message.textContent = '统一存档写入后无法确认内容一致。为避免继续覆盖，编辑与导入已停止；请先导出 JSON 备份后刷新。'; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; cardsEl.inert = true; return;
   }
   startFresh.hidden = true;
   cardsEl.inert = false;
@@ -1661,29 +1808,29 @@ function storageStatus() {
 }
 function persist() {
   if (corruption) return false;
-  const policy = externalConflictPolicy(externalConflict);
-  const saved = saveWorkspace(storage, state, now(), { allowWrite: policy.allowPersist });
-  if (saved.ok) { state.lastSavedAt = saved.savedAt; lastRaw = saved.raw; saveError = ''; storageStatus(); return true; }
-  const failure = Object.assign(new Error(saved.diagnostic?.message || saved.error), {
-    code: saved.diagnostic?.errorCode,
-    path: saved.diagnostic?.validationPath
-  });
-  reportDiagnostic(failure, saved.diagnostic || { phase: 'storage_write' }); saveError = saved.error; storageStatus(); return false;
+  const policy = externalConflictPolicy(writeLocked());
+  if (unified) {
+    if (!policy.allowPersist) { saveError = 'Conflict'; storageStatus(); return false; }
+    try {
+      const candidate = copy(unified); candidate.sections.intraday = makeEnvelope(state, now());
+      const saved = saveUnified(candidate);
+      unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); saveError = ''; storageStatus(); dashboardView?.render(); fullRiskView?.render(); return true;
+    } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); return false; }
+  }
+  saveError = 'StorageUnavailable'; storageStatus(); return false;
 }
 function load() {
-  const startup = loadInitialWorkspace(storage, now());
-  state = startup.state; lastRaw = startup.lastRaw;
-  if (startup.diagnostic) {
-    const failure = Object.assign(new Error(startup.diagnostic.message), {
-      code: startup.diagnostic.errorCode,
-      path: startup.diagnostic.validationPath
-    });
-    reportDiagnostic(failure, startup.diagnostic);
-  }
-  if (startup.mode === 'blank') persist();
-  if (startup.mode === 'storage-unavailable') saveError = startup.error;
-  if (startup.mode === 'recovery-required') corruption = true;
-  if (startup.mode === 'restored') restoredNotice = `恢复 ${dateKey(startup.savedAt).slice(5)} ${timeText(startup.savedAt)} 的手动状态 · 离开期间未核验行情`;
+  try {
+    const boot = loadUnified(storage);
+    if (boot.source === 'recovery-required') { corruption = true; saveError = 'RecoveryRequired'; lastRaw = boot.raw || ''; return; }
+    unified = boot.state;
+    state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.sections.intraday.savedAt; restoredNotice = boot.notice || '';
+    if (boot.source === 'legacy' || boot.source === 'blank') {
+      try { unified = saveUnified(unified, {}, 'unified_first_write'); state.lastSavedAt = unified.savedAt; }
+      catch (error) { reportDiagnostic(error, { phase: 'unified_first_write' }); saveError = 'StorageUnavailable'; }
+    }
+    lastRaw = JSON.stringify(unified); if (boot.source === 'storage-unavailable') saveError = 'StorageUnavailable'; return;
+  } catch (error) { reportDiagnostic(error, { phase: 'unified_startup' }); corruption = true; return; }
 }
 function mutate(message, symbol, focus = '.state-title') {
   assertState(state); persist(); renderAll();
@@ -1698,7 +1845,7 @@ function renderCard(symbol) {
   const collapsed = collapsedCards.has(symbol);
   const [action, prohibition] = instruction(card); const registration = registrationStatus(state, symbol);
   const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
-  const structure = `<section class="classifier structure-field"><span class="field-label">当前 15M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 15M 市场结构">${Object.entries(STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 结构</p>' : ''}</section>`;
+  const structure = `<section class="classifier structure-field"><span class="field-label">当前 3M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 3M 市场结构">${Object.entries(STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 市场结构</p>' : ''}</section>`;
   const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.structure3m, key))).join('')}</div>`;
   const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || card.direction === 'none' || !isDirectionAllowed(card.structure3m, card.direction))).join('')}</div>`;
   const position = `<div class="zone"><label for="zone-${symbol}">关键位置</label><input id="zone-${symbol}" data-zone="${symbol}" maxlength="100" autocomplete="off" spellcheck="false" value="${escapeHtml(opportunity?.zoneDraft || '')}" placeholder="${opportunity ? '输入后点确认' : '先建立机会'}"${!opportunity ? ' disabled' : holding ? ' readonly' : ''}><button class="zone-confirm" data-action="confirm-zone" data-symbol="${symbol}" type="button"${registration.enabled ? '' : ' disabled'}>${registration.label}</button></div><p class="zone-note ${registration.kind}">${registration.text}</p>`;
@@ -1709,7 +1856,7 @@ function renderCard(symbol) {
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
   const confirmedZone = opportunity?.registeredAt !== null && opportunity?.zone ? `<span class="summary-zone">${escapeHtml(opportunity.zone)}</span>` : '';
-  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">当前 15M 市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
+  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">当前 3M 市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
   const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></div>${summary}</div></section>${entry}${ending}</article>`;
@@ -1731,16 +1878,16 @@ function recordWarning(opportunity) {
 }
 function openConfirmation(action, title, message, confirm, warning = '') {
   if (pending) return;
-  pending = { ...action, revision: state.revision }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm;
+  pending = { ...action, revision: state.revision, storageRaw: lastRaw }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm;
   const warningEl = document.querySelector('#dialog-warning'); warningEl.textContent = warning; warningEl.hidden = !warning; dialog.showModal(); document.querySelector('#dialog-cancel').focus();
 }
 function finishConfirmation(confirmed) {
   const action = pending; pending = null; dialog.close();
   if (!confirmed) { announce('已取消；任务、计时和机会记录保持不变'); return; }
-  if (externalConflict) { announce('检测到其他页面修改；当前页面已锁定，本次确认未应用'); return; }
+  if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { state = copy(action.envelope.state); state.lastSavedAt = action.envelope.savedAt; corruption = false; saveError = ''; restoredNotice = '已恢复所选备份。仍须对照交易平台核对当前任务与持仓。'; mutate('备份已恢复；旧记录未合并，不发送任何订单'); return; }
-  if (action.kind === 'fresh') { state = createWorkspace(now()); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档将由这次新保存替换。'; mutate('已开始空白工作区；请按实际交易状态重新建立任务', null, null); return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : action.importKind === 'intraday' ? '状态卡备份' : '风险管理器备份'}。仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['direction', 'structure'].includes(action.kind)) return;
   if (action.kind === 'direction') { const result = changeDirection(state, action.symbol, action.direction, now(), true); if (result.changed) mutate(`${action.symbol} 旧机会因方向改变结束；当前无机会`, action.symbol); }
   if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now(), true); if (result.changed) mutate(`${action.symbol} 3M 市场结构已更新；当前不兼容机会已失效`, action.symbol); }
@@ -1750,11 +1897,11 @@ function finishConfirmation(confirmed) {
 function handleAction(button) {
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
   if (action === 'toggle-collapse') {
-    if (pending || corruption || externalConflict || button.disabled) return;
+    if (pending || corruption || writeLocked() || button.disabled) return;
     collapsedCards = toggleCardCollapsed(collapsedCards, symbol); renderAll();
     document.querySelector(`article[data-symbol="${symbol}"] .card-toggle`)?.focus({ preventScroll: true }); announce(`${symbol} 卡片已${collapsedCards.has(symbol) ? '收起' : '展开'}`); return;
   }
-  if (pending || corruption || externalConflict || button.disabled) return;
+  if (pending || corruption || writeLocked() || button.disabled) return;
   const card = state.cards[symbol];
   if (action === 'bias') { if (changeBias(state, symbol, value)) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol); return; }
   if (action === 'structure') {
@@ -1777,30 +1924,49 @@ function handleAction(button) {
 function download(text, filename, type) { const url = URL.createObjectURL(new Blob([text], { type })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
 
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
-cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption || externalConflict) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
+cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption || writeLocked()) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
 cardsEl.addEventListener('keydown', event => { if (event.target.matches('input[data-zone]') && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); event.target.closest('article').querySelector('.zone-confirm:not(:disabled)')?.focus(); } });
-historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || externalConflict || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
+historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
 document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => finishConfirmation(true)); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });
 document.querySelector('#data-tools').addEventListener('click', () => { document.querySelector('#data-feedback').textContent = ''; dataDialog.showModal(); }); document.querySelector('#data-close').addEventListener('click', () => dataDialog.close());
 document.querySelector('#export-today').addEventListener('click', () => { download(exportMarkdown(state, 'today'), `日内机会_${dateKey(now())}.md`, 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
 document.querySelector('#export-all').addEventListener('click', () => { download(exportMarkdown(state, 'all'), '日内机会_全部.md', 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
-document.querySelector('#export-json').addEventListener('click', () => { download(JSON.stringify(makeEnvelope(state), null, 2), `日内状态卡_完整备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成完整备份下载。'; });
+document.querySelector('#export-json').addEventListener('click', () => { const payload = unified ? copy(unified) : makeEnvelope(state); download(JSON.stringify(payload, null, 2), `交易控制中心_完整备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成完整备份下载（状态卡、风险管理器与外观）。'; });
+document.querySelector('#export-intraday-json').addEventListener('click', () => { download(JSON.stringify(makeEnvelope(state), null, 2), `日内状态卡_备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成状态卡分项 JSON。'; });
+document.querySelector('#export-risk-json').addEventListener('click', () => { download(JSON.stringify(unified?.sections.riskManager || { schemaVersion: 2, selectedAccountId: null, accounts: [] }, null, 2), `Trading_Risk_Manager_备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成风险管理器分项 JSON。'; });
 document.querySelector('#export-raw').addEventListener('click', () => { download(lastRaw || '', `日内状态卡_原始存档_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始存档；原数据未修改。'; });
-document.querySelector('#import-json').addEventListener('click', () => { if (externalConflict) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
-document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (externalConflict) { document.querySelector('#data-feedback').textContent = '检测到其他页面修改；请刷新读取最新状态后再恢复备份。'; return; } const raw = await file.text(); const envelope = deserialize(raw); validateEnvelope(envelope); if (externalConflict) { document.querySelector('#data-feedback').textContent = '检测到其他页面修改；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', envelope }, '确认恢复并替换当前本地数据？', `备份保存时间：${fullTime(envelope.savedAt)}\n将整体替换三张卡、草稿和全部记录，不合并。\n恢复不会产生订单，也不代表交易平台持仓已变化。`, '确认替换并恢复', '请先导出当前 JSON 备份。恢复后必须对照交易平台核对。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
-document.querySelector('#storage-retry').addEventListener('click', () => { if (!externalConflict) persist(); });
-document.querySelector('#start-fresh').addEventListener('click', () => { if (!externalConflict) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
-window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到外部页面写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); externalConflict = true; saveError = 'Conflict'; storageStatus(); } });
+document.querySelector('#import-json').addEventListener('click', () => { if (writeLocked()) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
+document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind }, '确认导入备份？', `${importSummary(preview.kind, preview.state)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
+document.querySelector('#storage-retry').addEventListener('click', () => { if (!writeLocked()) persist(); });
+document.querySelector('#start-fresh').addEventListener('click', () => { if (!writeLocked()) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
+window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到其他标签页写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); externalConflict = true; saveError = 'Conflict'; storageStatus(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { ORDER.forEach(symbol => { const element = document.querySelector(`article[data-symbol="${symbol}"] .duration`); if (element) element.textContent = duration(state.cards[symbol]); }); if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
 function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; renderTextBanner(banner, message); cardsEl.inert = true; } }
 
-initAppearance(document.querySelector('#appearance-select'));
-try { initRiskDashboard(document.querySelector('#risk-dashboard-host')); } catch (error) {
+load();
+appearanceView = initAppearance(document.querySelector('#appearance-select'), { getItem: () => unified?.preferences?.appearance }, document.documentElement, nextAppearance => {
+  if (!unified || writeLocked()) return false;
+  const candidate = copy(unified); candidate.preferences.appearance = nextAppearance;
+  try { unified = saveUnified(candidate, {}, 'appearance_update'); lastRaw = JSON.stringify(unified); state.lastSavedAt = unified.savedAt; dashboardView?.render(); fullRiskView?.render(); storageStatus(); return true; } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); return false; }
+});
+function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else applyRoute(document, normalized); }
+window.addEventListener('hashchange', route); route();
+try { dashboardView = initRiskDashboard(document.querySelector('#risk-dashboard-host'), {
+  getState: () => unified?.sections.riskManager,
+  isLocked: () => writeLocked(),
+  commit: nextRisk => { const candidate = copy(unified); candidate.sections.riskManager = copy(nextRisk); const saved = saveUnified(candidate, {}, 'risk_dashboard_commit'); unified = saved; lastRaw = JSON.stringify(saved); state.lastSavedAt = saved.savedAt; fullRiskView?.render(); storageStatus(); }
+}); } catch (error) {
   reportDiagnostic(error, { phase: 'risk_dashboard_init' });
   const riskHost = document.querySelector('#risk-dashboard-host');
   if (riskHost) riskHost.textContent = 'Trading Risk Manager 风险看板暂不可用；GC / CL / ES 状态卡仍可正常使用。';
 }
-load(); renderAll(); storageStatus();
+try { fullRiskView = initRiskManagerView(document.querySelector('#risk-manager-host'), {
+  getState: () => unified?.sections.riskManager,
+  isLocked: () => writeLocked(),
+  navigateHome: () => { globalThis.location.hash = '#/home'; },
+  commit: nextRisk => { const candidate = copy(unified); candidate.sections.riskManager = copy(nextRisk); const saved = saveUnified(candidate, {}, 'risk_view_commit'); unified = saved; lastRaw = JSON.stringify(saved); state.lastSavedAt = saved.savedAt; dashboardView?.render(); storageStatus(); }
+}); } catch (error) { reportDiagnostic(error, { phase: 'risk_view_init' }); }
+renderAll(); storageStatus();
 
 })();

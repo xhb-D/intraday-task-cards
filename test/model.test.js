@@ -91,7 +91,7 @@ test('M: 静态 UI 合约固定 GC → CL → ES 三卡，并为入场/平仓保
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
   assert.match(app, /ORDER\.map\(renderCard\)/); assert.match(css, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   const refinement = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
-  assert.match(app, /当前偏见/); assert.match(app, /当前 15M 市场结构/); assert.match(app, /交易方向/); assert.match(app, /disabled aria-disabled="true"/);
+  assert.match(app, /当前偏见/); assert.match(app, /当前 3M 市场结构/); assert.match(app, /class="tf">3M/); assert.match(app, /交易方向/); assert.match(app, /disabled aria-disabled="true"/);
   assert.match(app, /let stages = '<div class="empty"[^]*?if \(opportunity && !holding\)[^]*?else if \(holding\) ending/);
   assert.match(refinement, /grid-template-rows:31px 43px 43px 49px 98px 112px 34px 36px 34px/);
   assert.match(refinement, /\.card \.field-label\{margin-bottom:5px;font-size:10px;line-height:12px/);

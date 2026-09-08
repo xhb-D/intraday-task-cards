@@ -83,6 +83,7 @@
 .appearance-select:focus-visible{outline:2px solid color-mix(in srgb,var(--theme-accent) 60%,transparent);outline-offset:2px}
 
 body{background:var(--bg-page);color:var(--text-primary)}
+.app-nav{display:flex;gap:10px;margin-top:6px;font-size:12px}.app-nav a{color:var(--text-secondary);text-decoration:none}.app-nav a[aria-current=page]{color:var(--text-primary);font-weight:700;text-decoration:underline;text-underline-offset:3px}
 .stamp strong,.tf{color:var(--text-primary);background:var(--bg-surface-secondary);border-color:var(--border-primary)}
 .stamp p,.link,.subtitle,.restore-note,.field-label,.zone label,.zone-note,.task-meta,.instruction span,.history-body>p,.feedback,.caution{color:var(--text-secondary)}
 .card,.history,.dialog,.risk-dialog{background:var(--bg-surface);border-color:var(--border-primary);box-shadow:var(--shadow-card);color:var(--text-primary)}

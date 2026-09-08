@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "classification": "synthetic-only",
+  "fixtures": {
+    "intraday-v1-active": { "expectedSchemaVersion": 3, "sections": ["intraday"], "summary": "旧活动机会迁移后待结构审查。", "sha256": "02a124d30b8e49be9b5815216681ab53fb8e123b241b82af401ae8c8dd62715f" },
+    "intraday-v2-near": { "expectedSchemaVersion": 3, "sections": ["intraday"], "summary": "near 确定性映射为 wait 并合并阶段。", "sha256": "c18b3c0db78e4b9af4560abc7963600efcb724b2ad9ca2074da68da86143adbd" },
+    "intraday-v3-holding": { "expectedSchemaVersion": 3, "sections": ["intraday"], "summary": "已登记且持仓中的 V3 状态往返。", "sha256": "c6335077be7eda01efed22183a51a83f02ca060ba17ec677736c29d2c6855d9c" },
+    "risk-v1-legacy": { "expectedSchemaVersion": 2, "sections": ["riskManager"], "summary": "旧快照冻结，最大亏损额度保持 null。", "sha256": "e1a985e157363ced1237b49fd549a25112088519b5d7a323e4140d07310b0ab7" },
+    "risk-v2-multi-history": { "expectedSchemaVersion": 2, "sections": ["riskManager"], "summary": "多账户、余额事件及 previousSession 往返。", "sha256": "7312a1dd05029beb189f3c6f5d95c45cec04445fcc8617d2e4a133d5517e0131" },
+    "unified-v1-empty": { "expectedSchemaVersion": 1, "sections": ["intraday", "riskManager", "preferences"], "summary": "空白统一工作区。", "sha256": "03bd59da9234710c5fe1dc5056377117b05a6cd9a81e5ac14ce834c178218827" },
+    "unified-v1-active": { "expectedSchemaVersion": 1, "sections": ["intraday", "riskManager", "preferences"], "summary": "完整活动状态、多账户与外观偏好。", "sha256": "6153c25dc91ec96f1de6a7b3736fdd6f261eaa9cbd95c46b17cabf8e4e696146" },
+    "invalid-corrupt-json": { "expectedSchemaVersion": null, "sections": [], "summary": "损坏 JSON。", "sha256": "f1dec6e9ee608550bd1c39ff2b90134059bac5d02e4e78f6410aed2fbd870bd0" },
+    "invalid-future-version": { "expectedSchemaVersion": null, "sections": [], "summary": "未知未来版本。", "sha256": "0b78fe0d379edcbbcb749ea932b7931b90d40aea2f5c7bf0ccf8bbc67d71d69f" },
+    "invalid-ambiguous": { "expectedSchemaVersion": null, "sections": [], "summary": "多类格式匹配。", "sha256": "f5645a1a0e65fa34b7456d0fd84f0f6c31e3a895e8ef430d9c25a5eac1955e90" }
+  }
+}

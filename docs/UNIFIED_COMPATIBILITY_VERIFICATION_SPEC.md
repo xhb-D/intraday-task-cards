@@ -1,8 +1,9 @@
 # 统一交易控制中心 — Data Compatibility & Verification Spec
 
 - 状态：APPROVED / FROZEN
-- 版本：1.0
+- 版本：1.1
 - 日期：2026-09-08
+- 修订：用户于 2026-09-08 明确授权将当前市场结构展示恢复为 3M。验证应覆盖页面、ARIA 辅助文本、提示和 Markdown 导出的 3M 表述；`structure3m` 与现有备份不迁移、不改名。
 
 ## 1. 目标
 

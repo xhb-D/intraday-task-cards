@@ -9,7 +9,7 @@ import { addBalanceUpdate, deriveDecision, deriveCurrentBalance, undoLastBalance
 test('risk dashboard: 复用 V2 账户、余额更新、撤销与风险重算', () => {
   let state = { schemaVersion: RISK_MANAGER_SCHEMA_VERSION, selectedAccountId: null, accounts: [] };
   state = createAccount(state, {
-    name: 'LFF05073435950005', propFirm: 'Demo', accountType: '50K', nominalAccountSize: 50000,
+    name: 'DEMO-ACCOUNT-001', propFirm: 'Demo', accountType: '50K', nominalAccountSize: 50000,
     riskReferenceBalance: 50000, hardLossAmount: 2000, drawdownType: 'NONE', defaultHardLossFloor: null, initialBalance: 50000
   });
   const id = state.selectedAccountId;
@@ -21,23 +21,21 @@ test('risk dashboard: 复用 V2 账户、余额更新、撤销与风险重算', 
   assert.equal(deriveCurrentBalance(state.accounts[0].currentSession), 50000); assert.equal(decision.allowedR, 100);
 });
 
-test('risk dashboard: 首页保留真实存储键与指定操作入口', () => {
+test('risk dashboard: 首页和完整视图共享控制器与指定操作入口', () => {
   const source = readFileSync(new URL('../src/risk-dashboard.js', import.meta.url), 'utf8');
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   assert.equal(STORAGE_KEY, 'trading-risk-manager:v1');
-  assert.match(source, /saveAppState\(riskDashboardState, riskDashboardStorage\)/);
-  assert.match(source, /addBalanceUpdate\(riskDashboardState, account\.id/);
-  assert.match(source, /undoLastBalanceUpdate\(riskDashboardState, account\.id\)/);
-  assert.match(source, /更新余额/); assert.match(source, /撤销上一条余额更新/); assert.match(source, /编辑账户/); assert.match(source, /查看全部/);
+  assert.match(source, /mountRiskManager/);
+  assert.match(source, /compact: true/);
+  assert.match(html, /统一交易控制中心/);
   assert.match(html, /id="risk-dashboard-host"/);
 });
 
-test('risk dashboard: 窄屏空账户始终可通过下拉创建首个账户，且初始化失败不阻断状态卡', () => {
+test('risk dashboard: app 将两处风险视图绑定到同一 unified controller', () => {
   const source = readFileSync(new URL('../src/risk-dashboard.js', import.meta.url), 'utf8');
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
-  assert.match(source, /const placeholder = new Option\('选择账户', '', !account, !account\);[\s\S]*?placeholder\.disabled = true/);
-  assert.match(source, /picker\.value === '__add__'/);
-  assert.match(source, /picker\.value = riskDashboardState\.selectedAccountId \|\| ''/);
-  assert.match(app, /try \{ initRiskDashboard\(document\.querySelector\('#risk-dashboard-host'\)\); \} catch \(error\)/);
+  assert.match(source, /same controller/);
+  assert.match(app, /dashboardView = initRiskDashboard/);
+  assert.match(app, /fullRiskView = initRiskManagerView/);
   assert.match(app, /GC \/ CL \/ ES 状态卡仍可正常使用/);
 });

@@ -1,12 +1,14 @@
 import { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, SETUPS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, hasRecord, isDirectionAllowed, instruction, registrationStatus, changeBias, changeStructure, chooseSetup, changeDirection, updateDraft, confirmPosition, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy } from './model.js';
-import { STORE_KEY, deserialize, makeEnvelope, validateEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './persistence.js';
-import { loadInitialWorkspace, saveWorkspace } from './startup.js';
+import { makeEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './persistence.js';
 import { renderBannerVisibility, renderTextBanner } from './banner.js';
 import { reportDiagnostic } from './diagnostics.js';
 import { externalConflictPolicy } from './conflict.js';
 import { toggleCardCollapsed } from './ui-preferences.js';
 import { initRiskDashboard } from './risk-dashboard.js';
+import { initRiskManagerView } from './risk-manager-view.js';
 import { initAppearance } from './appearance.js';
+import { applyRoute, normalizeRoute } from './router.js';
+import { UNIFIED_KEY, commitUnified, importSummary, loadUnified, makeUnified, normalizeImport, parseBackupRaw } from './unified-persistence.js';
 
 const cardsEl = document.querySelector('#cards');
 const historyBody = document.querySelector('#history-body');
@@ -19,11 +21,16 @@ let lastRaw = null;
 let saveError = '';
 let corruption = false;
 let externalConflict = false;
+let storageUnsafe = false;
 let restoredNotice = '';
 let historyScope = 'today';
 let currentDay = '';
 let collapsedCards = new Set();
 let storage = null;
+let unified = null;
+let dashboardView = null;
+let fullRiskView = null;
+let appearanceView = null;
 try { storage = globalThis.localStorage; } catch (_) { storage = null; }
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -35,6 +42,16 @@ const duration = card => {
 };
 const announce = text => { live.textContent = text; };
 const directionShort = direction => direction === 'long' ? '多' : direction === 'short' ? '空' : '—';
+const writeLocked = () => externalConflict || storageUnsafe;
+function saveUnified(candidate, options = {}, phase = 'unified_storage_write') {
+  try { return commitUnified(storage, candidate, options); }
+  catch (error) {
+    if (error.code === 'POST_WRITE_MISMATCH') storageUnsafe = true;
+    reportDiagnostic(error, { phase });
+    storageStatus();
+    throw error;
+  }
+}
 
 function storageStatus() {
   const label = document.querySelector('#save-status');
@@ -45,11 +62,11 @@ function storageStatus() {
   const importJson = document.querySelector('#import-json');
   const importFile = document.querySelector('#import-file');
   const confirm = document.querySelector('#dialog-confirm');
-  const policy = externalConflictPolicy(externalConflict);
+  const policy = externalConflictPolicy(writeLocked());
   document.querySelector('#restore-note').textContent = restoredNotice;
   document.querySelector('#restore-note').hidden = !restoredNotice;
   document.querySelector('#export-raw').hidden = !corruption;
-  document.querySelector('#export-json').disabled = corruption;
+  document.querySelector('#export-json').disabled = corruption && !lastRaw;
   document.querySelector('#export-today').disabled = corruption;
   document.querySelector('#export-all').disabled = corruption;
   importJson.disabled = policy.disableDangerousDataActions;
@@ -57,12 +74,17 @@ function storageStatus() {
   startFresh.disabled = policy.disableDangerousDataActions;
   confirm.disabled = policy.disableDangerousDataActions;
   historyBody.inert = policy.historyInert;
+  document.querySelector('#risk-dashboard-host').inert = policy.cardsInert;
+  document.querySelector('#risk-manager-host').inert = policy.cardsInert;
   document.querySelectorAll('[data-delete]').forEach(button => { button.disabled = policy.historyInert; });
   if (corruption) {
     label.textContent = '存档异常 · 未覆盖'; message.textContent = '本地存档未通过校验。GC / CL / ES 已显示，但原存档未被清空或覆盖；请导出原始存档、恢复有效备份，或明确开始空白工作区。'; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = false; cardsEl.inert = true; return;
   }
   if (externalConflict) {
     label.textContent = '检测到外部修改 · 当前页面只读'; message.textContent = policy.message; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; cardsEl.inert = policy.cardsInert; return;
+  }
+  if (storageUnsafe) {
+    label.textContent = '存档回读不一致 · 当前页面只读'; message.textContent = '统一存档写入后无法确认内容一致。为避免继续覆盖，编辑与导入已停止；请先导出 JSON 备份后刷新。'; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; cardsEl.inert = true; return;
   }
   startFresh.hidden = true;
   cardsEl.inert = false;
@@ -71,29 +93,29 @@ function storageStatus() {
 }
 function persist() {
   if (corruption) return false;
-  const policy = externalConflictPolicy(externalConflict);
-  const saved = saveWorkspace(storage, state, now(), { allowWrite: policy.allowPersist });
-  if (saved.ok) { state.lastSavedAt = saved.savedAt; lastRaw = saved.raw; saveError = ''; storageStatus(); return true; }
-  const failure = Object.assign(new Error(saved.diagnostic?.message || saved.error), {
-    code: saved.diagnostic?.errorCode,
-    path: saved.diagnostic?.validationPath
-  });
-  reportDiagnostic(failure, saved.diagnostic || { phase: 'storage_write' }); saveError = saved.error; storageStatus(); return false;
+  const policy = externalConflictPolicy(writeLocked());
+  if (unified) {
+    if (!policy.allowPersist) { saveError = 'Conflict'; storageStatus(); return false; }
+    try {
+      const candidate = copy(unified); candidate.sections.intraday = makeEnvelope(state, now());
+      const saved = saveUnified(candidate);
+      unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); saveError = ''; storageStatus(); dashboardView?.render(); fullRiskView?.render(); return true;
+    } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); return false; }
+  }
+  saveError = 'StorageUnavailable'; storageStatus(); return false;
 }
 function load() {
-  const startup = loadInitialWorkspace(storage, now());
-  state = startup.state; lastRaw = startup.lastRaw;
-  if (startup.diagnostic) {
-    const failure = Object.assign(new Error(startup.diagnostic.message), {
-      code: startup.diagnostic.errorCode,
-      path: startup.diagnostic.validationPath
-    });
-    reportDiagnostic(failure, startup.diagnostic);
-  }
-  if (startup.mode === 'blank') persist();
-  if (startup.mode === 'storage-unavailable') saveError = startup.error;
-  if (startup.mode === 'recovery-required') corruption = true;
-  if (startup.mode === 'restored') restoredNotice = `恢复 ${dateKey(startup.savedAt).slice(5)} ${timeText(startup.savedAt)} 的手动状态 · 离开期间未核验行情`;
+  try {
+    const boot = loadUnified(storage);
+    if (boot.source === 'recovery-required') { corruption = true; saveError = 'RecoveryRequired'; lastRaw = boot.raw || ''; return; }
+    unified = boot.state;
+    state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.sections.intraday.savedAt; restoredNotice = boot.notice || '';
+    if (boot.source === 'legacy' || boot.source === 'blank') {
+      try { unified = saveUnified(unified, {}, 'unified_first_write'); state.lastSavedAt = unified.savedAt; }
+      catch (error) { reportDiagnostic(error, { phase: 'unified_first_write' }); saveError = 'StorageUnavailable'; }
+    }
+    lastRaw = JSON.stringify(unified); if (boot.source === 'storage-unavailable') saveError = 'StorageUnavailable'; return;
+  } catch (error) { reportDiagnostic(error, { phase: 'unified_startup' }); corruption = true; return; }
 }
 function mutate(message, symbol, focus = '.state-title') {
   assertState(state); persist(); renderAll();
@@ -108,7 +130,7 @@ function renderCard(symbol) {
   const collapsed = collapsedCards.has(symbol);
   const [action, prohibition] = instruction(card); const registration = registrationStatus(state, symbol);
   const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
-  const structure = `<section class="classifier structure-field"><span class="field-label">当前 15M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 15M 市场结构">${Object.entries(STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 结构</p>' : ''}</section>`;
+  const structure = `<section class="classifier structure-field"><span class="field-label">当前 3M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 3M 市场结构">${Object.entries(STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 市场结构</p>' : ''}</section>`;
   const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.structure3m, key))).join('')}</div>`;
   const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || card.direction === 'none' || !isDirectionAllowed(card.structure3m, card.direction))).join('')}</div>`;
   const position = `<div class="zone"><label for="zone-${symbol}">关键位置</label><input id="zone-${symbol}" data-zone="${symbol}" maxlength="100" autocomplete="off" spellcheck="false" value="${escapeHtml(opportunity?.zoneDraft || '')}" placeholder="${opportunity ? '输入后点确认' : '先建立机会'}"${!opportunity ? ' disabled' : holding ? ' readonly' : ''}><button class="zone-confirm" data-action="confirm-zone" data-symbol="${symbol}" type="button"${registration.enabled ? '' : ' disabled'}>${registration.label}</button></div><p class="zone-note ${registration.kind}">${registration.text}</p>`;
@@ -119,7 +141,7 @@ function renderCard(symbol) {
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
   const confirmedZone = opportunity?.registeredAt !== null && opportunity?.zone ? `<span class="summary-zone">${escapeHtml(opportunity.zone)}</span>` : '';
-  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">当前 15M 市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
+  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">当前 3M 市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
   const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></div>${summary}</div></section>${entry}${ending}</article>`;
@@ -141,16 +163,16 @@ function recordWarning(opportunity) {
 }
 function openConfirmation(action, title, message, confirm, warning = '') {
   if (pending) return;
-  pending = { ...action, revision: state.revision }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm;
+  pending = { ...action, revision: state.revision, storageRaw: lastRaw }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm;
   const warningEl = document.querySelector('#dialog-warning'); warningEl.textContent = warning; warningEl.hidden = !warning; dialog.showModal(); document.querySelector('#dialog-cancel').focus();
 }
 function finishConfirmation(confirmed) {
   const action = pending; pending = null; dialog.close();
   if (!confirmed) { announce('已取消；任务、计时和机会记录保持不变'); return; }
-  if (externalConflict) { announce('检测到其他页面修改；当前页面已锁定，本次确认未应用'); return; }
+  if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { state = copy(action.envelope.state); state.lastSavedAt = action.envelope.savedAt; corruption = false; saveError = ''; restoredNotice = '已恢复所选备份。仍须对照交易平台核对当前任务与持仓。'; mutate('备份已恢复；旧记录未合并，不发送任何订单'); return; }
-  if (action.kind === 'fresh') { state = createWorkspace(now()); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档将由这次新保存替换。'; mutate('已开始空白工作区；请按实际交易状态重新建立任务', null, null); return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : action.importKind === 'intraday' ? '状态卡备份' : '风险管理器备份'}。仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['direction', 'structure'].includes(action.kind)) return;
   if (action.kind === 'direction') { const result = changeDirection(state, action.symbol, action.direction, now(), true); if (result.changed) mutate(`${action.symbol} 旧机会因方向改变结束；当前无机会`, action.symbol); }
   if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now(), true); if (result.changed) mutate(`${action.symbol} 3M 市场结构已更新；当前不兼容机会已失效`, action.symbol); }
@@ -160,11 +182,11 @@ function finishConfirmation(confirmed) {
 function handleAction(button) {
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
   if (action === 'toggle-collapse') {
-    if (pending || corruption || externalConflict || button.disabled) return;
+    if (pending || corruption || writeLocked() || button.disabled) return;
     collapsedCards = toggleCardCollapsed(collapsedCards, symbol); renderAll();
     document.querySelector(`article[data-symbol="${symbol}"] .card-toggle`)?.focus({ preventScroll: true }); announce(`${symbol} 卡片已${collapsedCards.has(symbol) ? '收起' : '展开'}`); return;
   }
-  if (pending || corruption || externalConflict || button.disabled) return;
+  if (pending || corruption || writeLocked() || button.disabled) return;
   const card = state.cards[symbol];
   if (action === 'bias') { if (changeBias(state, symbol, value)) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol); return; }
   if (action === 'structure') {
@@ -187,28 +209,47 @@ function handleAction(button) {
 function download(text, filename, type) { const url = URL.createObjectURL(new Blob([text], { type })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
 
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
-cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption || externalConflict) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
+cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption || writeLocked()) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
 cardsEl.addEventListener('keydown', event => { if (event.target.matches('input[data-zone]') && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); event.target.closest('article').querySelector('.zone-confirm:not(:disabled)')?.focus(); } });
-historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || externalConflict || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
+historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
 document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => finishConfirmation(true)); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });
 document.querySelector('#data-tools').addEventListener('click', () => { document.querySelector('#data-feedback').textContent = ''; dataDialog.showModal(); }); document.querySelector('#data-close').addEventListener('click', () => dataDialog.close());
 document.querySelector('#export-today').addEventListener('click', () => { download(exportMarkdown(state, 'today'), `日内机会_${dateKey(now())}.md`, 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
 document.querySelector('#export-all').addEventListener('click', () => { download(exportMarkdown(state, 'all'), '日内机会_全部.md', 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
-document.querySelector('#export-json').addEventListener('click', () => { download(JSON.stringify(makeEnvelope(state), null, 2), `日内状态卡_完整备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成完整备份下载。'; });
+document.querySelector('#export-json').addEventListener('click', () => { const payload = unified ? copy(unified) : makeEnvelope(state); download(JSON.stringify(payload, null, 2), `交易控制中心_完整备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成完整备份下载（状态卡、风险管理器与外观）。'; });
+document.querySelector('#export-intraday-json').addEventListener('click', () => { download(JSON.stringify(makeEnvelope(state), null, 2), `日内状态卡_备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成状态卡分项 JSON。'; });
+document.querySelector('#export-risk-json').addEventListener('click', () => { download(JSON.stringify(unified?.sections.riskManager || { schemaVersion: 2, selectedAccountId: null, accounts: [] }, null, 2), `Trading_Risk_Manager_备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成风险管理器分项 JSON。'; });
 document.querySelector('#export-raw').addEventListener('click', () => { download(lastRaw || '', `日内状态卡_原始存档_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始存档；原数据未修改。'; });
-document.querySelector('#import-json').addEventListener('click', () => { if (externalConflict) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
-document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (externalConflict) { document.querySelector('#data-feedback').textContent = '检测到其他页面修改；请刷新读取最新状态后再恢复备份。'; return; } const raw = await file.text(); const envelope = deserialize(raw); validateEnvelope(envelope); if (externalConflict) { document.querySelector('#data-feedback').textContent = '检测到其他页面修改；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', envelope }, '确认恢复并替换当前本地数据？', `备份保存时间：${fullTime(envelope.savedAt)}\n将整体替换三张卡、草稿和全部记录，不合并。\n恢复不会产生订单，也不代表交易平台持仓已变化。`, '确认替换并恢复', '请先导出当前 JSON 备份。恢复后必须对照交易平台核对。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
-document.querySelector('#storage-retry').addEventListener('click', () => { if (!externalConflict) persist(); });
-document.querySelector('#start-fresh').addEventListener('click', () => { if (!externalConflict) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
-window.addEventListener('storage', event => { if (event.key === STORE_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到外部页面写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); externalConflict = true; saveError = 'Conflict'; storageStatus(); } });
+document.querySelector('#import-json').addEventListener('click', () => { if (writeLocked()) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
+document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind }, '确认导入备份？', `${importSummary(preview.kind, preview.state)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
+document.querySelector('#storage-retry').addEventListener('click', () => { if (!writeLocked()) persist(); });
+document.querySelector('#start-fresh').addEventListener('click', () => { if (!writeLocked()) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
+window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到其他标签页写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); externalConflict = true; saveError = 'Conflict'; storageStatus(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { ORDER.forEach(symbol => { const element = document.querySelector(`article[data-symbol="${symbol}"] .duration`); if (element) element.textContent = duration(state.cards[symbol]); }); if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
 function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; renderTextBanner(banner, message); cardsEl.inert = true; } }
 
-initAppearance(document.querySelector('#appearance-select'));
-try { initRiskDashboard(document.querySelector('#risk-dashboard-host')); } catch (error) {
+load();
+appearanceView = initAppearance(document.querySelector('#appearance-select'), { getItem: () => unified?.preferences?.appearance }, document.documentElement, nextAppearance => {
+  if (!unified || writeLocked()) return false;
+  const candidate = copy(unified); candidate.preferences.appearance = nextAppearance;
+  try { unified = saveUnified(candidate, {}, 'appearance_update'); lastRaw = JSON.stringify(unified); state.lastSavedAt = unified.savedAt; dashboardView?.render(); fullRiskView?.render(); storageStatus(); return true; } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); return false; }
+});
+function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else applyRoute(document, normalized); }
+window.addEventListener('hashchange', route); route();
+try { dashboardView = initRiskDashboard(document.querySelector('#risk-dashboard-host'), {
+  getState: () => unified?.sections.riskManager,
+  isLocked: () => writeLocked(),
+  commit: nextRisk => { const candidate = copy(unified); candidate.sections.riskManager = copy(nextRisk); const saved = saveUnified(candidate, {}, 'risk_dashboard_commit'); unified = saved; lastRaw = JSON.stringify(saved); state.lastSavedAt = saved.savedAt; fullRiskView?.render(); storageStatus(); }
+}); } catch (error) {
   reportDiagnostic(error, { phase: 'risk_dashboard_init' });
   const riskHost = document.querySelector('#risk-dashboard-host');
   if (riskHost) riskHost.textContent = 'Trading Risk Manager 风险看板暂不可用；GC / CL / ES 状态卡仍可正常使用。';
 }
-load(); renderAll(); storageStatus();
+try { fullRiskView = initRiskManagerView(document.querySelector('#risk-manager-host'), {
+  getState: () => unified?.sections.riskManager,
+  isLocked: () => writeLocked(),
+  navigateHome: () => { globalThis.location.hash = '#/home'; },
+  commit: nextRisk => { const candidate = copy(unified); candidate.sections.riskManager = copy(nextRisk); const saved = saveUnified(candidate, {}, 'risk_view_commit'); unified = saved; lastRaw = JSON.stringify(saved); state.lastSavedAt = saved.savedAt; dashboardView?.render(); storageStatus(); }
+}); } catch (error) { reportDiagnostic(error, { phase: 'risk_view_init' }); }
+renderAll(); storageStatus();

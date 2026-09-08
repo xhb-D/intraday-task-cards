@@ -41,14 +41,17 @@ test('external conflict: policy fails closed for edits and dangerous data action
 
 test('external conflict: app binds the lock to all mutation paths, including an already-open confirmation', () => {
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
-  assert.match(app, /saveWorkspace\(storage, state, now\(\), \{ allowWrite: policy\.allowPersist \}\)/);
+  assert.match(app, /return commitUnified\(storage, candidate, options\)/);
+  assert.match(app, /storageUnsafe = true/);
   assert.match(app, /cardsEl\.inert = policy\.cardsInert/);
   assert.match(app, /historyBody\.inert = policy\.historyInert/);
+  assert.match(app, /risk-dashboard-host'\)\.inert = policy\.cardsInert/);
   assert.match(app, /importJson\.disabled = policy\.disableDangerousDataActions/);
   assert.match(app, /retry\.hidden = true; startFresh\.hidden = true/);
-  assert.match(app, /if \(pending \|\| corruption \|\| externalConflict \|\| button\.disabled\) return/);
-  assert.match(app, /if \(!input \|\| pending \|\| corruption \|\| externalConflict\) return/);
-  assert.match(app, /if \(!button \|\| externalConflict \|\| event\.detail > 1\) return/);
-  assert.match(app, /if \(externalConflict\) \{ announce\('检测到其他页面修改；当前页面已锁定，本次确认未应用'\); return; \}/);
+  assert.match(app, /if \(pending \|\| corruption \|\| writeLocked\(\) \|\| button\.disabled\) return/);
+  assert.match(app, /if \(!input \|\| pending \|\| corruption \|\| writeLocked\(\)\) return/);
+  assert.match(app, /if \(!button \|\| writeLocked\(\) \|\| event\.detail > 1\) return/);
+  assert.match(app, /if \(writeLocked\(\)\) \{ announce\('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'\); return; \}/);
+  assert.match(app, /expectedRaw: action\.storageRaw/);
   assert.match(app, /externalConflict = true; saveError = 'Conflict'; storageStatus\(\);/);
 });

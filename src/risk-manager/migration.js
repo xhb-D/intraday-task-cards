@@ -15,6 +15,7 @@
 import { computeLegacySnapshot } from './risk-snapshot.js';
 
 export const RISK_MANAGER_SCHEMA_VERSION = 2;
+// Compatibility name retained for the imported V2 regression suite.
 
 /**
  * Upgrade one V1 account object to the V2 shape (in place on a deep copy).

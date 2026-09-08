@@ -42,8 +42,8 @@ test('production bundle: 折叠点击路径可执行，且不会触发安全错�
     querySelectorAll() { return []; },
     createElement() { return element(); }
   };
-  let writes = 0;
-  const localStorage = { getItem: () => null, setItem: () => { writes += 1; } };
+  let writes = 0; const records = new Map();
+  const localStorage = { getItem: key => records.get(key) ?? null, setItem: (key, value) => { writes += 1; records.set(key, String(value)); } };
   const context = { document, localStorage, console: { error() {} }, setInterval() {}, setTimeout() {}, URL: { createObjectURL: () => '', revokeObjectURL() {} }, Blob, Intl, Date, JSON, Error, SyntaxError };
   context.window = { addEventListener() {} };
   vm.runInNewContext(bundle, context);

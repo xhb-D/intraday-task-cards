@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-test('production bundle: index 使用 classic script；仅保留 Trading Risk Manager 导航入口', () => {
+test('production bundle: index 使用 classic bundle，包含统一持久化与双路由且不依赖网络', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
   assert.match(html, /<script src="dist\/app\.bundle\.js"><\/script>/);
@@ -10,10 +10,10 @@ test('production bundle: index 使用 classic script；仅保留 Trading Risk Ma
   assert.doesNotMatch(html, /type="module"/);
   assert.doesNotMatch(bundle, /^import\s/m);
   assert.doesNotMatch(bundle, /engine\.calculateRiskDecision/);
-  const navigationUrl = 'https://xhb-d.github.io/trading-risk-manager/';
-  assert.match(bundle, new RegExp(navigationUrl.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  assert.doesNotMatch(bundle.replace(navigationUrl, ''), /https?:\/\//);
-  assert.match(bundle, /loadInitialWorkspace/);
-  assert.match(bundle, /diagnosticFromError/);
+  assert.doesNotMatch(bundle, /https?:\/\//);
+  assert.match(bundle, /trading-control-center:v1/);
+  assert.match(bundle, /mountRiskManager/);
+  assert.match(html, /#\/home/);
+  assert.match(html, /#\/risk/);
   assert.match(bundle, /renderTextBanner/);
 });
