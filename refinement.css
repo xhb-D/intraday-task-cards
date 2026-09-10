@@ -59,7 +59,7 @@
 .task-summary div{min-width:0}
 .task-summary div:nth-child(n+3){padding-top:9px;border-top:1px solid #483d33}
 .task-summary dd{margin:0;color:#edf2f9;font-size:18px;line-height:23px;font-weight:650}
-.summary-direction-long{display:inline-flex;align-items:center;max-width:100%;padding:1px 7px;border:1px solid color-mix(in srgb,var(--theme-accent) 58%,var(--border-primary));border-radius:7px;background:color-mix(in srgb,var(--theme-accent) 13%,var(--bg-surface-secondary));box-shadow:0 0 9px color-mix(in srgb,var(--theme-accent) 22%,transparent);color:var(--text-primary)}
+.summary-direction-active{display:inline-flex;align-items:center;max-width:100%;padding:1px 7px;border:1px solid color-mix(in srgb,var(--theme-accent) 58%,var(--border-primary));border-radius:7px;background:color-mix(in srgb,var(--theme-accent) 13%,var(--bg-surface-secondary));box-shadow:0 0 9px color-mix(in srgb,var(--theme-accent) 22%,transparent);color:var(--text-primary)}
 .summary-zone{display:block;margin-top:5px;color:#bac3d0;font-size:13px;line-height:18px;font-weight:500;overflow-wrap:anywhere}
 .is-collapsed .task{margin-top:0}
 .route-error{max-width:560px;margin:20px auto;padding:20px;border:1px solid #67513a;border-radius:9px;background:#211914}.route-error h2{font-size:19px}.route-error p{margin:10px 0 15px;color:#d4bd9c;line-height:21px}.route-error-home{font-size:13px}

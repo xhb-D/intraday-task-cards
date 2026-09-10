@@ -19,7 +19,8 @@ test('UI contract: 阶段控制在状态面板前，摘要取当前字段，折�
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
   assert.match(app, /const summary = opportunity \?[^]*?BIASES\[card\.bias\][^]*?DIRECTIONS\[card\.direction\][^]*?STRUCTURES_3M\[card\.structure3m\][^]*?SETUPS\[opportunity\.type\]/);
-  assert.match(app, /card\.direction === 'long' \? `<span class="summary-direction-long">\$\{DIRECTIONS\[card\.direction\]\}<\/span>` : DIRECTIONS\[card\.direction\]/);
+  assert.match(app, /\['long', 'short'\]\.includes\(card\.direction\) \? `<span class="summary-direction-active">\$\{DIRECTIONS\[card\.direction\]\}<\/span>` : DIRECTIONS\[card\.direction\]/);
+  assert.doesNotMatch(app, /summary-direction-long/);
   assert.match(app, /Object\.entries\(VISIBLE_STRUCTURES_3M\)/);
   assert.match(app, /isDirectionAllowed\(card\.bias, key\)/);
   assert.match(app, /isSetupAllowed\(card\.direction, card\.structure3m, key\)/);
@@ -32,7 +33,7 @@ test('UI contract: 阶段控制在状态面板前，摘要取当前字段，折�
   assert.match(css, /@container \(max-width:390px\)\{\.task-content\{grid-template-columns:1fr/);
   assert.doesNotMatch(css, /\.task-summary dd\{[^}]*text-overflow:ellipsis/);
   assert.doesNotMatch(css, /\.summary-zone\{[^}]*text-overflow:ellipsis/);
-  assert.match(css, /\.summary-direction-long\{display:inline-flex;[^}]*border:1px solid color-mix\(in srgb,var\(--theme-accent\) 58%,var\(--border-primary\)\);[^}]*background:color-mix\(in srgb,var\(--theme-accent\) 13%,var\(--bg-surface-secondary\)\);[^}]*box-shadow:0 0 9px color-mix\(in srgb,var\(--theme-accent\) 22%,transparent\);[^}]*color:var\(--text-primary\)\}/);
+  assert.match(css, /\.summary-direction-active\{display:inline-flex;[^}]*border:1px solid color-mix\(in srgb,var\(--theme-accent\) 58%,var\(--border-primary\)\);[^}]*background:color-mix\(in srgb,var\(--theme-accent\) 13%,var\(--bg-surface-secondary\)\);[^}]*box-shadow:0 0 9px color-mix\(in srgb,var\(--theme-accent\) 22%,transparent\);[^}]*color:var\(--text-primary\)\}/);
 });
 
 test('production bundle: 折叠点击路径可执行，且不会触发安全错误横幅或写入交易状态', () => {
