@@ -1131,6 +1131,7 @@ function initRiskManagerView(host, controller) { return mountRiskManager(host, c
 const ORDER = Object.freeze(['GC', 'CL', 'ES']);
 const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' });
 const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' });
+const VISIBLE_STRUCTURES_3M = Object.freeze({ bullish: '多头', range: '震荡', bearish: '空头' });
 const DIRECTIONS = Object.freeze({ long: '只找多', short: '只找空', none: '暂无交易方向' });
 const SETUPS = Object.freeze({ pullback: '趋势回调', range: '区间反转', reversal: '趋势反转' });
 const STAGES = Object.freeze({ none: '无机会', wait: '等待', signal: '找信号', position: '持仓' });
@@ -1143,10 +1144,23 @@ const storedStage = stage => ATTENTION.includes(stage) || stage === 'position';
 const copy = value => JSON.parse(JSON.stringify(value));
 const stateOf = card => !card.opportunity ? 'none' : card.opportunity.enteredAt === null ? card.opportunity.attention : 'position';
 const hasRecord = (state, opportunity) => Boolean(opportunity && state.records.some(record => record.id === opportunity.id));
-const isDirectionAllowed = (structure3m, direction) => {
-  if (!own(STRUCTURES_3M, structure3m) || !own(DIRECTIONS, direction)) return false;
-  if (direction === 'none' || structure3m === 'range') return true;
-  return structure3m === 'bullish' ? direction === 'long' : structure3m === 'bearish' ? direction === 'short' : false;
+const isDirectionAllowed = (bias, direction) => {
+  if (!own(BIASES, bias) || !own(DIRECTIONS, direction)) return false;
+  if (direction === 'none' || bias === 'neutral') return true;
+  return bias === 'bullish' ? direction === 'long' : direction === 'short';
+};
+const isSetupAllowed = (direction, structure3m, type) => {
+  if (!own(DIRECTIONS, direction) || !own(STRUCTURES_3M, structure3m) || !own(SETUPS, type) || direction === 'none' || structure3m === 'unjudged') return false;
+  if (structure3m === 'range') return type === 'range';
+  if (direction === 'long') return structure3m === 'bullish' ? type !== 'reversal' : type !== 'pullback';
+  return structure3m === 'bearish' ? type !== 'reversal' : type !== 'pullback';
+};
+const holdingConflictWarning = card => {
+  if (stateOf(card) !== 'position') return '';
+  const warnings = [];
+  if (!isDirectionAllowed(card.bias, card.direction)) warnings.push('当前偏见与本笔方向冲突；平仓后需重新选择方向。');
+  if (!isSetupAllowed(card.direction, card.structure3m, card.opportunity.type)) warnings.push('当前 3M 市场结构与本笔机会不再匹配；不会自动平仓。');
+  return warnings.join(' ');
 };
 const recordSnapshot = opportunity => { const { zoneDraft, ...record } = opportunity; return copy(record); };
 
@@ -1177,17 +1191,25 @@ function closeOpportunity(state, card, reason, time, invalidReason = null) {
   syncRecord(state, opportunity); card.opportunity = null; card.idleSince = time;
 }
 
-function changeBias(state, symbol, bias) {
+function changeBias(state, symbol, bias, time = Date.now(), confirmed = false) {
   if (!own(BIASES, bias)) throw new Error('偏见无效');
-  const card = cardFor(state, symbol); if (card.bias === bias) return false;
-  card.bias = bias; touch(state); assertState(state); return true;
+  const card = cardFor(state, symbol); if (card.bias === bias) return { changed: false, reason: 'same' };
+  const holding = stateOf(card) === 'position';
+  const directionWouldConflict = !isDirectionAllowed(bias, card.direction);
+  if (!holding && card.opportunity && directionWouldConflict && !confirmed) return { changed: false, needsConfirmation: true };
+  card.bias = bias;
+  if (!holding && directionWouldConflict) {
+    if (card.opportunity) closeOpportunity(state, card, 'invalid', time, 'bias_change');
+    card.direction = 'none';
+  }
+  touch(state); assertState(state); return { changed: true, invalidated: directionWouldConflict && !holding, holdingConflict: directionWouldConflict && holding };
 }
 function changeDirection(state, symbol, direction, time = Date.now(), confirmed = false) {
   if (!own(DIRECTIONS, direction)) throw new Error('交易方向无效');
   const card = cardFor(state, symbol);
   if (stateOf(card) === 'position') return { changed: false, reason: 'holding' };
   if (card.needsStructureReview) return { changed: false, reason: 'needs-structure-review' };
-  if (!isDirectionAllowed(card.structure3m, direction)) return { changed: false, reason: 'structure' };
+  if (!isDirectionAllowed(card.bias, direction)) return { changed: false, reason: 'bias' };
   if (card.direction === direction) return { changed: false, reason: 'same' };
   if (card.opportunity && !confirmed) return { changed: false, needsConfirmation: true };
   if (card.opportunity) closeOpportunity(state, card, 'direction', time);
@@ -1200,19 +1222,18 @@ function changeStructure(state, symbol, structure3m, time = Date.now(), confirme
   if (status === 'position') { card.structure3m = structure3m; card.needsStructureReview = false; touch(state); assertState(state); return { changed: true }; }
   if (!card.opportunity) {
     card.structure3m = structure3m; card.needsStructureReview = false;
-    if (!isDirectionAllowed(structure3m, card.direction)) card.direction = 'none';
     touch(state); assertState(state); return { changed: true };
   }
-  if (isDirectionAllowed(structure3m, card.direction)) { card.structure3m = structure3m; card.needsStructureReview = false; touch(state); assertState(state); return { changed: true }; }
+  if (isSetupAllowed(card.direction, structure3m, card.opportunity.type)) { card.structure3m = structure3m; card.needsStructureReview = false; touch(state); assertState(state); return { changed: true }; }
   if (!confirmed) return { changed: false, needsConfirmation: true };
   closeOpportunity(state, card, 'invalid', time, 'structure_change');
-  card.structure3m = structure3m; card.needsStructureReview = false; card.direction = 'none';
+  card.structure3m = structure3m; card.needsStructureReview = false;
   touch(state); assertState(state); return { changed: true, invalidated: true };
 }
 function chooseSetup(state, symbol, type, time = Date.now()) {
   if (!own(SETUPS, type)) throw new Error('机会类型无效');
   const card = cardFor(state, symbol);
-  if (card.needsStructureReview || card.direction === 'none' || !isDirectionAllowed(card.structure3m, card.direction) || stateOf(card) === 'position' || card.opportunity?.type === type) return { changed: false };
+  if (card.needsStructureReview || !isSetupAllowed(card.direction, card.structure3m, type) || stateOf(card) === 'position' || card.opportunity?.type === type) return { changed: false };
   if (card.opportunity) closeOpportunity(state, card, 'canceled', time);
   card.opportunity = {
     id: nextId(state, time), symbol, direction: card.direction, type,
@@ -1271,8 +1292,9 @@ function markExited(state, symbol, time = Date.now(), confirmed = false) {
   if (stateOf(card) !== 'position') return { changed: false };
   if (!confirmed) return { changed: false, needsConfirmation: true };
   closeOpportunity(state, card, 'closed', time);
-  if (!isDirectionAllowed(card.structure3m, card.direction)) card.direction = 'none';
-  touch(state); assertState(state); return { changed: true };
+  const directionReset = !isDirectionAllowed(card.bias, card.direction);
+  if (directionReset) card.direction = 'none';
+  touch(state); assertState(state); return { changed: true, directionReset };
 }
 function deleteRecord(state, id) { const index = state.records.findIndex(record => record.id === id); if (index < 0) return false; state.records.splice(index, 1); touch(state); assertState(state); return true; }
 
@@ -1280,7 +1302,7 @@ function recordProgress(record) { return record.endedAt !== null ? RESULTS[recor
 function instruction(card) {
   const state = stateOf(card);
   if (card.needsStructureReview) return ['先确认当前 3M 市场结构', '旧版本机会暂不可继续执行'];
-  if (state === 'none') return card.direction === 'none' ? ['先确认 3M 结构与交易方向', '不找入场'] : ['等具体机会', '不找入场'];
+  if (state === 'none') return card.direction === 'none' ? ['先确认偏见、交易方向与 3M 结构', '不找入场'] : card.structure3m === 'unjudged' ? ['先确认当前 3M 市场结构', '不找入场'] : ['等具体机会', '不找入场'];
   if (state === 'wait') return ['等既定条件成熟', '不提前入场'];
   if (state === 'signal') return ['按既定规则找入场信号', '不临时更换入场理由'];
   return ['只管理当前持仓', '本卡不找新入场'];
@@ -1291,15 +1313,16 @@ function assertState(state) {
   for (const symbol of ORDER) {
     const card = state.cards?.[symbol];
     if (!card || card.symbol !== symbol || !own(BIASES, card.bias) || !own(STRUCTURES_3M, card.structure3m) || typeof card.needsStructureReview !== 'boolean' || !own(DIRECTIONS, card.direction) || !Number.isSafeInteger(card.idleSince)) throw stateError('卡片结构无效', `cards.${symbol}`);
-    const opportunity = card.opportunity; if (!opportunity) { if (!isDirectionAllowed(card.structure3m, card.direction)) throw stateError('空闲交易方向不兼容', `cards.${symbol}.direction`); continue; }
+    const opportunity = card.opportunity; if (!opportunity) { if (!isDirectionAllowed(card.bias, card.direction)) throw stateError('空闲交易方向不兼容', `cards.${symbol}.direction`); continue; }
     const holding = stateOf(card) === 'position';
     if (card.direction === 'none' || opportunity.symbol !== symbol || opportunity.direction !== card.direction || !own(SETUPS, opportunity.type) || !ATTENTION.includes(opportunity.attention) || opportunity.endedAt !== null || opportunity.reason !== null || active.has(opportunity.id)) throw stateError('活动机会无效', `cards.${symbol}.opportunity`);
     if (card.needsStructureReview && holding) throw stateError('持仓不应等待结构审查', `cards.${symbol}.needsStructureReview`);
-    if (!holding && !card.needsStructureReview && !isDirectionAllowed(card.structure3m, card.direction)) throw stateError('活动交易方向不兼容', `cards.${symbol}.direction`);
+    if (!holding && !isDirectionAllowed(card.bias, card.direction)) throw stateError('活动交易方向不兼容', `cards.${symbol}.direction`);
+    if (!holding && !card.needsStructureReview && !isSetupAllowed(card.direction, card.structure3m, opportunity.type)) throw stateError('活动机会不兼容', `cards.${symbol}.opportunity.type`);
     if (typeof opportunity.zone !== 'string' || typeof opportunity.zoneDraft !== 'string' || opportunity.zone.length > 100 || opportunity.zoneDraft.length > 100 || !Array.isArray(opportunity.stages) || !opportunity.stages.length) throw stateError('机会字段无效', `cards.${symbol}.opportunity`);
     if ((opportunity.registeredAt === null) !== (opportunity.zone === '')) throw stateError('登记状态无效', `cards.${symbol}.opportunity.registeredAt`);
     if (opportunity.registeredAt === null ? opportunity.biasAtRegistration !== null || opportunity.structure3mAtRegistration !== null : !own(BIASES, opportunity.biasAtRegistration) || !own(STRUCTURES_3M, opportunity.structure3mAtRegistration)) throw stateError('登记快照无效', `cards.${symbol}.opportunity`);
-    if (opportunity.invalidReason !== null && opportunity.invalidReason !== 'structure_change') throw stateError('失效原因无效', `cards.${symbol}.opportunity.invalidReason`);
+    if (opportunity.invalidReason !== null && !['structure_change', 'bias_change'].includes(opportunity.invalidReason)) throw stateError('失效原因无效', `cards.${symbol}.opportunity.invalidReason`);
     const last = assertTimeline(opportunity, `cards.${symbol}.opportunity`, true);
     if (last.start !== opportunity.stageSince || last.state !== stateOf(card) || (opportunity.enteredAt !== null) !== holding) throw stateError('阶段状态无效', `cards.${symbol}.opportunity.stages`);
     active.set(opportunity.id, opportunity);
@@ -1311,7 +1334,7 @@ function assertState(state) {
     const last = assertTimeline(record, `records.${index}`, record.endedAt === null);
     if (last.start !== record.stageSince || last.state !== (record.enteredAt === null ? record.attention : 'position')) throw stateError('记录阶段状态无效', `records.${index}.stages`);
     if (record.endedAt === null) { const current = active.get(record.id); if (!current || JSON.stringify(recordSnapshot(current)) !== JSON.stringify(record)) throw stateError('活动记录不一致', `records.${index}`); }
-    else if (active.has(record.id) || !own(RESULTS, record.reason) || (record.reason === 'closed') !== (record.enteredAt !== null) || (record.invalidReason !== null && record.invalidReason !== 'structure_change')) throw stateError('结束记录无效', `records.${index}`);
+    else if (active.has(record.id) || !own(RESULTS, record.reason) || (record.reason === 'closed') !== (record.enteredAt !== null) || (record.invalidReason !== null && !['structure_change', 'bias_change'].includes(record.invalidReason))) throw stateError('结束记录无效', `records.${index}`);
   }
   return true;
 }
@@ -1380,10 +1403,8 @@ function validateEnvelope(envelope) {
 function serialize(state, savedAt = Date.now()) { return JSON.stringify(makeEnvelope(state, savedAt)); }
 function deserialize(raw) {
   if (typeof raw !== 'string' || raw.length > MAX_FILE_BYTES) throw new Error('存档为空或超过 8 MB');
-  let parsed;
-  try { parsed = JSON.parse(raw); } catch (error) { throw Object.assign(new Error('存档 JSON 无法解析', { cause: error }), { code: 'JSON_PARSE_ERROR', path: 'raw' }); }
   let envelope;
-  try { envelope = migrateEnvelope(parsed); } catch (error) { throw Object.assign(new Error('存档迁移失败', { cause: error }), { code: 'MIGRATION_ERROR', path: 'envelope' }); }
+  try { envelope = JSON.parse(raw); } catch (error) { throw Object.assign(new Error('存档 JSON 无法解析', { cause: error }), { code: 'JSON_PARSE_ERROR', path: 'raw' }); }
   validateEnvelope(envelope); return envelope;
 }
 function exportMarkdown(state, scope = 'today', now = Date.now()) {
@@ -1399,63 +1420,10 @@ const timeText = time => { const d = new Date(time); return [d.getHours(), d.get
 const fullTime = time => `${dateKey(time)} ${timeText(time)}`;
 const cell = value => String(value).replace(/\|/g, '&#124;').replace(/[\r\n]+/g, '<br>');
 
-function migrateEnvelope(envelope) {
-  if (!envelope || envelope.app !== APP_ID || ![1, 2].includes(envelope.schemaVersion)) return envelope;
-  const migrated = copy(envelope);
-  if (migrated.schemaVersion === 1) migrateV1ToV2(migrated);
-  if (migrated.schemaVersion === 2) migrateV2ToV3(migrated);
-  return migrated;
-}
-
-function migrateV1ToV2(migrated) {
-  const state = migrated.state;
-  if (!state || !state.cards || !Array.isArray(state.records)) return;
-  state.schemaVersion = 2;
-  for (const card of Object.values(state.cards)) {
-    card.bias = 'neutral'; card.structure3m = 'unjudged';
-    card.needsStructureReview = Boolean(card.opportunity && card.opportunity.enteredAt === null);
-    if (!card.opportunity) card.direction = 'none';
-    if (card.opportunity) {
-      card.opportunity.biasAtRegistration = card.opportunity.registeredAt === null ? null : 'neutral';
-      card.opportunity.structure3mAtRegistration = card.opportunity.registeredAt === null ? null : 'unjudged';
-      card.opportunity.invalidReason = null;
-    }
-  }
-  for (const record of state.records) {
-    record.biasAtRegistration = 'neutral'; record.structure3mAtRegistration = 'unjudged'; record.invalidReason = null;
-  }
-  migrated.schemaVersion = 2;
-}
-
-function migrateV2ToV3(migrated) {
-  const state = migrated.state;
-  if (!state || !state.cards || !Array.isArray(state.records)) return;
-  state.schemaVersion = 3;
-  for (const card of Object.values(state.cards)) if (card.opportunity) migrateOpportunity(card.opportunity);
-  for (const record of state.records) migrateOpportunity(record);
-  migrated.schemaVersion = 3;
-}
-
-function migrateOpportunity(opportunity) {
-  if (!opportunity || typeof opportunity !== 'object') return;
-  if (opportunity.attention === 'near') opportunity.attention = 'wait';
-  if (!Array.isArray(opportunity.stages)) return;
-  const stages = [];
-  for (const source of opportunity.stages) {
-    const stage = source && typeof source === 'object' ? { ...source, state: source.state === 'near' ? 'wait' : source.state } : source;
-    const previous = stages.at(-1);
-    if (previous?.state === 'wait' && stage?.state === 'wait' && previous.end === stage.start) previous.end = stage.end;
-    else stages.push(stage);
-  }
-  opportunity.stages = stages;
-  if (stages.length) opportunity.stageSince = stages.at(-1).start;
-}
-
 
 
 const UNIFIED_KEY = 'trading-control-center:v1';
 const PRE_IMPORT_KEY = 'trading-control-center:v1:pre-import';
-const LEGACY_INTRADAY_KEY = 'intraday-task-cards:v1:state';
 const LEGACY_RISK_KEY = 'trading-risk-manager:v1';
 const LEGACY_APPEARANCE_KEY = 'trading-risk-manager:appearance';
 const blankRisk = () => ({ schemaVersion: RISK_MANAGER_SCHEMA_VERSION, selectedAccountId: null, accounts: [] });
@@ -1541,9 +1509,10 @@ function validateUnified(value) {
 }
 
 function classifyBackup(value) {
-  const matches = [value?.app === 'trading-control-center' && !!value.sections, value?.app === 'intraday-task-cards' && !!value.state, (value?.app === undefined || value?.app === 'intraday-task-cards') && Number.isInteger(value?.schemaVersion) && Array.isArray(value?.accounts) && Object.hasOwn(value, 'selectedAccountId')].filter(Boolean).length;
+  if (value?.app === 'intraday-task-cards' && !!value.state) throw new Error('不支持旧版独立日内状态卡备份；请使用当前统一交易控制中心 JSON。');
+  const matches = [value?.app === 'trading-control-center' && !!value.sections, value?.app === undefined && Number.isInteger(value?.schemaVersion) && Array.isArray(value?.accounts) && Object.hasOwn(value, 'selectedAccountId')].filter(Boolean).length;
   if (matches !== 1) throw new Error(matches ? '备份格式歧义' : '无法识别备份格式');
-  return value.app === 'trading-control-center' ? 'unified' : value.app === 'intraday-task-cards' ? 'intraday' : 'risk';
+  return value.app === 'trading-control-center' ? 'unified' : 'risk';
 }
 
 function parseBackupRaw(raw) {
@@ -1555,7 +1524,6 @@ function parseBackupRaw(raw) {
 function normalizeImport(value, current) {
   const kind = classifyBackup(value); let next;
   if (kind === 'unified') { validateUnified(value); next = copy(value); }
-  else if (kind === 'intraday') { const intraday = deserialize(JSON.stringify(value)); next = copy(current); next.sections.intraday = intraday; }
   else { const risk = migrateState(value); validateRisk(risk); next = copy(current); next.sections.riskManager = risk; }
   next.preferences = { appearance: appearance(next.preferences?.appearance) }; validateUnified(next); return { kind, state: next, summary: importSummary(kind, next) };
 }
@@ -1564,18 +1532,21 @@ function importSummary(kind, state) {
   const cards = Object.keys(state.sections.intraday.state.cards || {}).length;
   const records = state.sections.intraday.state.records?.length || 0;
   const accounts = state.sections.riskManager.accounts?.length || 0;
-  return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好。` : kind === 'intraday' ? `将只替换状态卡（${cards} 张、${records} 条记录）；账户和外观保持不变。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
+  return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
 }
 
 function loadUnified(storage) {
   if (!storage?.getItem) return { state: makeUnified(), source: 'storage-unavailable' };
   let raw; try { raw = storage.getItem(UNIFIED_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
-  if (raw !== null && raw !== undefined) { try { const parsed = JSON.parse(raw); validateUnified(parsed); let notice = ''; try { const legacyRaw = storage.getItem(LEGACY_INTRADAY_KEY); const legacy = legacyRaw ? JSON.parse(legacyRaw) : null; if (Number.isSafeInteger(legacy?.savedAt) && legacy.savedAt > parsed.savedAt) notice = '检测到时间更新的旧状态卡存档；为避免双源覆盖，当前仍只读取统一存档。'; } catch (_) {} return { state: parsed, source: 'canonical', raw, notice }; } catch (error) { return { state: null, source: 'recovery-required', error, raw }; } }
-  let intradayRaw; let riskRaw; let preference;
-  try { intradayRaw = storage.getItem(LEGACY_INTRADAY_KEY); riskRaw = storage.getItem(LEGACY_RISK_KEY); preference = storage.getItem(LEGACY_APPEARANCE_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
-  if (intradayRaw === null && riskRaw === null) return { state: makeUnified(undefined, blankRisk(), { appearance: preference }), source: 'blank' };
-  try { const intraday = intradayRaw === null ? makeEnvelope(createWorkspace()) : deserialize(intradayRaw); const risk = riskRaw === null ? blankRisk() : migrateState(JSON.parse(riskRaw)); validateRisk(risk); return { state: makeUnified(intraday, risk, { appearance: preference }), source: 'legacy' }; }
-  catch (error) { return { state: null, source: 'recovery-required', error, raw: JSON.stringify({ intradayRaw, riskRaw, preference }) }; }
+  if (raw !== null) {
+    try { const state = JSON.parse(raw); validateUnified(state); return { state, source: 'canonical' }; }
+    catch (error) { return { state: null, source: 'recovery-required', error, raw }; }
+  }
+  let riskRaw; let preference;
+  try { riskRaw = storage.getItem(LEGACY_RISK_KEY); preference = storage.getItem(LEGACY_APPEARANCE_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
+  if (riskRaw === null) return { state: makeUnified(undefined, blankRisk(), { appearance: preference }), source: 'blank' };
+  try { const risk = migrateState(JSON.parse(riskRaw)); validateRisk(risk); return { state: makeUnified(makeEnvelope(createWorkspace()), risk, { appearance: preference }), source: 'legacy-risk' }; }
+  catch (error) { return { state: null, source: 'recovery-required', error, raw: JSON.stringify({ riskRaw, preference }) }; }
 }
 
 function commitUnified(storage, state, { preImport = false, expectedRaw } = {}) {
@@ -1845,9 +1816,9 @@ function renderCard(symbol) {
   const collapsed = collapsedCards.has(symbol);
   const [action, prohibition] = instruction(card); const registration = registrationStatus(state, symbol);
   const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
-  const structure = `<section class="classifier structure-field"><span class="field-label">当前 3M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 3M 市场结构">${Object.entries(STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 市场结构</p>' : ''}</section>`;
-  const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.structure3m, key))).join('')}</div>`;
-  const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || card.direction === 'none' || !isDirectionAllowed(card.structure3m, card.direction))).join('')}</div>`;
+  const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.bias, key))).join('')}</div>`;
+  const structure = `<section class="classifier structure-field"><span class="field-label">当前 3M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 3M 市场结构">${Object.entries(VISIBLE_STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 市场结构</p>' : ''}</section>`;
+  const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || !isSetupAllowed(card.direction, card.structure3m, key))).join('')}</div>`;
   const position = `<div class="zone"><label for="zone-${symbol}">关键位置</label><input id="zone-${symbol}" data-zone="${symbol}" maxlength="100" autocomplete="off" spellcheck="false" value="${escapeHtml(opportunity?.zoneDraft || '')}" placeholder="${opportunity ? '输入后点确认' : '先建立机会'}"${!opportunity ? ' disabled' : holding ? ' readonly' : ''}><button class="zone-confirm" data-action="confirm-zone" data-symbol="${symbol}" type="button"${registration.enabled ? '' : ' disabled'}>${registration.label}</button></div><p class="zone-note ${registration.kind}">${registration.text}</p>`;
   let stages = '<div class="empty" aria-hidden="true"></div>', entry = '<div class="empty" aria-hidden="true"></div>', ending = '<div class="empty" aria-hidden="true"></div>';
   if (opportunity && !holding) {
@@ -1856,10 +1827,11 @@ function renderCard(symbol) {
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
   const confirmedZone = opportunity?.registeredAt !== null && opportunity?.zone ? `<span class="summary-zone">${escapeHtml(opportunity.zone)}</span>` : '';
-  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">当前 3M 市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
-  const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
+  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">当前 3M 市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
+  const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section>${structure}<section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
-  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span></p></div>${summary}</div></section>${entry}${ending}</article>`;
+  const conflictWarning = holdingConflictWarning(card);
+  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${entry}${ending}</article>`;
 }
 function recordsForScope() {
   const day = dateKey(now()); return state.records.filter(record => historyScope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
@@ -1886,13 +1858,14 @@ function finishConfirmation(confirmed) {
   if (!confirmed) { announce('已取消；任务、计时和机会记录保持不变'); return; }
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : action.importKind === 'intraday' ? '状态卡备份' : '风险管理器备份'}。仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
   if (action.kind === 'fresh') { try { const fresh = makeEnvelope(createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
-  const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['direction', 'structure'].includes(action.kind)) return;
+  const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['bias', 'direction', 'structure'].includes(action.kind)) return;
+  if (action.kind === 'bias') { const result = changeBias(state, action.symbol, action.bias, now(), true); if (result.changed) mutate(`${action.symbol} 当前偏见已更新；原机会已失效并重置方向`, action.symbol); }
   if (action.kind === 'direction') { const result = changeDirection(state, action.symbol, action.direction, now(), true); if (result.changed) mutate(`${action.symbol} 旧机会因方向改变结束；当前无机会`, action.symbol); }
   if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now(), true); if (result.changed) mutate(`${action.symbol} 3M 市场结构已更新；当前不兼容机会已失效`, action.symbol); }
   if (action.kind === 'entry') { const result = markEntered(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认入场；本卡进入持仓`, action.symbol); }
-  if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；保留方向，回到无机会`, action.symbol); }
+  if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；${result.directionReset ? '已重置为暂无交易方向' : '保留方向'}，回到无机会`, action.symbol); }
 }
 function handleAction(button) {
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
@@ -1903,10 +1876,15 @@ function handleAction(button) {
   }
   if (pending || corruption || writeLocked() || button.disabled) return;
   const card = state.cards[symbol];
-  if (action === 'bias') { if (changeBias(state, symbol, value)) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol); return; }
+  if (action === 'bias') {
+    const result = changeBias(state, symbol, value, now(), false);
+    if (result.needsConfirmation) openConfirmation({ kind: 'bias', symbol, bias: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前偏见？`, `${BIASES[card.bias]} → ${BIASES[value]} 将使交易方向「${DIRECTIONS[card.direction]}」失效，当前未入场机会将结束为失效并重置方向。`, '确认改变', recordWarning(card.opportunity));
+    else if (result.changed) mutate(`${symbol} 当前偏见：${BIASES[value]}${result.holdingConflict ? '；持仓方向冲突，平仓后需重新选择方向' : ''}`, symbol);
+    return;
+  }
   if (action === 'structure') {
     const result = changeStructure(state, symbol, value, now(), false);
-    if (result.needsConfirmation) openConfirmation({ kind: 'structure', symbol, structure3m: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前 3M 市场结构？`, `${symbol} 当前仍有${directionShort(card.direction)}头交易机会「${SETUPS[card.opportunity.type]}」。\n\n${STRUCTURES_3M[card.structure3m]} → ${STRUCTURES_3M[value]} 后，交易方向「${DIRECTIONS[card.direction]}」将不再合法，当前机会将结束为失效。`, '确认改变');
+    if (result.needsConfirmation) openConfirmation({ kind: 'structure', symbol, structure3m: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前 3M 市场结构？`, `${symbol} 当前仍有${directionShort(card.direction)}头交易机会「${SETUPS[card.opportunity.type]}」。\n\n${STRUCTURES_3M[card.structure3m]} → ${STRUCTURES_3M[value]} 后，该机会将不再合法并结束为失效；交易方向保持不变。`, '确认改变');
     else if (result.changed) mutate(`${symbol} 当前 3M 市场结构：${STRUCTURES_3M[value]}`, symbol); return;
   }
   if (action === 'direction') {
@@ -1933,7 +1911,6 @@ document.querySelector('#data-tools').addEventListener('click', () => { document
 document.querySelector('#export-today').addEventListener('click', () => { download(exportMarkdown(state, 'today'), `日内机会_${dateKey(now())}.md`, 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
 document.querySelector('#export-all').addEventListener('click', () => { download(exportMarkdown(state, 'all'), '日内机会_全部.md', 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
 document.querySelector('#export-json').addEventListener('click', () => { const payload = unified ? copy(unified) : makeEnvelope(state); download(JSON.stringify(payload, null, 2), `交易控制中心_完整备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成完整备份下载（状态卡、风险管理器与外观）。'; });
-document.querySelector('#export-intraday-json').addEventListener('click', () => { download(JSON.stringify(makeEnvelope(state), null, 2), `日内状态卡_备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成状态卡分项 JSON。'; });
 document.querySelector('#export-risk-json').addEventListener('click', () => { download(JSON.stringify(unified?.sections.riskManager || { schemaVersion: 2, selectedAccountId: null, accounts: [] }, null, 2), `Trading_Risk_Manager_备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成风险管理器分项 JSON。'; });
 document.querySelector('#export-raw').addEventListener('click', () => { download(lastRaw || '', `日内状态卡_原始存档_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始存档；原数据未修改。'; });
 document.querySelector('#import-json').addEventListener('click', () => { if (writeLocked()) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });

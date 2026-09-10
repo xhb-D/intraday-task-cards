@@ -25,7 +25,7 @@
 .card .task-meta{font-size:10px;line-height:14px}
 .card .state-title{margin-top:1px;font-size:31px;line-height:38px;font-weight:720;letter-spacing:.01em}
 .card .instruction{font-size:13px;line-height:18px;font-weight:560}
-.card .instruction span{font-size:12px;line-height:17px;color:#b5c2d2}
+.card .instruction span{font-size:12px;line-height:17px;color:#b5c2d2}.card .holding-warning{display:block;margin-top:5px;font-size:11px;line-height:17px;color:#e6c8a5;font-weight:500}
 .state-wait .task{background:#111a25}
 .state-signal .task{border-color:#6e4d3d;border-left-color:#f3ab82;background:#211914}
 .state-position .task{border-color:#514c70;border-left-color:#b9b0ed;background:#191827}

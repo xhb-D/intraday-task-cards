@@ -29,7 +29,7 @@ test('B: 方向空机会一次完成；已选无副作用；活跃机会需确�
   const state = fresh(); const revision = state.revision;
   assert.equal(changeStructure(state, 'GC', 'bullish', later()).changed, true); assert.equal(changeDirection(state, 'GC', 'long', later()).changed, true); const after = state.revision;
   assert.equal(changeDirection(state, 'GC', 'long', later()).changed, false); assert.equal(state.revision, after); assert.equal(chooseSetup(state, 'GC', 'pullback', later()).changed, true);
-  assert.equal(changeStructure(state, 'GC', 'range', later()).changed, true); assert.equal(changeDirection(state, 'GC', 'short', later()).needsConfirmation, true); assert.equal(stateOf(state.cards.GC), 'wait');
+  assert.equal(changeStructure(state, 'GC', 'bullish', later()).changed, false); assert.equal(changeDirection(state, 'GC', 'short', later()).needsConfirmation, true); assert.equal(stateOf(state.cards.GC), 'wait');
   assert.equal(changeDirection(state, 'GC', 'short', later(), true).changed, true); assert.equal(state.cards.GC.opportunity, null); assert.equal(state.cards.GC.direction, 'short'); assert.ok(state.revision > revision); assertState(state);
 });
 

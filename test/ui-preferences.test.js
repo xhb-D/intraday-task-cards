@@ -18,7 +18,10 @@ test('UI preference: 每卡折叠独立，且不进入交易状态序列化', ()
 test('UI contract: 阶段控制在状态面板前，摘要取当前字段，折叠按钮具备可访问语义', () => {
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
-  assert.match(app, /const summary = opportunity \?[^]*?BIASES\[card\.bias\][^]*?STRUCTURES_3M\[card\.structure3m\][^]*?DIRECTIONS\[card\.direction\][^]*?SETUPS\[opportunity\.type\]/);
+  assert.match(app, /const summary = opportunity \?[^]*?BIASES\[card\.bias\][^]*?DIRECTIONS\[card\.direction\][^]*?STRUCTURES_3M\[card\.structure3m\][^]*?SETUPS\[opportunity\.type\]/);
+  assert.match(app, /Object\.entries\(VISIBLE_STRUCTURES_3M\)/);
+  assert.match(app, /isDirectionAllowed\(card\.bias, key\)/);
+  assert.match(app, /isSetupAllowed\(card\.direction, card\.structure3m, key\)/);
   assert.match(app, /opportunity\?\.registeredAt !== null && opportunity\?\.zone \?[^]*?summary-zone/);
   assert.match(app, /<dt class="sr-only">当前偏见<\/dt>/);
   assert.match(app, /\$\{controls\}<section class="task/);
@@ -48,6 +51,9 @@ test('production bundle: 折叠点击路径可执行，且不会触发安全错�
   context.window = { addEventListener() {} };
   vm.runInNewContext(bundle, context);
   const cards = elements.get('#cards'); const initialWrites = writes;
+  assert.match(cards.innerHTML, /当前偏见[^]*?交易方向[^]*?当前 3M 市场结构[^]*?当前机会[^]*?当前状态/);
+  assert.doesNotMatch(cards.innerHTML, /未判断/);
+  assert.match(cards.innerHTML, /当前机会[^]*?趋势回调[^]*?disabled aria-disabled="true"/);
   const button = { disabled: false, dataset: { action: 'toggle-collapse', symbol: 'GC' } };
   cards.listeners.click({ detail: 1, target: { closest: () => button } });
   assert.match(cards.innerHTML, /<article class="card [^"]*is-collapsed" data-symbol="GC"/);

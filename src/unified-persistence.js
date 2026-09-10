@@ -1,11 +1,10 @@
 import { copy, createWorkspace, assertState } from './model.js';
-import { deserialize, makeEnvelope, validateEnvelope, MAX_FILE_BYTES } from './persistence.js';
+import { makeEnvelope, validateEnvelope, MAX_FILE_BYTES } from './persistence.js';
 import { DRAW_DOWN_TYPES } from './risk-manager/account-service.js';
 import { migrateState, RISK_MANAGER_SCHEMA_VERSION } from './risk-manager/migration.js';
 
 export const UNIFIED_KEY = 'trading-control-center:v1';
 export const PRE_IMPORT_KEY = 'trading-control-center:v1:pre-import';
-export const LEGACY_INTRADAY_KEY = 'intraday-task-cards:v1:state';
 export const LEGACY_RISK_KEY = 'trading-risk-manager:v1';
 export const LEGACY_APPEARANCE_KEY = 'trading-risk-manager:appearance';
 const blankRisk = () => ({ schemaVersion: RISK_MANAGER_SCHEMA_VERSION, selectedAccountId: null, accounts: [] });
@@ -91,9 +90,10 @@ export function validateUnified(value) {
 }
 
 export function classifyBackup(value) {
-  const matches = [value?.app === 'trading-control-center' && !!value.sections, value?.app === 'intraday-task-cards' && !!value.state, (value?.app === undefined || value?.app === 'intraday-task-cards') && Number.isInteger(value?.schemaVersion) && Array.isArray(value?.accounts) && Object.hasOwn(value, 'selectedAccountId')].filter(Boolean).length;
+  if (value?.app === 'intraday-task-cards' && !!value.state) throw new Error('不支持旧版独立日内状态卡备份；请使用当前统一交易控制中心 JSON。');
+  const matches = [value?.app === 'trading-control-center' && !!value.sections, value?.app === undefined && Number.isInteger(value?.schemaVersion) && Array.isArray(value?.accounts) && Object.hasOwn(value, 'selectedAccountId')].filter(Boolean).length;
   if (matches !== 1) throw new Error(matches ? '备份格式歧义' : '无法识别备份格式');
-  return value.app === 'trading-control-center' ? 'unified' : value.app === 'intraday-task-cards' ? 'intraday' : 'risk';
+  return value.app === 'trading-control-center' ? 'unified' : 'risk';
 }
 
 export function parseBackupRaw(raw) {
@@ -105,7 +105,6 @@ export function parseBackupRaw(raw) {
 export function normalizeImport(value, current) {
   const kind = classifyBackup(value); let next;
   if (kind === 'unified') { validateUnified(value); next = copy(value); }
-  else if (kind === 'intraday') { const intraday = deserialize(JSON.stringify(value)); next = copy(current); next.sections.intraday = intraday; }
   else { const risk = migrateState(value); validateRisk(risk); next = copy(current); next.sections.riskManager = risk; }
   next.preferences = { appearance: appearance(next.preferences?.appearance) }; validateUnified(next); return { kind, state: next, summary: importSummary(kind, next) };
 }
@@ -114,18 +113,21 @@ export function importSummary(kind, state) {
   const cards = Object.keys(state.sections.intraday.state.cards || {}).length;
   const records = state.sections.intraday.state.records?.length || 0;
   const accounts = state.sections.riskManager.accounts?.length || 0;
-  return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好。` : kind === 'intraday' ? `将只替换状态卡（${cards} 张、${records} 条记录）；账户和外观保持不变。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
+  return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
 }
 
 export function loadUnified(storage) {
   if (!storage?.getItem) return { state: makeUnified(), source: 'storage-unavailable' };
   let raw; try { raw = storage.getItem(UNIFIED_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
-  if (raw !== null && raw !== undefined) { try { const parsed = JSON.parse(raw); validateUnified(parsed); let notice = ''; try { const legacyRaw = storage.getItem(LEGACY_INTRADAY_KEY); const legacy = legacyRaw ? JSON.parse(legacyRaw) : null; if (Number.isSafeInteger(legacy?.savedAt) && legacy.savedAt > parsed.savedAt) notice = '检测到时间更新的旧状态卡存档；为避免双源覆盖，当前仍只读取统一存档。'; } catch (_) {} return { state: parsed, source: 'canonical', raw, notice }; } catch (error) { return { state: null, source: 'recovery-required', error, raw }; } }
-  let intradayRaw; let riskRaw; let preference;
-  try { intradayRaw = storage.getItem(LEGACY_INTRADAY_KEY); riskRaw = storage.getItem(LEGACY_RISK_KEY); preference = storage.getItem(LEGACY_APPEARANCE_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
-  if (intradayRaw === null && riskRaw === null) return { state: makeUnified(undefined, blankRisk(), { appearance: preference }), source: 'blank' };
-  try { const intraday = intradayRaw === null ? makeEnvelope(createWorkspace()) : deserialize(intradayRaw); const risk = riskRaw === null ? blankRisk() : migrateState(JSON.parse(riskRaw)); validateRisk(risk); return { state: makeUnified(intraday, risk, { appearance: preference }), source: 'legacy' }; }
-  catch (error) { return { state: null, source: 'recovery-required', error, raw: JSON.stringify({ intradayRaw, riskRaw, preference }) }; }
+  if (raw !== null) {
+    try { const state = JSON.parse(raw); validateUnified(state); return { state, source: 'canonical' }; }
+    catch (error) { return { state: null, source: 'recovery-required', error, raw }; }
+  }
+  let riskRaw; let preference;
+  try { riskRaw = storage.getItem(LEGACY_RISK_KEY); preference = storage.getItem(LEGACY_APPEARANCE_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
+  if (riskRaw === null) return { state: makeUnified(undefined, blankRisk(), { appearance: preference }), source: 'blank' };
+  try { const risk = migrateState(JSON.parse(riskRaw)); validateRisk(risk); return { state: makeUnified(makeEnvelope(createWorkspace()), risk, { appearance: preference }), source: 'legacy-risk' }; }
+  catch (error) { return { state: null, source: 'recovery-required', error, raw: JSON.stringify({ riskRaw, preference }) }; }
 }
 
 export function commitUnified(storage, state, { preImport = false, expectedRaw } = {}) {

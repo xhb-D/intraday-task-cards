@@ -99,16 +99,16 @@ const unifiedComplete = makeUnified(intradayV3(), riskV2(), { appearance: 'dark'
 unifiedComplete.savedAt = T3 + 1;
 
 export const goldenFixtures = Object.freeze({
-  'intraday-v1-active': { value: intradayV1(), expectedSchemaVersion: 3, sections: ['intraday'], summary: '旧活动机会迁移后待结构审查。' },
-  'intraday-v2-near': { value: intradayV2(), expectedSchemaVersion: 3, sections: ['intraday'], summary: 'near 确定性映射为 wait 并合并阶段。' },
-  'intraday-v3-holding': { value: intradayV3(), expectedSchemaVersion: 3, sections: ['intraday'], summary: '已登记且持仓中的 V3 状态往返。' },
+  'intraday-v1-active': { value: intradayV1(), expectedSchemaVersion: null, sections: [], summary: '旧独立日内状态卡 V1：明确拒绝，不迁移。' },
+  'intraday-v2-near': { value: intradayV2(), expectedSchemaVersion: null, sections: [], summary: '旧独立日内状态卡 V2：明确拒绝，不迁移。' },
+  'intraday-v3-holding': { value: intradayV3(), expectedSchemaVersion: null, sections: [], summary: '旧独立日内状态卡 V3：明确拒绝，不迁移。' },
   'risk-v1-legacy': { value: riskV1(), expectedSchemaVersion: 2, sections: ['riskManager'], summary: '旧快照冻结，最大亏损额度保持 null。' },
   'risk-v2-multi-history': { value: riskV2(), expectedSchemaVersion: 2, sections: ['riskManager'], summary: '多账户、余额事件及 previousSession 往返。' },
   'unified-v1-empty': { value: unifiedEmpty, expectedSchemaVersion: 1, sections: ['intraday', 'riskManager', 'preferences'], summary: '空白统一工作区。' },
   'unified-v1-active': { value: unifiedComplete, expectedSchemaVersion: 1, sections: ['intraday', 'riskManager', 'preferences'], summary: '完整活动状态、多账户与外观偏好。' },
   'invalid-corrupt-json': { value: '{not-json', expectedSchemaVersion: null, sections: [], summary: '损坏 JSON。' },
   'invalid-future-version': { value: { app: 'trading-control-center', schemaVersion: 99, sections: {} }, expectedSchemaVersion: null, sections: [], summary: '未知未来版本。' },
-  'invalid-ambiguous': { value: { app: 'intraday-task-cards', schemaVersion: 2, state: {}, accounts: [], selectedAccountId: null }, expectedSchemaVersion: null, sections: [], summary: '多类格式匹配。' },
+  'invalid-ambiguous': { value: { app: 'intraday-task-cards', schemaVersion: 2, state: {}, accounts: [], selectedAccountId: null }, expectedSchemaVersion: null, sections: [], summary: '伪装为风险格式的旧独立状态卡：优先明确拒绝。' },
 });
 
 export const fixtureTimes = Object.freeze({ T0, T1, T2, T3 });
