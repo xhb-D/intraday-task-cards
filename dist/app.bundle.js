@@ -1159,7 +1159,7 @@ const holdingConflictWarning = card => {
   if (stateOf(card) !== 'position') return '';
   const warnings = [];
   if (!isDirectionAllowed(card.bias, card.direction)) warnings.push('当前偏见与本笔方向冲突；平仓后需重新选择方向。');
-  if (!isSetupAllowed(card.direction, card.structure3m, card.opportunity.type)) warnings.push('当前 3M 市场结构与本笔机会不再匹配；不会自动平仓。');
+  if (!isSetupAllowed(card.direction, card.structure3m, card.opportunity.type)) warnings.push('当前市场结构与本笔机会不再匹配；不会自动平仓。');
   return warnings.join(' ');
 };
 const recordSnapshot = opportunity => { const { zoneDraft, ...record } = opportunity; return copy(record); };
@@ -1216,7 +1216,7 @@ function changeDirection(state, symbol, direction, time = Date.now(), confirmed 
   card.direction = direction; touch(state); assertState(state); return { changed: true };
 }
 function changeStructure(state, symbol, structure3m, time = Date.now(), confirmed = false) {
-  if (!own(STRUCTURES_3M, structure3m)) throw new Error('3M 市场结构无效');
+  if (!own(STRUCTURES_3M, structure3m)) throw new Error('市场结构无效');
   const card = cardFor(state, symbol); const status = stateOf(card);
   if (card.structure3m === structure3m && !card.needsStructureReview) return { changed: false, reason: 'same' };
   if (status === 'position') { card.structure3m = structure3m; card.needsStructureReview = false; touch(state); assertState(state); return { changed: true }; }
@@ -1301,8 +1301,8 @@ function deleteRecord(state, id) { const index = state.records.findIndex(record 
 function recordProgress(record) { return record.endedAt !== null ? RESULTS[record.reason] : record.enteredAt !== null ? '持仓中' : '已登记'; }
 function instruction(card) {
   const state = stateOf(card);
-  if (card.needsStructureReview) return ['先确认当前 3M 市场结构', '旧版本机会暂不可继续执行'];
-  if (state === 'none') return card.direction === 'none' ? ['先确认偏见、交易方向与 3M 结构', '不找入场'] : card.structure3m === 'unjudged' ? ['先确认当前 3M 市场结构', '不找入场'] : ['等具体机会', '不找入场'];
+  if (card.needsStructureReview) return ['先确认市场结构', '旧版本机会暂不可继续执行'];
+  if (state === 'none') return card.direction === 'none' ? ['先确认偏见、交易方向与市场结构', '不找入场'] : card.structure3m === 'unjudged' ? ['先确认市场结构', '不找入场'] : ['等具体机会', '不找入场'];
   if (state === 'wait') return ['等既定条件成熟', '不提前入场'];
   if (state === 'signal') return ['按既定规则找入场信号', '不临时更换入场理由'];
   return ['只管理当前持仓', '本卡不找新入场'];
@@ -1410,8 +1410,8 @@ function deserialize(raw) {
 function exportMarkdown(state, scope = 'today', now = Date.now()) {
   assertState(state); const day = dateKey(now);
   const rows = state.records.filter(record => scope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
-  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 3M市场结构 | 进展／结果 |', '| --- | --- | --- | --- | --- | --- | --- |'];
-  for (const r of rows) lines.push(`| ${fullTime(r.registeredAt)} | ${r.symbol} | ${r.direction === 'long' ? '多' : '空'} | ${({pullback:'趋势回调',range:'区间反转',reversal:'趋势反转'})[r.type]} | ${cell(r.zone)} | 偏见：${({bullish:'偏多',neutral:'无偏见',bearish:'偏空'})[r.biasAtRegistration]}<br>3M市场结构：${({unjudged:'未判断',bullish:'多头',range:'震荡',bearish:'空头'})[r.structure3mAtRegistration]} | ${r.endedAt !== null ? ({invalid:'失效',canceled:'已取消',direction:'方向改变结束',closed:'已平仓'})[r.reason] : r.enteredAt !== null ? '持仓中' : '已登记'} |`);
+  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 市场结构 | 进展／结果 |', '| --- | --- | --- | --- | --- | --- | --- |'];
+  for (const r of rows) lines.push(`| ${fullTime(r.registeredAt)} | ${r.symbol} | ${r.direction === 'long' ? '多' : '空'} | ${({pullback:'趋势回调',range:'区间反转',reversal:'趋势反转'})[r.type]} | ${cell(r.zone)} | 偏见：${({bullish:'偏多',neutral:'无偏见',bearish:'偏空'})[r.biasAtRegistration]}<br>市场结构：${({unjudged:'未判断',bullish:'多头',range:'震荡',bearish:'空头'})[r.structure3mAtRegistration]} | ${r.endedAt !== null ? ({invalid:'失效',canceled:'已取消',direction:'方向改变结束',closed:'已平仓'})[r.reason] : r.enteredAt !== null ? '持仓中' : '已登记'} |`);
   if (!rows.length) lines.push('', '本范围内尚无已登记且仍保留的记录。');
   return lines.concat(['', '---', '阶段起止时间和当前任务草稿保存在完整 JSON 备份中。']).join('\n');
 }
@@ -1817,7 +1817,7 @@ function renderCard(symbol) {
   const [action, prohibition] = instruction(card); const registration = registrationStatus(state, symbol);
   const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
   const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.bias, key))).join('')}</div>`;
-  const structure = `<section class="classifier structure-field"><span class="field-label">当前 3M 市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 当前 3M 市场结构">${Object.entries(VISIBLE_STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认当前 3M 市场结构</p>' : ''}</section>`;
+  const structure = `<section class="classifier structure-field"><span class="field-label">市场结构</span><div class="segment structure-segment" role="group" aria-label="${symbol} 市场结构">${Object.entries(VISIBLE_STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认市场结构</p>' : ''}</section>`;
   const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || !isSetupAllowed(card.direction, card.structure3m, key))).join('')}</div>`;
   const position = `<div class="zone"><label for="zone-${symbol}">关键位置</label><input id="zone-${symbol}" data-zone="${symbol}" maxlength="100" autocomplete="off" spellcheck="false" value="${escapeHtml(opportunity?.zoneDraft || '')}" placeholder="${opportunity ? '输入后点确认' : '先建立机会'}"${!opportunity ? ' disabled' : holding ? ' readonly' : ''}><button class="zone-confirm" data-action="confirm-zone" data-symbol="${symbol}" type="button"${registration.enabled ? '' : ' disabled'}>${registration.label}</button></div><p class="zone-note ${registration.kind}">${registration.text}</p>`;
   let stages = '<div class="empty" aria-hidden="true"></div>', entry = '<div class="empty" aria-hidden="true"></div>', ending = '<div class="empty" aria-hidden="true"></div>';
@@ -1827,7 +1827,7 @@ function renderCard(symbol) {
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
   const confirmedZone = opportunity?.registeredAt !== null && opportunity?.zone ? `<span class="summary-zone">${escapeHtml(opportunity.zone)}</span>` : '';
-  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">当前 3M 市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
+  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${card.direction === 'long' ? `<span class="summary-direction-long">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
   const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section>${structure}<section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   const conflictWarning = holdingConflictWarning(card);
@@ -1863,7 +1863,7 @@ function finishConfirmation(confirmed) {
   const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['bias', 'direction', 'structure'].includes(action.kind)) return;
   if (action.kind === 'bias') { const result = changeBias(state, action.symbol, action.bias, now(), true); if (result.changed) mutate(`${action.symbol} 当前偏见已更新；原机会已失效并重置方向`, action.symbol); }
   if (action.kind === 'direction') { const result = changeDirection(state, action.symbol, action.direction, now(), true); if (result.changed) mutate(`${action.symbol} 旧机会因方向改变结束；当前无机会`, action.symbol); }
-  if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now(), true); if (result.changed) mutate(`${action.symbol} 3M 市场结构已更新；当前不兼容机会已失效`, action.symbol); }
+  if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now(), true); if (result.changed) mutate(`${action.symbol} 市场结构已更新；当前不兼容机会已失效`, action.symbol); }
   if (action.kind === 'entry') { const result = markEntered(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认入场；本卡进入持仓`, action.symbol); }
   if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；${result.directionReset ? '已重置为暂无交易方向' : '保留方向'}，回到无机会`, action.symbol); }
 }
@@ -1884,8 +1884,8 @@ function handleAction(button) {
   }
   if (action === 'structure') {
     const result = changeStructure(state, symbol, value, now(), false);
-    if (result.needsConfirmation) openConfirmation({ kind: 'structure', symbol, structure3m: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前 3M 市场结构？`, `${symbol} 当前仍有${directionShort(card.direction)}头交易机会「${SETUPS[card.opportunity.type]}」。\n\n${STRUCTURES_3M[card.structure3m]} → ${STRUCTURES_3M[value]} 后，该机会将不再合法并结束为失效；交易方向保持不变。`, '确认改变');
-    else if (result.changed) mutate(`${symbol} 当前 3M 市场结构：${STRUCTURES_3M[value]}`, symbol); return;
+    if (result.needsConfirmation) openConfirmation({ kind: 'structure', symbol, structure3m: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 市场结构？`, `${symbol} 当前仍有${directionShort(card.direction)}头交易机会「${SETUPS[card.opportunity.type]}」。\n\n${STRUCTURES_3M[card.structure3m]} → ${STRUCTURES_3M[value]} 后，该机会将不再合法并结束为失效；交易方向保持不变。`, '确认改变');
+    else if (result.changed) mutate(`${symbol} 市场结构：${STRUCTURES_3M[value]}`, symbol); return;
   }
   if (action === 'direction') {
     const result = changeDirection(state, symbol, value, now(), false);

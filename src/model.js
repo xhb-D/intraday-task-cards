@@ -29,7 +29,7 @@ export const holdingConflictWarning = card => {
   if (stateOf(card) !== 'position') return '';
   const warnings = [];
   if (!isDirectionAllowed(card.bias, card.direction)) warnings.push('当前偏见与本笔方向冲突；平仓后需重新选择方向。');
-  if (!isSetupAllowed(card.direction, card.structure3m, card.opportunity.type)) warnings.push('当前 3M 市场结构与本笔机会不再匹配；不会自动平仓。');
+  if (!isSetupAllowed(card.direction, card.structure3m, card.opportunity.type)) warnings.push('当前市场结构与本笔机会不再匹配；不会自动平仓。');
   return warnings.join(' ');
 };
 export const recordSnapshot = opportunity => { const { zoneDraft, ...record } = opportunity; return copy(record); };
@@ -86,7 +86,7 @@ export function changeDirection(state, symbol, direction, time = Date.now(), con
   card.direction = direction; touch(state); assertState(state); return { changed: true };
 }
 export function changeStructure(state, symbol, structure3m, time = Date.now(), confirmed = false) {
-  if (!own(STRUCTURES_3M, structure3m)) throw new Error('3M 市场结构无效');
+  if (!own(STRUCTURES_3M, structure3m)) throw new Error('市场结构无效');
   const card = cardFor(state, symbol); const status = stateOf(card);
   if (card.structure3m === structure3m && !card.needsStructureReview) return { changed: false, reason: 'same' };
   if (status === 'position') { card.structure3m = structure3m; card.needsStructureReview = false; touch(state); assertState(state); return { changed: true }; }
@@ -171,8 +171,8 @@ export function deleteRecord(state, id) { const index = state.records.findIndex(
 export function recordProgress(record) { return record.endedAt !== null ? RESULTS[record.reason] : record.enteredAt !== null ? '持仓中' : '已登记'; }
 export function instruction(card) {
   const state = stateOf(card);
-  if (card.needsStructureReview) return ['先确认当前 3M 市场结构', '旧版本机会暂不可继续执行'];
-  if (state === 'none') return card.direction === 'none' ? ['先确认偏见、交易方向与 3M 结构', '不找入场'] : card.structure3m === 'unjudged' ? ['先确认当前 3M 市场结构', '不找入场'] : ['等具体机会', '不找入场'];
+  if (card.needsStructureReview) return ['先确认市场结构', '旧版本机会暂不可继续执行'];
+  if (state === 'none') return card.direction === 'none' ? ['先确认偏见、交易方向与市场结构', '不找入场'] : card.structure3m === 'unjudged' ? ['先确认市场结构', '不找入场'] : ['等具体机会', '不找入场'];
   if (state === 'wait') return ['等既定条件成熟', '不提前入场'];
   if (state === 'signal') return ['按既定规则找入场信号', '不临时更换入场理由'];
   return ['只管理当前持仓', '本卡不找新入场'];

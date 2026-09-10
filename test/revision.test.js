@@ -71,7 +71,7 @@ test('revision: 持仓冲突只警告不自动退出，偏见冲突平仓后强�
   assert.match(holdingConflictWarning(state.cards.GC), /偏见与本笔方向冲突/);
   assert.deepEqual(markExited(state, 'GC', later(), true), { changed: true, directionReset: true }); assert.equal(state.cards.GC.direction, 'none'); assertState(state);
   const structureConflict = fresh(); registered(structureConflict); markEntered(structureConflict, 'GC', later(), true); changeStructure(structureConflict, 'GC', 'bearish', later());
-  assert.match(holdingConflictWarning(structureConflict.cards.GC), /3M 市场结构/); assert.deepEqual(markExited(structureConflict, 'GC', later(), true), { changed: true, directionReset: false });
+  assert.match(holdingConflictWarning(structureConflict.cards.GC), /当前市场结构/); assert.deepEqual(markExited(structureConflict, 'GC', later(), true), { changed: true, directionReset: false });
   assert.equal(structureConflict.cards.GC.direction, 'long'); assertState(structureConflict);
 });
 
@@ -87,5 +87,5 @@ test('revision: 登记快照不可被随后偏见、结构或位置再确认改�
   const state = fresh(); const opportunity = registered(state); const snapshot = { bias: opportunity.biasAtRegistration, structure: opportunity.structure3mAtRegistration };
   changeBias(state, 'GC', 'bullish', later()); changeStructure(state, 'GC', 'range', later()); updateDraft(state, 'GC', '更新后的关键位置'); confirmPosition(state, 'GC', later());
   assert.deepEqual({ bias: opportunity.biasAtRegistration, structure: opportunity.structure3mAtRegistration }, snapshot); assert.deepEqual({ bias: state.records[0].biasAtRegistration, structure: state.records[0].structure3mAtRegistration }, snapshot);
-  assert.deepEqual(deserialize(serialize(state, later())).state.records[0].biasAtRegistration, snapshot.bias); assert.match(exportMarkdown(state, 'all', later()), /登记时偏见 \/ 3M市场结构/); assertState(state);
+  assert.deepEqual(deserialize(serialize(state, later())).state.records[0].biasAtRegistration, snapshot.bias); assert.match(exportMarkdown(state, 'all', later()), /登记时偏见 \/ 市场结构/); assertState(state);
 });
