@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createWorkspace } from '../src/model.js';
 import { serialize } from '../src/persistence.js';
-import { toggleCardCollapsed } from '../src/ui-preferences.js';
+import { preserveScrollPosition, toggleCardCollapsed } from '../src/ui-preferences.js';
 
 test('UI preference: 每卡折叠独立，且不进入交易状态序列化', () => {
   const state = createWorkspace(1); const before = serialize(state, 2);
@@ -13,6 +13,33 @@ test('UI preference: 每卡折叠独立，且不进入交易状态序列化', ()
   const clCollapsed = toggleCardCollapsed(gcAndClCollapsed, 'GC');
   assert.deepEqual([...gcCollapsed], ['GC']); assert.deepEqual([...gcAndClCollapsed], ['GC', 'CL']); assert.deepEqual([...clCollapsed], ['CL']);
   assert.equal(serialize(state, 2), before);
+});
+
+test('UI preference: 重绘后立即并在下一帧恢复原滚动位置', () => {
+  const calls = [];
+  let queued;
+  const viewport = {
+    scrollX: 24,
+    scrollY: 680,
+    scrollTo(x, y) { calls.push([x, y]); },
+    requestAnimationFrame(callback) { queued = callback; },
+  };
+
+  const result = preserveScrollPosition(() => 'rendered', viewport);
+
+  assert.equal(result, 'rendered');
+  assert.deepEqual(calls, [[24, 680]]);
+  queued();
+  assert.deepEqual(calls, [[24, 680], [24, 680]]);
+});
+
+test('UI preference: 重绘抛错或无 requestAnimationFrame 时仍恢复滚动位置', () => {
+  const calls = [];
+  const viewport = { scrollX: 8, scrollY: 320, scrollTo(x, y) { calls.push([x, y]); } };
+  const error = new Error('render failed');
+
+  assert.throws(() => preserveScrollPosition(() => { throw error; }, viewport), error);
+  assert.deepEqual(calls, [[8, 320]]);
 });
 
 test('UI contract: 阶段控制在状态面板前，摘要取当前字段，折叠按钮具备可访问语义', () => {
@@ -29,6 +56,8 @@ test('UI contract: 阶段控制在状态面板前，摘要取当前字段，折�
   assert.match(app, /\$\{controls\}<section class="task/);
   assert.match(app, /data-action="toggle-collapse"[^]*?type="button" aria-expanded="\$\{!collapsed\}" aria-label="\$\{toggleLabel\}"/);
   assert.match(app, /collapsedCards = toggleCardCollapsed\(collapsedCards, symbol\); renderAll\(\)/);
+  assert.match(app, /function renderAll\(\) \{ return preserveScrollPosition\(/);
+  assert.match(readFileSync(new URL('../src/risk-manager-view.js', import.meta.url), 'utf8'), /function render\(\) \{ if \(disposed\) return; return preserveScrollPosition\(/);
   assert.match(css, /\.card\{grid-template-rows:unset;align-self:start;container-type:inline-size\}/);
   assert.match(css, /@container \(max-width:390px\)\{\.task-content\{grid-template-columns:1fr/);
   assert.doesNotMatch(css, /\.task-summary dd\{[^}]*text-overflow:ellipsis/);

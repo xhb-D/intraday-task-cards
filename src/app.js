@@ -3,7 +3,7 @@ import { makeEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './per
 import { renderBannerVisibility, renderTextBanner } from './banner.js';
 import { reportDiagnostic } from './diagnostics.js';
 import { externalConflictPolicy } from './conflict.js';
-import { toggleCardCollapsed } from './ui-preferences.js';
+import { preserveScrollPosition, toggleCardCollapsed } from './ui-preferences.js';
 import { initRiskDashboard } from './risk-dashboard.js';
 import { initRiskManagerView } from './risk-manager-view.js';
 import { initAppearance } from './appearance.js';
@@ -157,7 +157,7 @@ function renderHistory() {
   document.querySelectorAll('[data-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === historyScope)));
   historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUPS[record.type]}</td><td class="position">${escapeHtml(record.zone)}</td><td>${recordProgress(record)}</td><td><button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button></td></tr>`).join('');
 }
-function renderAll() { try { cardsEl.innerHTML = ORDER.map(renderCard).join(''); renderHistory(); storageStatus(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }
+function renderAll() { return preserveScrollPosition(() => { try { cardsEl.innerHTML = ORDER.map(renderCard).join(''); renderHistory(); storageStatus(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
 function recordWarning(opportunity) {
   if (!hasRecord(state, opportunity)) return opportunity.registeredAt === null ? '关键位置尚未确认登记：这次操作不会自动新增机会记录。' : '本条记录已删除：这次操作不会把它自动恢复。';
   return opportunity.zoneDraft.trim() !== opportunity.zone ? `位置修改待确认：记录继续保留「${opportunity.zone}」。` : '';
