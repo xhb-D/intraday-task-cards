@@ -9,7 +9,7 @@
 .classifier .segment{height:26px;gap:4px}
 .classifier .option{height:26px;border-color:#263341;background:#151e29;color:#8e9daf;font-size:11px}
 .bias-field .option.selected{background:#202c38;border-color:#52687d;color:#d3dee9;font-weight:600}
-.structure-segment{grid-template-columns:repeat(4,minmax(0,1fr))}
+.structure-segment{grid-template-columns:minmax(0,1fr) minmax(0,1.7fr) minmax(0,1fr)}
 .structure-field .option.selected{background:#263545;border-color:#718ba5;color:#e0eaf5;font-weight:650}
 .direction-field .option{height:32px;border-color:#394c61;background:#182330;color:#b8c6d6;font-size:12px;font-weight:600}
 .direction-field .option.selected{background:#30445a;border-color:#91a9c4;color:#f4f8fd;font-weight:700}

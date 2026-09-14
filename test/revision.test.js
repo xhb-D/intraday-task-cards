@@ -77,6 +77,7 @@ test('revision: 持仓冲突只警告不自动退出，偏见冲突平仓后强�
 
 test('revision: 未判断只作当前统一格式中的内部安全态，不提供可选结构', () => {
   assert.deepEqual(Object.keys(VISIBLE_STRUCTURES_3M), ['bullish', 'range', 'bearish']); assert.ok(STRUCTURES_3M.unjudged);
+  assert.equal(STRUCTURES_3M.range, '震荡（观察拍卖完成）'); assert.equal(VISIBLE_STRUCTURES_3M.range, '震荡（观察拍卖完成）');
   const state = fresh(); changeDirection(state, 'GC', 'long', later()); assert.equal(state.cards.GC.structure3m, 'unjudged'); assert.equal(chooseSetup(state, 'GC', 'range', later()).changed, false);
   const restored = deserialize(JSON.stringify(makeEnvelope(state, later()))).state;
   assert.equal(restored.schemaVersion, 3); assert.equal(restored.cards.GC.structure3m, 'unjudged');
@@ -88,4 +89,6 @@ test('revision: 登记快照不可被随后偏见、结构或位置再确认改�
   changeBias(state, 'GC', 'bullish', later()); changeStructure(state, 'GC', 'range', later()); updateDraft(state, 'GC', '更新后的关键位置'); confirmPosition(state, 'GC', later());
   assert.deepEqual({ bias: opportunity.biasAtRegistration, structure: opportunity.structure3mAtRegistration }, snapshot); assert.deepEqual({ bias: state.records[0].biasAtRegistration, structure: state.records[0].structure3mAtRegistration }, snapshot);
   assert.deepEqual(deserialize(serialize(state, later())).state.records[0].biasAtRegistration, snapshot.bias); assert.match(exportMarkdown(state, 'all', later()), /登记时偏见 \/ 市场结构/); assertState(state);
+  const rangeState = fresh(); registered(rangeState, 'GC', 'range', 'long', 'range'); const markdown = exportMarkdown(rangeState, 'all', later());
+  assert.match(markdown, /市场结构：震荡 \|/); assert.doesNotMatch(markdown, /观察拍卖完成/);
 });

@@ -6,12 +6,12 @@
   <meta name="description" content="GC、CL、ES 独立任务卡；只在本地保存，手动记录，不读取行情或发送订单。">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src data:; font-src 'none'; connect-src 'none'; form-action 'none'; base-uri 'none'">
   <title>日内交易状态卡 · GC / CL / ES · V1</title>
-  <script src="appearance-bootstrap.js?v=unified-20260914-1"></script>
-  <link rel="stylesheet" href="styles.css?v=unified-20260914-1">
-  <link rel="stylesheet" href="banner.css?v=unified-20260914-1">
-  <link rel="stylesheet" href="refinement.css?v=unified-20260914-1">
-  <link rel="stylesheet" href="risk-dashboard.css?v=unified-20260914-1">
-  <link rel="stylesheet" href="appearance.css?v=unified-20260914-1">
+  <script src="appearance-bootstrap.js?v=unified-20260914-2"></script>
+  <link rel="stylesheet" href="styles.css?v=unified-20260914-2">
+  <link rel="stylesheet" href="banner.css?v=unified-20260914-2">
+  <link rel="stylesheet" href="refinement.css?v=unified-20260914-2">
+  <link rel="stylesheet" href="risk-dashboard.css?v=unified-20260914-2">
+  <link rel="stylesheet" href="appearance.css?v=unified-20260914-2">
 </head>
 <body>
   <main class="shell">
@@ -40,6 +40,6 @@
   <dialog id="confirm-dialog" class="dialog" aria-labelledby="dialog-title"><h2 id="dialog-title"></h2><p id="dialog-message"></p><p id="dialog-warning" class="warning" hidden></p><div class="dialog-actions"><button id="dialog-cancel" type="button" autofocus>取消</button><button id="dialog-confirm" class="primary" type="button">确认</button></div></dialog>
   <dialog id="data-dialog" class="dialog data-dialog"><h2>导出与本地备份</h2><p>完整备份包含状态卡、风险管理器和外观偏好；仅接受当前统一格式或风险管理器备份。</p><div class="data-grid"><button id="export-today" type="button"><b>今日 Markdown</b><span>今日及未结束的已登记机会</span></button><button id="export-all" type="button"><b>全部 Markdown</b><span>全部仍保留的机会记录</span></button><button id="export-json" type="button"><b>完整备份 JSON</b><span>保存状态卡、风险管理器和外观</span></button><button id="export-risk-json" type="button"><b>风险管理器 JSON</b><span>仅导出账户与风险记录</span></button><button id="import-json" type="button"><b>导入 JSON 备份</b><span>预览影响范围后确认；8 MB 上限</span></button></div><button id="export-raw" class="link raw-export" type="button" hidden>导出原始存档（用于排查异常）</button><input id="import-file" type="file" accept=".json,application/json" hidden><p id="data-feedback" class="feedback" role="status"></p><p class="caution">不支持旧版独立日内状态卡备份。恢复完成后，请对照真实交易平台核对当前任务与持仓。</p><div class="dialog-actions"><button id="data-close" type="button">关闭</button></div></dialog>
   <div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="dist/app.bundle.js?v=unified-20260914-1"></script>
+  <script src="dist/app.bundle.js?v=unified-20260914-2"></script>
 </body>
 </html>
