@@ -45,6 +45,9 @@
 .cards{align-items:start}
 .card{grid-template-rows:unset;align-self:start;container-type:inline-size}
 .card-head-actions{display:flex;align-items:center;gap:7px}
+.card-hide{min-height:30px;padding:0 7px;border:1px solid #334354;border-radius:6px;background:#151e29;color:#b7c5d6;font-size:11px;line-height:1;white-space:nowrap}
+.card-hide:hover{border-color:#60758d;color:#e5edf8}
+.card-hide:focus-visible,.commodity-dashboard button:focus-visible{outline:2px solid #a9c4df;outline-offset:2px}
 .card-toggle{width:30px;height:30px;padding:0;display:grid;place-items:center;border:1px solid #334354;border-radius:6px;background:#151e29;color:#b7c5d6}
 .card-toggle:hover{border-color:#60758d;color:#e5edf8}
 .card-toggle:focus-visible{outline:2px solid #a9c4df;outline-offset:2px}
@@ -61,8 +64,17 @@
 .task-summary dd{margin:0;color:#edf2f9;font-size:18px;line-height:23px;font-weight:650}
 .summary-direction-active{display:inline-flex;align-items:center;max-width:100%;padding:1px 7px;border:1px solid color-mix(in srgb,var(--theme-accent) 58%,var(--border-primary));border-radius:7px;background:color-mix(in srgb,var(--theme-accent) 13%,var(--bg-surface-secondary));box-shadow:0 0 9px color-mix(in srgb,var(--theme-accent) 22%,transparent);color:var(--text-primary)}
 .summary-zone{display:block;margin-top:5px;color:#bac3d0;font-size:13px;line-height:18px;font-weight:500;overflow-wrap:anywhere}
+.commodity-dashboard{margin:12px 0 14px;padding:11px 13px;border:1px solid #33445d;border-radius:10px;background:linear-gradient(105deg,#142033,#111a27)}
+.commodity-dashboard-summary{min-height:24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
+.commodity-dashboard h2{font-size:16px;line-height:22px;letter-spacing:.02em}
+.commodity-dashboard-actions{display:flex;align-items:center;gap:7px;white-space:nowrap;color:#dbe6f4;font-size:11px;font-weight:650}
+.commodity-dashboard-actions button,.commodity-dashboard-row button{min-height:30px;padding:0 9px;border:1px solid #476586;border-radius:6px;background:#1d2d42;color:#e4eefb;font-size:11px;font-weight:650}
+.commodity-dashboard-list{display:grid;gap:7px;margin-top:10px}
+.commodity-dashboard-row{min-height:48px;display:grid;grid-template-columns:58px minmax(0,1fr) auto;align-items:center;gap:10px;padding:8px 10px;border:1px solid #334763;border-radius:7px;background:#1b2839}
+.commodity-dashboard-row strong{font-size:15px;letter-spacing:.03em}.commodity-dashboard-row span{color:#9eaec3;font-size:11px;line-height:16px}
+.cards.cards--count-2{grid-template-columns:repeat(2,minmax(0,1fr))}.cards.cards--count-1{grid-template-columns:1fr}
 .is-collapsed .task{margin-top:0}
 .route-error{max-width:560px;margin:20px auto;padding:20px;border:1px solid #67513a;border-radius:9px;background:#211914}.route-error h2{font-size:19px}.route-error p{margin:10px 0 15px;color:#d4bd9c;line-height:21px}.route-error-home{font-size:13px}
 @media(max-width:1050px){.card-controls{grid-template-rows:43px 49px 43px auto 34px}.card .task{min-height:unset}.task-content{grid-template-columns:1fr;gap:9px}.task-summary{gap:8px 14px}.task-summary dd{font-size:17px;line-height:22px}}
-@media(max-width:629px){.card-head-actions{gap:6px}.card-toggle{width:29px;height:29px}.card .task{padding:10px}.task-summary dd{font-size:16px}}
+@media(max-width:629px){.card-head-actions{gap:6px}.card-hide{min-height:29px;padding:0 6px}.card-toggle{width:29px;height:29px}.commodity-dashboard{margin-top:10px;padding:10px}.commodity-dashboard-summary{align-items:flex-start}.commodity-dashboard-actions{padding-top:1px}.commodity-dashboard-row{grid-template-columns:42px minmax(0,1fr);gap:6px 9px}.commodity-dashboard-row button{grid-column:2;justify-self:start}.cards.cards--count-2,.cards.cards--count-1{grid-template-columns:1fr}.card .task{padding:10px}.task-summary dd{font-size:16px}}
 @container (max-width:390px){.task-content{grid-template-columns:1fr;gap:10px}.task-summary{gap:9px 14px}.task-summary dd{white-space:normal;overflow-wrap:anywhere}.card .task{min-height:unset}.is-collapsed .task{min-height:0}}

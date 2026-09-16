@@ -3,7 +3,7 @@ import { makeEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './per
 import { renderBannerVisibility, renderTextBanner } from './banner.js';
 import { reportDiagnostic } from './diagnostics.js';
 import { externalConflictPolicy } from './conflict.js';
-import { preserveScrollPosition, toggleCardCollapsed } from './ui-preferences.js';
+import { loadCommodityPreferences, preserveScrollPosition, saveCommodityPreferences, setCommodityHidden, setCommodityManagerExpanded, toggleCardCollapsed, visibleCommoditySymbols } from './ui-preferences.js';
 import { initRiskDashboard } from './risk-dashboard.js';
 import { initRiskManagerView } from './risk-manager-view.js';
 import { initAppearance } from './appearance.js';
@@ -11,6 +11,7 @@ import { applyRoute, normalizeRoute } from './router.js';
 import { UNIFIED_KEY, commitUnified, importSummary, loadUnified, makeUnified, normalizeImport, parseBackupRaw } from './unified-persistence.js';
 
 const cardsEl = document.querySelector('#cards');
+const commodityDashboardEl = document.querySelector('#commodity-dashboard');
 const historyBody = document.querySelector('#history-body');
 const dialog = document.querySelector('#confirm-dialog');
 const dataDialog = document.querySelector('#data-dialog');
@@ -27,11 +28,13 @@ let historyScope = 'today';
 let currentDay = '';
 let collapsedCards = new Set();
 let storage = null;
+let commodityPreferences = null;
 let unified = null;
 let dashboardView = null;
 let fullRiskView = null;
 let appearanceView = null;
 try { storage = globalThis.localStorage; } catch (_) { storage = null; }
+commodityPreferences = loadCommodityPreferences(storage, ORDER);
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
 const now = () => Date.now();
@@ -145,7 +148,15 @@ function renderCard(symbol) {
   const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section>${structure}<section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   const conflictWarning = holdingConflictWarning(card);
-  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${entry}${ending}</article>`;
+  const hideLabel = `隐藏 ${symbol} 卡片`;
+  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><button class="card-hide" data-action="hide-card" data-symbol="${symbol}" type="button" title="${hideLabel}" aria-label="${hideLabel}">隐藏</button><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${entry}${ending}</article>`;
+}
+function renderCommodityDashboard() {
+  const hiddenSymbols = commodityPreferences.hiddenSymbols;
+  const expanded = hiddenSymbols.length > 0 && commodityPreferences.managerExpanded;
+  const managerLabel = expanded ? '收起隐藏商品列表' : '展开隐藏商品列表';
+  const hiddenRows = expanded ? `<div class="commodity-dashboard-list">${hiddenSymbols.map(symbol => `<div class="commodity-dashboard-row"><strong>${symbol}</strong><span>已隐藏，状态仍保留</span><button type="button" data-action="restore-card" data-symbol="${symbol}">恢复显示</button></div>`).join('')}</div>` : '';
+  commodityDashboardEl.innerHTML = `<div class="commodity-dashboard-summary"><h2 id="commodity-dashboard-title">商品看板</h2><div class="commodity-dashboard-actions"><span>已隐藏商品 ${hiddenSymbols.length}</span>${hiddenSymbols.length ? `<button type="button" data-action="toggle-commodity-manager" aria-expanded="${expanded}" aria-label="${managerLabel}">${expanded ? '收起' : '展开'}</button>` : ''}</div></div>${hiddenRows}`;
 }
 function recordsForScope() {
   const day = dateKey(now()); return state.records.filter(record => historyScope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
@@ -157,7 +168,7 @@ function renderHistory() {
   document.querySelectorAll('[data-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === historyScope)));
   historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUPS[record.type]}</td><td class="position">${escapeHtml(record.zone)}</td><td>${recordProgress(record)}</td><td><button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button></td></tr>`).join('');
 }
-function renderAll() { return preserveScrollPosition(() => { try { cardsEl.innerHTML = ORDER.map(renderCard).join(''); renderHistory(); storageStatus(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
+function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = visibleSymbols.map(renderCard).join(''); renderHistory(); storageStatus(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
 function recordWarning(opportunity) {
   if (!hasRecord(state, opportunity)) return opportunity.registeredAt === null ? '关键位置尚未确认登记：这次操作不会自动新增机会记录。' : '本条记录已删除：这次操作不会把它自动恢复。';
   return opportunity.zoneDraft.trim() !== opportunity.zone ? `位置修改待确认：记录继续保留「${opportunity.zone}」。` : '';
@@ -183,6 +194,10 @@ function finishConfirmation(confirmed) {
 }
 function handleAction(button) {
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
+  if (action === 'hide-card') {
+    commodityPreferences = setCommodityManagerExpanded(setCommodityHidden(commodityPreferences, symbol, true, ORDER), true, ORDER); saveCommodityPreferences(storage, commodityPreferences, ORDER); renderAll();
+    commodityDashboardEl.querySelector('[data-action="toggle-commodity-manager"]')?.focus({ preventScroll: true }); announce(`${symbol} 已隐藏；状态与记录保持不变`); return;
+  }
   if (action === 'toggle-collapse') {
     if (pending || corruption || writeLocked() || button.disabled) return;
     collapsedCards = toggleCardCollapsed(collapsedCards, symbol); renderAll();
@@ -213,9 +228,21 @@ function handleAction(button) {
   if (action === 'exit') { if (stateOf(card) === 'position') openConfirmation({ kind: 'exit', symbol, opportunityId: card.opportunity.id }, `确认 ${symbol} 已全部平仓？`, `${symbol} · ${SETUPS[card.opportunity.type]}\n关键位置：${card.opportunity.zone || '尚未确认'}\n\n仅在本笔已经实际全部平仓后确认。部分减仓不属于已平仓。`, '确认已平仓', recordWarning(card.opportunity)); return; }
   if (action === 'end') { if (endOpportunity(state, symbol, value, now())) mutate(`${symbol} 机会${RESULTS[value]}；方向保留，当前无机会`, symbol); }
 }
+function handleCommodityDashboardAction(button) {
+  const { action, symbol } = button.dataset;
+  if (action === 'toggle-commodity-manager') {
+    commodityPreferences = setCommodityManagerExpanded(commodityPreferences, !commodityPreferences.managerExpanded, ORDER); saveCommodityPreferences(storage, commodityPreferences, ORDER); renderAll();
+    commodityDashboardEl.querySelector('[data-action="toggle-commodity-manager"]')?.focus({ preventScroll: true }); announce(`隐藏商品列表已${commodityPreferences.managerExpanded ? '展开' : '收起'}`); return;
+  }
+  if (action === 'restore-card' && ORDER.includes(symbol)) {
+    commodityPreferences = setCommodityHidden(commodityPreferences, symbol, false, ORDER); saveCommodityPreferences(storage, commodityPreferences, ORDER); renderAll();
+    document.querySelector(`article[data-symbol="${symbol}"] .card-hide`)?.focus({ preventScroll: true }); announce(`${symbol} 已恢复显示；状态与记录保持不变`);
+  }
+}
 function download(text, filename, type) { const url = URL.createObjectURL(new Blob([text], { type })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
 
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
+commodityDashboardEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); });
 cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption || writeLocked()) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
 cardsEl.addEventListener('keydown', event => { if (event.target.matches('input[data-zone]') && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); event.target.closest('article').querySelector('.zone-confirm:not(:disabled)')?.focus(); } });
 historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
