@@ -93,7 +93,9 @@ test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态�
   assert.doesNotMatch(css, /\.task-summary dd\{[^}]*text-overflow:ellipsis/);
   assert.doesNotMatch(css, /\.summary-zone\{[^}]*text-overflow:ellipsis/);
   assert.match(css, /\.summary-direction-active\{display:inline-flex;[^}]*border:1px solid color-mix\(in srgb,var\(--theme-accent\) 58%,var\(--border-primary\)\);[^}]*background:color-mix\(in srgb,var\(--theme-accent\) 13%,var\(--bg-surface-secondary\)\);[^}]*box-shadow:0 0 9px color-mix\(in srgb,var\(--theme-accent\) 22%,transparent\);[^}]*color:var\(--text-primary\)\}/);
-  assert.match(css, /\.commodity-dashboard\{margin:12px 0 14px/);
+  assert.match(css, /\.card-hide\{[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface-secondary\);[^}]*color:var\(--text-secondary\)/);
+  assert.match(css, /\.commodity-dashboard\{margin:12px 0 14px;[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface\);[^}]*color:var\(--text-primary\)/);
+  assert.match(css, /\.commodity-dashboard-row\{[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface-secondary\)/);
   assert.match(css, /\.cards\.cards--count-2\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
   assert.match(css, /@media\(max-width:629px\)\{[^]*?\.commodity-dashboard-row\{grid-template-columns:42px minmax\(0,1fr\)/);
 });
