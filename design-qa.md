@@ -1,25 +1,35 @@
 # 日内交易状态卡 UI Design QA
 
-- Date: 2026-09-10
-- Scope: only the current-state summary direction values `只找多` and `只找空`; no business rule, wording, field order, or layout changed.
-- Light implementation evidence: `/Users/hongchujun/Documents/ChatGPT/日内交易卡片/qa/implementation-active-directions-light-1280x633.png`
-- Browser: isolated local Chrome, `http://127.0.0.1:4177/#/home`
-- Actual content viewport: 1280 x 633 (the requested 1280 x 720 browser window has a 633 px page viewport after browser chrome).
-- Reviewed scenario: GC / 无偏见 / 只找多 / 多头 / 趋势回调 / 等待，与 CL / 无偏见 / 只找空 / 空头 / 趋势回调 / 等待，同屏显示。
+- Date: 2026-09-16
+- Scope: GC / CL / ES 卡片的本地显示隐藏与恢复；不改变偏见、方向、结构、机会、关键位置、状态、记录或统一备份格式。
+- Visual truth inputs compared in the same QA pass:
+  - `/Users/hongchujun/.codex/generated_images/01a079d6-c844-7fe0-b65f-ab3aedeebe71/exec-b04d8cfd-380a-41ad-82c9-d34f42ade4e1.png`
+  - `/var/folders/s0/w9l5s5fd2g9903lpf2dh6mz80000gn/T/TemporaryItems/NSIRD_screencaptureui_RU95RI/截屏2026-09-16 上午9.08.23.png`
+- Implementation examined: Codex in-app browser, `http://localhost:4180/#/home`, deep appearance, 1280 x 720 viewport. The browser capture is session evidence; the local URL is the reproducible implementation target.
 
 ## Acceptance checks
 
-- `direction === 'long'` and `direction === 'short'` both render `summary-direction-active`; `暂无交易方向` keeps the ordinary summary rendering.
-- The special value inherits `.task-summary dd` typography. The dedicated rule contains no `font-size`; its 18 px desktop, 17 px compact, and 16 px mobile sizes therefore remain exactly the parent `dd` sizes.
-- The pill is limited to an inline value: 1 px theme-aware blue border, low-opacity accent background, modest 9 px accent glow, and no grid, wrapping, or card-height change.
-- Light explicit mode: reviewed in the same-screen evidence image. `只找多` and `只找空` both use `--text-primary`, so each remains legible on the light blue pill.
-- The static UI contract explicitly pins the long-and-short active render, the ordinary `暂无交易方向` fallback, and the theme-token style. `npm run build` passed; `npm test` passed 211/211; `git diff --check` passed.
+- Default manager is after the risk description and before the card grid. Its measured height is 48 px with no hidden cards; it stays visible even when all cards are hidden.
+- Each title row exposes the compact, keyboard-focusable text control `隐藏`; it has both an accessible name and a native title. The textual control is the accepted constraint difference from the visual truth's eye-slash asset: no new asset, emoji, inline SVG, or dependency was introduced.
+- Hiding CL automatically opens the manager. At 1280 x 720 it measures 112 px with its single recovery row, and GC / ES reflow into two 523 px columns with no horizontal overflow.
+- The expanded row contains `CL` / `已隐藏，状态仍保留` / `恢复显示`; manager collapse and re-expand preserve the hidden list.
+- Restoring CL returns the card sequence to GC → CL → ES. A refresh retained the CL hidden preference and expanded manager state. Hiding all three left the manager and all three restore controls usable; each was restored successfully.
+- The independent `intraday-task-cards:v1:commodity-preferences` key contains only hidden symbols and manager expansion. Unit and production-bundle tests confirm the serialized trading workspace and records are unchanged.
+- Responsive QA: at 900 px the page rendered two card columns with no cards or manager overflow; at 390 x 844 it rendered a single card column, and the manager and controls remained visible without horizontal overflow.
+- Interaction QA: hide, restore, manager expand/collapse, refresh persistence, all-hidden recovery, focus return, and scroll-preserving re-render all use the existing `preserveScrollPosition` path. In-app browser console errors: none.
 
-## Finding and fix history
+## Comparison and iteration record
 
-1. First pass used a hard-coded pale `#c9e0ff` foreground. Because `appearance.css` is loaded after `refinement.css`, the light follow-system page showed the blue box while the `只找多` text had insufficient contrast. This was a P1 visual-readability issue; the first-pass capture is not acceptance evidence.
-2. Second pass replaced the hard-coded border, background, glow, and foreground with `--theme-accent`, `--border-primary`, `--bg-surface-secondary`, and `--text-primary`.
-3. The active-direction rule is now semantic rather than long-only: `summary-direction-active` applies to both `只找多` and `只找空`; `暂无交易方向` remains unwrapped. The same-screen light capture above verifies both active directions, while the dedicated rule still contains no `font-size` and the state/direction rules are unchanged.
+1. The first implementation retained the fixed three-column grid after hiding CL, which left an unused third column and did not match the two-card visual truth. The renderer now assigns an explicit visible-card-count class so two cards fill two columns and one card fills its grid row; mobile overrides remain single-column.
+2. The first manager copy used an explanatory second line, making its collapsed state too tall. Removing that nonessential line yields the required compact 48 px default manager while the expanded recovery row retains its explicit data-safety copy.
+3. The final dark-mode comparison preserves the existing page typography, panels, borders, state colors, and card hierarchy. The new manager follows those same surface tokens instead of introducing a dominant standalone card.
+
+## Verification
+
+- `npm run build` passed.
+- `node --check dist/app.bundle.js` passed.
+- `npm test` passed after the final build.
+- `git diff --check` passed.
 
 ## Final result
 

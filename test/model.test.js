@@ -86,10 +86,10 @@ test('K/L: 序列化恢复草稿、状态、持仓和历史；导入验证失败
   assert.throws(() => deserialize('{"app":"bad"}')); const markdown = exportMarkdown(state, 'all', later()); assert.match(markdown, /登记时偏见/); assert.equal(JSON.stringify(state), before); assert.throws(() => validateEnvelope({ ...makeEnvelope(state), schemaVersion: 4 }));
 });
 
-test('M: 静态 UI 合约固定 GC → CL → ES 三卡，并为入场/平仓保留不同操作行', () => {
+test('M: 静态 UI 合约按 GC → CL → ES 固定顺序过滤可见卡，并为入场/平仓保留不同操作行', () => {
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
-  assert.match(app, /ORDER\.map\(renderCard\)/); assert.match(css, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
+  assert.match(app, /visibleCommoditySymbols\(ORDER, commodityPreferences\)/); assert.match(app, /visibleSymbols\.map\(renderCard\)/); assert.match(css, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   const refinement = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
   assert.match(app, /当前偏见/); assert.match(app, /field-label">市场结构/); assert.match(app, /aria-label="\$\{symbol\} 市场结构"/); assert.match(app, /class="tf">3M/); assert.match(app, /交易方向/); assert.match(app, /disabled aria-disabled="true"/);
   assert.match(app, /let stages = '<div class="empty"[^]*?if \(opportunity && !holding\)[^]*?else if \(holding\) ending/);
