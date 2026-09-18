@@ -91,7 +91,7 @@ test('M: 静态 UI 合约按 GC → CL → ES 固定顺序过滤可见卡，并�
   const css = readFileSync(new URL('../styles.css', import.meta.url), 'utf8');
   assert.match(app, /visibleCommoditySymbols\(ORDER, commodityPreferences\)/); assert.match(app, /visibleSymbols\.map\(renderCard\)/); assert.match(css, /grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   const refinement = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
-  assert.match(app, /当前偏见/); assert.match(app, /field-label">市场结构/); assert.match(app, /aria-label="\$\{symbol\} 市场结构"/); assert.match(app, /class="tf">3M/); assert.match(app, /交易方向/); assert.match(app, /disabled aria-disabled="true"/);
+  assert.match(app, /当前偏见/); assert.match(app, /field-label">市场结构/); assert.match(app, /aria-label="\$\{symbol\} 市场结构"/); assert.match(app, /class="tf">3M/); assert.match(app, /交易方向（HTF缺口）/); assert.match(app, /disabled aria-disabled="true"/);
   assert.match(app, /let stages = '<div class="empty"[^]*?if \(opportunity && !holding\)[^]*?else if \(holding\) ending/);
   assert.match(refinement, /grid-template-rows:31px 43px 43px 49px 98px 112px 34px 36px 34px/);
   assert.match(refinement, /\.card-controls\{display:grid;grid-template-rows:43px 49px 43px 98px 34px;gap:5px\}/);

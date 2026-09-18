@@ -119,6 +119,8 @@ test('production bundle: 折叠与隐藏点击路径可执行，且不会写入�
   vm.runInNewContext(bundle, context);
   const cards = elements.get('#cards'); const initialWrites = writes;
   assert.match(cards.innerHTML, /当前偏见[^]*?交易方向[^]*?市场结构[^]*?当前机会[^]*?当前状态/);
+  assert.match(cards.innerHTML, /field-label">交易方向（HTF缺口）<\/span>/);
+  assert.doesNotMatch(cards.innerHTML, /field-label">交易方向<\/span>/);
   assert.doesNotMatch(cards.innerHTML, /当前 3M 市场结构/);
   assert.doesNotMatch(cards.innerHTML, /未判断/);
   assert.match(cards.innerHTML, /当前机会[^]*?趋势回调[^]*?disabled aria-disabled="true"/);
