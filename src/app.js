@@ -145,7 +145,7 @@ function renderCard(symbol) {
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
   const confirmedZone = opportunity?.registeredAt !== null && opportunity?.zone ? `<span class="summary-zone">${escapeHtml(opportunity.zone)}</span>` : '';
   const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${['long', 'short'].includes(card.direction) ? `<span class="summary-direction-active">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
-  const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向'}</span>${direction}</section>${structure}<section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
+  const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向（HTF缺口）'}</span>${direction}</section>${structure}<section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   const conflictWarning = holdingConflictWarning(card);
   const hideLabel = `隐藏 ${symbol} 卡片`;
