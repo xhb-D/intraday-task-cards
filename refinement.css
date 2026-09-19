@@ -11,6 +11,7 @@
 .bias-field .option.selected{background:#202c38;border-color:#52687d;color:#d3dee9;font-weight:600}
 .structure-segment{grid-template-columns:minmax(0,1fr) minmax(0,1.7fr) minmax(0,1fr)}
 .structure-field .option.selected{background:#263545;border-color:#718ba5;color:#e0eaf5;font-weight:650}
+.structure-field .field-label,.direction-field .field-label{white-space:nowrap}
 .direction-field .option{height:32px;border-color:#394c61;background:#182330;color:#b8c6d6;font-size:12px;font-weight:600}
 .direction-field .option.selected{background:#30445a;border-color:#91a9c4;color:#f4f8fd;font-weight:700}
 .opportunity-field .option{height:30px;border-color:#2c3b4c;font-size:12px}
@@ -78,3 +79,4 @@
 @media(max-width:1050px){.card-controls{grid-template-rows:43px 49px 43px auto 34px}.card .task{min-height:unset}.task-content{grid-template-columns:1fr;gap:9px}.task-summary{gap:8px 14px}.task-summary dd{font-size:17px;line-height:22px}}
 @media(max-width:629px){.card-head-actions{gap:6px}.card-hide{min-height:29px;padding:0 6px}.card-toggle{width:29px;height:29px}.commodity-dashboard{margin-top:10px;padding:10px}.commodity-dashboard-summary{align-items:flex-start}.commodity-dashboard-actions{padding-top:1px}.commodity-dashboard-row{grid-template-columns:42px minmax(0,1fr);gap:6px 9px}.commodity-dashboard-row button{grid-column:2;justify-self:start}.cards.cards--count-2,.cards.cards--count-1{grid-template-columns:1fr}.card .task{padding:10px}.task-summary dd{font-size:16px}}
 @container (max-width:390px){.task-content{grid-template-columns:1fr;gap:10px}.task-summary{gap:9px 14px}.task-summary dd{white-space:normal;overflow-wrap:anywhere}.card .task{min-height:unset}.is-collapsed .task{min-height:0}}
+@container (max-width:330px){.structure-field .field-label,.direction-field .field-label{font-size:9px;letter-spacing:0}}
