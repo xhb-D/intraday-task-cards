@@ -119,8 +119,8 @@ test('production bundle: 折叠与隐藏点击路径可执行，且不会写入�
   context.window = { addEventListener() {} };
   vm.runInNewContext(bundle, context);
   const cards = elements.get('#cards'); const initialWrites = writes;
-  assert.match(cards.innerHTML, /当前偏见[^]*?市场结构（比较20均线和波段高低点）[^]*?交易方向（市场结构不明确时看HTF缺口）[^]*?当前机会[^]*?当前状态/);
-  assert.match(cards.innerHTML, /field-label">市场结构（比较20均线和波段高低点）<\/span>/);
+  assert.match(cards.innerHTML, /当前偏见[^]*?市场结构（MTF chanlun）[^]*?交易方向（市场结构不明确时看HTF缺口）[^]*?当前机会[^]*?当前状态/);
+  assert.match(cards.innerHTML, /field-label">市场结构（MTF chanlun）<\/span>/);
   assert.match(cards.innerHTML, /field-label">交易方向（市场结构不明确时看HTF缺口）<\/span>/);
   assert.doesNotMatch(cards.innerHTML, /field-label">交易方向（HTF缺口）<\/span>/);
   assert.doesNotMatch(cards.innerHTML, /当前 3M 市场结构/);

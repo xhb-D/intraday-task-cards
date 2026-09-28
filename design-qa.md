@@ -1,38 +1,48 @@
 # 日内交易状态卡 UI Design QA
 
-- Date: 2026-09-16
-- Scope: GC / CL / ES 卡片的本地显示隐藏与恢复；不改变偏见、方向、结构、机会、关键位置、状态、记录或统一备份格式。
-- Visual truth inputs compared in the same QA pass:
-  - `/Users/hongchujun/.codex/generated_images/01a079d6-c844-7fe0-b65f-ab3aedeebe71/exec-b04d8cfd-380a-41ad-82c9-d34f42ade4e1.png`
-  - `/var/folders/s0/w9l5s5fd2g9903lpf2dh6mz80000gn/T/TemporaryItems/NSIRD_screencaptureui_RU95RI/截屏2026-09-16 上午9.08.23.png`
-- Implementation examined: Codex in-app browser, `http://localhost:4180/#/home`, deep appearance, 1280 x 720 viewport. The browser capture is session evidence; the local URL is the reproducible implementation target.
+- Date: 2026-09-28
+- Scope: 仅将商品卡片标题 `市场结构（比较20均线和波段高低点）` 改为 `市场结构（MTF chanlun）`；布局、主题、控件、业务规则和数据格式不变。
+- Source visual truth path: `/Users/hongchujun/.codex/generated_images/01a079d6-c844-7fe0-b65f-ab3aedeebe71/exec-8f97f269-9ee9-4e80-aa06-d485a6f81aaa.png`。
+- Implementation screenshot path: Codex in-app browser inline capture；可复现页面 `http://127.0.0.1:4184/?preview=mtf-chanlun#/home`。
+- Viewport: 1280 x 720 CSS px，dark theme，1x density。
+- Source pixels: 1234 x 1275；implementation pixels: 1280 x 720。源图是单卡近景，实施截图是三卡完整页面，因此只比较授权范围内的标题文案、单行显示、对齐和相邻控件布局，不对两者整体比例作伪精确比较。
 
-## Acceptance checks
+## Full-view comparison evidence
 
-- Default manager is after the risk description and before the card grid. Its measured height is 48 px with no hidden cards; it stays visible even when all cards are hidden.
-- Each title row exposes the compact, keyboard-focusable text control `隐藏`; it has both an accessible name and a native title. The textual control is the accepted constraint difference from the visual truth's eye-slash asset: no new asset, emoji, inline SVG, or dependency was introduced.
-- Hiding CL automatically opens the manager. At 1280 x 720 it measures 112 px with its single recovery row, and GC / ES reflow into two 523 px columns with no horizontal overflow.
-- The expanded row contains `CL` / `已隐藏，状态仍保留` / `恢复显示`; manager collapse and re-expand preserve the hidden list.
-- Restoring CL returns the card sequence to GC → CL → ES. A refresh retained the CL hidden preference and expanded manager state. Hiding all three left the manager and all three restore controls usable; each was restored successfully.
-- The independent `intraday-task-cards:v1:commodity-preferences` key contains only hidden symbols and manager expansion. Unit and production-bundle tests confirm the serialized trading workspace and records are unchanged.
-- Responsive QA: at 900 px the page rendered two card columns with no cards or manager overflow; at 390 x 844 it rendered a single card column, and the manager and controls remained visible without horizontal overflow.
-- Interaction QA: hide, restore, manager expand/collapse, refresh persistence, all-hidden recovery, focus return, and scroll-preserving re-render all use the existing `preserveScrollPosition` path. In-app browser console errors: none.
+- GC、CL、ES 三张卡片均显示 `市场结构（MTF chanlun）`。
+- 三卡字段顺序仍为当前偏见 → 市场结构 → 交易方向 → 当前机会 → 当前状态。
+- 新标题未改变商品卡片宽度、市场结构按钮尺寸、下方交易方向间距或三列布局。
+- 深色主题的字体、边框、表面色和选中态均沿用既有 token，没有新增视觉资产或样式。
 
-## Comparison and iteration record
+## Focused region comparison evidence
 
-1. The first implementation retained the fixed three-column grid after hiding CL, which left an unused third column and did not match the two-card visual truth. The renderer now assigns an explicit visible-card-count class so two cards fill two columns and one card fills its grid row; mobile overrides remain single-column.
-2. The first manager copy used an explanatory second line, making its collapsed state too tall. Removing that nonessential line yields the required compact 48 px default manager while the expanded recovery row retains its explicit data-safety copy.
-3. The final dark-mode comparison preserves the existing page typography, panels, borders, state colors, and card hierarchy. The new manager follows those same surface tokens instead of introducing a dominant standalone card.
+- 重点检查每张卡片“当前偏见”与市场结构按钮之间的标题区域；新标题保持单行，左边缘与其他字段标题一致。
+- `MTF chanlun` 的大小写、空格和全角括号与冻结文案完全一致。
+- 相邻的 `多头 / 震荡（观察拍卖完成） / 空头` 按钮未发生挤压、换行或错位。
+
+## Required fidelity surfaces
+
+- Fonts and typography: 沿用现有字体、字号、字重、行高和抗锯齿；无可见漂移。
+- Spacing and layout rhythm: 标题上下间距与其他字段一致；三列卡片无溢出。
+- Colors and visual tokens: 未修改颜色、透明度、边框、圆角或状态色。
+- Image quality and asset fidelity: 本次没有图片、图标或其他视觉资产变更。
+- Copy and content: 页面、README、业务规范、测试和生产 bundle 均统一为 `市场结构（MTF chanlun）`；旧标题已无残留。
+
+## Findings
+
+- 未发现 P0、P1 或 P2 问题。
+- P3：源效果图是单卡近景，实际页面为三卡密集布局；实际产品字号更小，但这是既有响应式布局，不属于本次文案修改造成的偏差。
+
+## Comparison history
+
+1. 首次自动测试在生产 bundle 尚未重建时发现旧标题仍存在；先重新构建生产 bundle，再复测。
+2. 最终页面截图确认三张卡片均使用新标题，且没有布局回归。
 
 ## Verification
 
-- `npm run build` passed.
-- `node --check dist/app.bundle.js` passed.
-- `npm test` passed after the final build.
-- `git diff --check` passed.
-
-## Final result
-
-No P0, P1, or P2 issues remain within the authorized scope.
+- `npm run build` passed。
+- `npm test`: 219/219 passed。
+- `node --check dist/app.bundle.js` passed。
+- `git diff --check` passed。
 
 final result: passed
