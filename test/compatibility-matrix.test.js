@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { assertState, copy } from '../src/model.js';
+import { assertState, changeDirection, changeStructure, chooseSetup, copy } from '../src/model.js';
 import { makeEnvelope } from '../src/persistence.js';
 import { migrateState } from '../src/risk-manager/migration.js';
 import { deriveDecision } from '../src/risk-manager/session-service.js';
@@ -23,7 +23,13 @@ const store = (entries = {}, hooks = {}) => {
   };
 };
 const riskV2 = () => clone(goldenFixtures['risk-v2-multi-history'].value);
-const unifiedActive = () => clone(goldenFixtures['unified-v1-active'].value);
+const unifiedActive = () => clone(makeUnified());
+const migratedActive = () => normalizeImport(clone(goldenFixtures['unified-v1-active'].value), makeUnified()).state;
+const currentActive = () => {
+  const value = makeUnified(); const state = value.sections.intraday.state;
+  changeStructure(state, 'GC', 'bullish', 10); changeDirection(state, 'GC', 'long', 11); chooseSetup(state, 'GC', 'mtf_pb', 12);
+  return value;
+};
 
 test('Golden fixtures: manifest has deterministic SHA-256 metadata and only synthetic labels', () => {
   assert.equal(manifest.classification, 'synthetic-only');
@@ -88,8 +94,8 @@ test('C15 风险分项导出：旧风险验证器可读取', () => {
   const exported = unifiedActive().sections.riskManager; validateRisk(exported); const result = validateLegacyRiskImport(raw(exported)); assert.equal(result.ok, true, result.error); assert.deepEqual(result.state, exported);
 });
 test('C16 非法 JSON：拒绝且当前内存与存储零变化', () => {
-  const before = unifiedActive(); const s = store({ [UNIFIED_KEY]: raw(before) }); assert.throws(() => parseBackupRaw('{bad'));
-  assert.equal(s.getItem(UNIFIED_KEY), raw(before)); assert.deepEqual(before, unifiedActive());
+  const before = unifiedActive(); const beforeRaw = raw(before); const s = store({ [UNIFIED_KEY]: beforeRaw }); assert.throws(() => parseBackupRaw('{bad'));
+  assert.equal(s.getItem(UNIFIED_KEY), beforeRaw); assert.deepEqual(JSON.parse(beforeRaw), before);
 });
 test('C17 未知顶层版本：拒绝，不猜测降级', () => {
   assert.throws(() => normalizeImport(goldenFixtures['invalid-future-version'].value, makeUnified()), /受支持/);
@@ -107,10 +113,10 @@ test('C21 重复账户、会话、事件 ID：拒绝并返回字段路径', () =
 test('C22 余额事件链断裂：拒绝且不静默修补', () => { const invalid = riskV2(); invalid.accounts[0].currentSession.balanceEvents[1].previousBalance = 1; assert.throws(() => validateRisk(invalid), error => /链断裂/.test(error.message) && /previousBalance/.test(error.path)); });
 test('C23 事件 delta 错误：拒绝且不静默重算', () => { const invalid = riskV2(); invalid.accounts[0].currentSession.balanceEvents[1].delta = 0; assert.throws(() => validateRisk(invalid), error => /delta/.test(error.path)); });
 test('C24 非法时间戳：拒绝并定位字段', () => { const invalid = riskV2(); invalid.accounts[0].currentSession.balanceEvents[0].timestamp = 'tomorrow'; assert.throws(() => validateRisk(invalid), error => /timestamp/.test(error.path)); });
-test('C25 当前统一存档的活动机会与记录身份不一致：assertState 拒绝', () => { const state = clone(unifiedActive()).sections.intraday.state; state.records[0].id = 'different-id'; assert.throws(() => assertState(state), /活动记录不一致/); });
+test('C25 当前统一存档的活动机会与记录身份不一致：assertState 拒绝', () => { const state = currentActive().sections.intraday.state; state.records[0].id = 'different-id'; assert.throws(() => assertState(state), /活动记录不一致/); });
 test('C26 超过 8 MB：JSON 解析前拒绝', () => { assert.throws(() => parseBackupRaw('x'.repeat(8 * 1024 * 1024 + 1)), error => error.code === 'FILE_TOO_LARGE'); });
 test('C27 canonical 写入失败：旧值保留，调用方仍拥有内存候选', () => {
-  const prior = raw(unifiedActive()); const s = store({ [UNIFIED_KEY]: prior }, { setItem(key) { if (key === UNIFIED_KEY) throw new Error('quota'); } }); const candidate = unifiedActive();
+  const prior = raw(unifiedActive()); const s = store({ [UNIFIED_KEY]: prior }, { setItem(key) { if (key === UNIFIED_KEY) throw new Error('quota'); } }); const candidate = unifiedActive(); candidate.sections.riskManager = riskV2();
   assert.throws(() => commitUnified(s, candidate), error => error.code === 'CANONICAL_WRITE_FAILED'); assert.equal(s.getItem(UNIFIED_KEY), prior); assert.equal(candidate.sections.riskManager.accounts.length, 2);
 });
 test('C28 写后回读不一致：安全停止错误且不返回新 state', () => {
@@ -125,9 +131,9 @@ test('C30 确认前另一标签页写入：revision guard 取消导入且不覆�
   const s = store(); const initial = commitUnified(s, makeUnified()); const expectedRaw = s.getItem(UNIFIED_KEY); const external = commitUnified(s, initial); const externalRaw = s.getItem(UNIFIED_KEY);
   assert.throws(() => commitUnified(s, initial, { preImport: true, expectedRaw }), error => error.code === 'REVISION_CONFLICT'); assert.equal(s.getItem(UNIFIED_KEY), externalRaw); assert.equal(JSON.parse(externalRaw).revision, external.revision);
 });
-test('C31 同一备份重复导入：结果相同，不重复迁移或新增记录', () => {
+test('C31 同一 V3 统一备份重复导入：结果相同，不重复迁移或新增记录', () => {
   const current = makeUnified(); const fixture = goldenFixtures['unified-v1-active'].value; const first = normalizeImport(fixture, current).state; const second = normalizeImport(fixture, first).state;
-  assert.deepEqual(second, first); assert.equal(second.sections.intraday.state.records.length, 1);
+  assert.deepEqual(second, first); assert.equal(second.sections.intraday.state.records.length, 2);
 });
 test('C32 多账户和长余额历史：顺序、选择与风险结论一致', () => {
   const state = riskV2(); const decisions = state.accounts.map(deriveDecision); validateRisk(state);
@@ -155,7 +161,7 @@ test('Architecture 3 未知 hash：显示错误、保留 hash、提供返回入�
 test('C38 导出界面只提供统一备份与风险管理器备份，线上验证待发布授权', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8'); assert.match(html, /id="export-json"/); assert.match(html, /id="export-risk-json"/); assert.doesNotMatch(html, /export-intraday-json/);
 });
-test('退出播报：偏见冲突导致方向重置时不宣称保留方向', () => {
+test('退出播报：平仓后保留当前交易方向', () => {
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
-  assert.match(app, /directionReset \? '已重置为暂无交易方向' : '保留方向'/);
+  assert.match(app, /已确认全部平仓；保留方向/);
 });

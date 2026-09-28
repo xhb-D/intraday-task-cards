@@ -93,7 +93,7 @@ body{background:var(--bg-page);color:var(--text-primary)}
 .option:disabled{background:color-mix(in srgb,var(--bg-surface-secondary) 45%,var(--bg-page));border-color:var(--border-primary);color:var(--text-tertiary)}
 .readonly,.zone,.card .task,.state-wait .task,.state-signal .task,.state-position .task{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-primary)}
 .zone input,.task-summary dd,.instruction,.history summary,.data-grid button{color:var(--text-primary)}
-.zone-confirm,.card .entry{background:color-mix(in srgb,var(--theme-accent) 16%,var(--bg-surface));border-color:color-mix(in srgb,var(--theme-accent) 45%,var(--border-primary));color:var(--text-primary)}
+.card .entry{background:color-mix(in srgb,var(--theme-accent) 16%,var(--bg-surface));border-color:color-mix(in srgb,var(--theme-accent) 45%,var(--border-primary));color:var(--text-primary)}
 .dialog::backdrop,.risk-dialog::backdrop{background:var(--overlay-bg)}
 .dialog p,.dialog-actions button,.data-grid span,th,td{color:var(--text-secondary)}
 .dialog-actions .primary{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--on-accent)}

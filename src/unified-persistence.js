@@ -1,5 +1,5 @@
 import { copy, createWorkspace, assertState } from './model.js';
-import { makeEnvelope, validateEnvelope, MAX_FILE_BYTES } from './persistence.js';
+import { makeEnvelope, migrateEnvelope, validateEnvelope, MAX_FILE_BYTES } from './persistence.js';
 import { DRAW_DOWN_TYPES } from './risk-manager/account-service.js';
 import { migrateState, RISK_MANAGER_SCHEMA_VERSION } from './risk-manager/migration.js';
 
@@ -89,6 +89,14 @@ export function validateUnified(value) {
   validateEnvelope(value.sections.intraday); assertState(value.sections.intraday?.state); validateRisk(value.sections.riskManager); if (!value.preferences || !['system', 'light', 'dark'].includes(value.preferences.appearance)) throw Object.assign(new Error('外观偏好无效'), { path: 'preferences.appearance' }); return true;
 }
 
+export function migrateUnified(value) {
+  if (!value || value.app !== 'trading-control-center' || value.schemaVersion !== 1 || !value.sections) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
+  if (!Number.isSafeInteger(value.revision) || value.revision < 0) throw Object.assign(new Error('revision 无效'), { path: 'revision' });
+  if (!(typeof value.savedAt === 'number' && Number.isFinite(value.savedAt)) || typeof value.timezone !== 'string') throw Object.assign(new Error('统一存档时间或时区无效'), { path: 'envelope' });
+  const next = copy(value); const migration = migrateEnvelope(next.sections.intraday); next.sections.intraday = migration.envelope; validateUnified(next);
+  return { state: next, migrated: migration.migrated, migratedAt: migration.migratedAt || null, audits: migration.audits || [] };
+}
+
 export function classifyBackup(value) {
   if (value?.app === 'intraday-task-cards' && !!value.state) throw new Error('不支持旧版独立日内状态卡备份；请使用当前统一交易控制中心 JSON。');
   const matches = [value?.app === 'trading-control-center' && !!value.sections, value?.app === undefined && Number.isInteger(value?.schemaVersion) && Array.isArray(value?.accounts) && Object.hasOwn(value, 'selectedAccountId')].filter(Boolean).length;
@@ -104,23 +112,25 @@ export function parseBackupRaw(raw) {
 
 export function normalizeImport(value, current) {
   const kind = classifyBackup(value); let next;
-  if (kind === 'unified') { validateUnified(value); next = copy(value); }
+  let migration = { migrated: false, audits: [] };
+  if (kind === 'unified') { migration = migrateUnified(value); next = copy(migration.state); }
   else { const risk = migrateState(value); validateRisk(risk); next = copy(current); next.sections.riskManager = risk; }
-  next.preferences = { appearance: appearance(next.preferences?.appearance) }; validateUnified(next); return { kind, state: next, summary: importSummary(kind, next) };
+  next.preferences = { appearance: appearance(next.preferences?.appearance) }; validateUnified(next); return { kind, state: next, migration, summary: importSummary(kind, next, migration) };
 }
 
-export function importSummary(kind, state) {
+export function importSummary(kind, state, migration = { migrated: false }) {
   const cards = Object.keys(state.sections.intraday.state.cards || {}).length;
   const records = state.sections.intraday.state.records?.length || 0;
   const accounts = state.sections.riskManager.accounts?.length || 0;
-  return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
+  const migrated = kind === 'unified' && migration.migrated ? '；日内 V3 将先确定性迁移为 V4' : '';
+  return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好${migrated}。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
 }
 
 export function loadUnified(storage) {
   if (!storage?.getItem) return { state: makeUnified(), source: 'storage-unavailable' };
   let raw; try { raw = storage.getItem(UNIFIED_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
   if (raw !== null) {
-    try { const state = JSON.parse(raw); validateUnified(state); return { state, source: 'canonical' }; }
+    try { const parsed = JSON.parse(raw); const result = migrateUnified(parsed); return { state: result.state, source: result.migrated ? 'canonical-migrated' : 'canonical', migration: result }; }
     catch (error) { return { state: null, source: 'recovery-required', error, raw }; }
   }
   let riskRaw; let preference;

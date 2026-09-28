@@ -68,13 +68,14 @@ test('UI preference: 重绘抛错或无 requestAnimationFrame 时仍恢复滚动
 test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态且具备可访问语义', () => {
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
   const css = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
-  assert.match(app, /const summary = opportunity \?[^]*?BIASES\[card\.bias\][^]*?DIRECTIONS\[card\.direction\][^]*?STRUCTURES_3M\[card\.structure3m\][^]*?SETUPS\[opportunity\.type\]/);
+  assert.match(app, /const summary = opportunity \?[^]*?BIASES\[card\.bias\][^]*?DIRECTIONS\[card\.direction\][^]*?STRUCTURES_3M\[card\.structure3m\][^]*?SETUP_LABELS\[opportunity\.type\]/);
   assert.match(app, /\['long', 'short'\]\.includes\(card\.direction\) \? `<span class="summary-direction-active">\$\{DIRECTIONS\[card\.direction\]\}<\/span>` : DIRECTIONS\[card\.direction\]/);
   assert.doesNotMatch(app, /summary-direction-long/);
   assert.match(app, /Object\.entries\(VISIBLE_STRUCTURES_3M\)/);
   assert.match(app, /isDirectionAllowed\(card\.bias, key\)/);
   assert.match(app, /isSetupAllowed\(card\.direction, card\.structure3m, key\)/);
-  assert.match(app, /opportunity\?\.registeredAt !== null && opportunity\?\.zone \?[^]*?summary-zone/);
+  assert.match(app, /入场信号：原方向拒绝\+新方向位移（COC）\+价格接受（震荡）/);
+  assert.doesNotMatch(app, /data-zone|zone-confirm|zone-note|updateDraft|confirmPosition/);
   assert.match(app, /<dt class="sr-only">当前偏见<\/dt>/);
   assert.match(app, /\$\{controls\}<section class="task/);
   assert.match(app, /data-action="toggle-collapse"[^]*?type="button" aria-expanded="\$\{!collapsed\}" aria-label="\$\{toggleLabel\}"/);
@@ -124,7 +125,10 @@ test('production bundle: 折叠与隐藏点击路径可执行，且不会写入�
   assert.doesNotMatch(cards.innerHTML, /field-label">交易方向（HTF缺口）<\/span>/);
   assert.doesNotMatch(cards.innerHTML, /当前 3M 市场结构/);
   assert.doesNotMatch(cards.innerHTML, /未判断/);
-  assert.match(cards.innerHTML, /当前机会[^]*?趋势回调[^]*?disabled aria-disabled="true"/);
+  assert.match(cards.innerHTML, /当前机会[^]*?MTF PB[^]*?HTF PB[^]*?HTF BOF/);
+  assert.match(cards.innerHTML, /交易方向（市场结构不明确时看HTF缺口）[^]*?暂无交易方向/);
+  assert.match(cards.innerHTML, /入场信号：原方向拒绝\+新方向位移（COC）\+价格接受（震荡）/);
+  assert.doesNotMatch(cards.innerHTML, /趋势回调|data-zone|zone-confirm/);
   const button = { disabled: false, dataset: { action: 'toggle-collapse', symbol: 'GC' } };
   cards.listeners.click({ detail: 1, target: { closest: () => button } });
   assert.match(cards.innerHTML, /<article class="card [^"]*is-collapsed" data-symbol="GC"/);

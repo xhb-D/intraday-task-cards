@@ -1,4 +1,4 @@
-import { ORDER, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, hasRecord, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, instruction, registrationStatus, changeBias, changeStructure, chooseSetup, changeDirection, updateDraft, confirmPosition, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy } from './model.js';
+import { ORDER, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, SETUP_LABELS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, instruction, changeBias, changeStructure, chooseSetup, changeDirection, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy } from './model.js';
 import { makeEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './persistence.js';
 import { renderBannerVisibility, renderTextBanner } from './banner.js';
 import { reportDiagnostic } from './diagnostics.js';
@@ -113,7 +113,8 @@ function load() {
     if (boot.source === 'recovery-required') { corruption = true; saveError = 'RecoveryRequired'; lastRaw = boot.raw || ''; return; }
     unified = boot.state;
     state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.sections.intraday.savedAt; restoredNotice = boot.notice || '';
-    if (boot.source === 'legacy' || boot.source === 'blank') {
+    if (boot.source === 'canonical-migrated') restoredNotice = '已将统一存档中的日内 V3 数据确定性迁移为 V4；旧历史名称和关键位置保持不变。';
+    if (boot.source === 'legacy' || boot.source === 'blank' || boot.source === 'canonical-migrated') {
       try { unified = saveUnified(unified, {}, 'unified_first_write'); state.lastSavedAt = unified.savedAt; }
       catch (error) { reportDiagnostic(error, { phase: 'unified_first_write' }); saveError = 'StorageUnavailable'; }
     }
@@ -131,21 +132,20 @@ function option(symbol, action, value, text, selected, disabled = false) {
 function renderCard(symbol) {
   const card = state.cards[symbol]; const opportunity = card.opportunity; const status = stateOf(card); const holding = status === 'position';
   const collapsed = collapsedCards.has(symbol);
-  const [action, prohibition] = instruction(card); const registration = registrationStatus(state, symbol);
+  const [action, prohibition] = instruction(card);
   const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
-  const direction = holding ? `<div class="readonly">本笔${directionShort(card.direction)}头 <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.bias, key))).join('')}</div>`;
+  const direction = holding ? `<div class="readonly">本笔${DIRECTIONS[card.direction]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.bias, key))).join('')}</div>`;
   const structure = `<section class="classifier structure-field"><span class="field-label">市场结构（比较20均线和波段高低点）</span><div class="segment structure-segment" role="group" aria-label="${symbol} 市场结构">${Object.entries(VISIBLE_STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认市场结构</p>' : ''}</section>`;
-  const setups = holding ? `<div class="readonly">${SETUPS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || !isSetupAllowed(card.direction, card.structure3m, key))).join('')}</div>`;
-  const position = `<div class="zone"><label for="zone-${symbol}">关键位置</label><input id="zone-${symbol}" data-zone="${symbol}" maxlength="100" autocomplete="off" spellcheck="false" value="${escapeHtml(opportunity?.zoneDraft || '')}" placeholder="${opportunity ? '输入后点确认' : '先建立机会'}"${!opportunity ? ' disabled' : holding ? ' readonly' : ''}><button class="zone-confirm" data-action="confirm-zone" data-symbol="${symbol}" type="button"${registration.enabled ? '' : ' disabled'}>${registration.label}</button></div><p class="zone-note ${registration.kind}">${registration.text}</p>`;
+  const setups = holding ? `<div class="readonly">${SETUP_LABELS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || !isSetupAllowed(card.direction, card.structure3m, key))).join('')}</div>`;
+  const entrySignal = '<div class="entry-signal readonly" aria-label="入场信号">入场信号：原方向拒绝+新方向位移（COC）+价格接受（震荡）</div>';
   let stages = '<div class="empty" aria-hidden="true"></div>', entry = '<div class="empty" aria-hidden="true"></div>', ending = '<div class="empty" aria-hidden="true"></div>';
   if (opportunity && !holding) {
     stages = `<div class="stage-row" role="group" aria-label="${symbol} 注意力阶段">${ATTENTION.map(stage => `<button class="stage${stage === status ? ' selected' : ''}" data-action="stage" data-symbol="${symbol}" data-value="${stage}" type="button" aria-pressed="${stage === status}">${STAGES[stage]}</button>`).join('')}</div>`;
     entry = `<button class="entry${status === 'signal' ? ' hot' : ''}" data-action="entry" data-symbol="${symbol}" type="button">${symbol} 已入场</button>`;
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
-  const confirmedZone = opportunity?.registeredAt !== null && opportunity?.zone ? `<span class="summary-zone">${escapeHtml(opportunity.zone)}</span>` : '';
-  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${['long', 'short'].includes(card.direction) ? `<span class="summary-direction-active">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUPS[opportunity.type]}</dd>${confirmedZone}</div></dl>` : '';
-  const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向（市场结构不明确时看HTF缺口）'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${position}</section>${stages}</div>`;
+  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${['long', 'short'].includes(card.direction) ? `<span class="summary-direction-active">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUP_LABELS[opportunity.type]}</dd></div></dl>` : '';
+  const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向（市场结构不明确时看HTF缺口）'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${entrySignal}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   const conflictWarning = holdingConflictWarning(card);
   const hideLabel = `隐藏 ${symbol} 卡片`;
@@ -166,13 +166,9 @@ function renderHistory() {
   document.querySelector('#history-count').textContent = `${records.length} 条 · ${historyScope === 'all' ? '全部保留' : '今日及未结束'}`;
   document.querySelector('#history-empty').hidden = Boolean(records.length); document.querySelector('#history-table').hidden = !records.length;
   document.querySelectorAll('[data-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === historyScope)));
-  historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUPS[record.type]}</td><td class="position">${escapeHtml(record.zone)}</td><td>${recordProgress(record)}</td><td><button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button></td></tr>`).join('');
+  historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUP_LABELS[record.type]}</td><td class="position">${escapeHtml(record.zone ?? '—')}</td><td>${recordProgress(record)}</td><td><button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button></td></tr>`).join('');
 }
 function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = visibleSymbols.map(renderCard).join(''); renderHistory(); storageStatus(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
-function recordWarning(opportunity) {
-  if (!hasRecord(state, opportunity)) return opportunity.registeredAt === null ? '关键位置尚未确认登记：这次操作不会自动新增机会记录。' : '本条记录已删除：这次操作不会把它自动恢复。';
-  return opportunity.zoneDraft.trim() !== opportunity.zone ? `位置修改待确认：记录继续保留「${opportunity.zone}」。` : '';
-}
 function openConfirmation(action, title, message, confirm, warning = '') {
   if (pending) return;
   pending = { ...action, revision: state.revision, storageRaw: lastRaw }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm;
@@ -183,14 +179,14 @@ function finishConfirmation(confirmed) {
   if (!confirmed) { announce('已取消；任务、计时和机会记录保持不变'); return; }
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内 V3 已迁移为 V4。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
   if (action.kind === 'fresh') { try { const fresh = makeEnvelope(createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['bias', 'direction', 'structure'].includes(action.kind)) return;
-  if (action.kind === 'bias') { const result = changeBias(state, action.symbol, action.bias, now(), true); if (result.changed) mutate(`${action.symbol} 当前偏见已更新；原机会已失效并重置方向`, action.symbol); }
+  if (action.kind === 'bias') { const result = changeBias(state, action.symbol, action.bias, now()); if (result.changed) mutate(`${action.symbol} 当前偏见：${BIASES[action.bias]}`, action.symbol); }
   if (action.kind === 'direction') { const result = changeDirection(state, action.symbol, action.direction, now(), true); if (result.changed) mutate(`${action.symbol} 旧机会因方向改变结束；当前无机会`, action.symbol); }
-  if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now(), true); if (result.changed) mutate(`${action.symbol} 市场结构已更新；当前不兼容机会已失效`, action.symbol); }
+  if (action.kind === 'structure') { const result = changeStructure(state, action.symbol, action.structure3m, now()); if (result.changed) mutate(`${action.symbol} 市场结构：${STRUCTURES_3M[action.structure3m]}`, action.symbol); }
   if (action.kind === 'entry') { const result = markEntered(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认入场；本卡进入持仓`, action.symbol); }
-  if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；${result.directionReset ? '已重置为暂无交易方向' : '保留方向'}，回到无机会`, action.symbol); }
+  if (action.kind === 'exit') { const result = markExited(state, action.symbol, now(), true); if (result.changed) mutate(`${action.symbol} 已确认全部平仓；保留方向，回到无机会`, action.symbol); }
 }
 function handleAction(button) {
   const { action, symbol, value } = button.dataset; if (!ORDER.includes(symbol)) return;
@@ -206,26 +202,23 @@ function handleAction(button) {
   if (pending || corruption || writeLocked() || button.disabled) return;
   const card = state.cards[symbol];
   if (action === 'bias') {
-    const result = changeBias(state, symbol, value, now(), false);
-    if (result.needsConfirmation) openConfirmation({ kind: 'bias', symbol, bias: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前偏见？`, `${BIASES[card.bias]} → ${BIASES[value]} 将使交易方向「${DIRECTIONS[card.direction]}」失效，当前未入场机会将结束为失效并重置方向。`, '确认改变', recordWarning(card.opportunity));
-    else if (result.changed) mutate(`${symbol} 当前偏见：${BIASES[value]}${result.holdingConflict ? '；持仓方向冲突，平仓后需重新选择方向' : ''}`, symbol);
+    const result = changeBias(state, symbol, value, now());
+    if (result.changed) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol);
     return;
   }
   if (action === 'structure') {
-    const result = changeStructure(state, symbol, value, now(), false);
-    if (result.needsConfirmation) openConfirmation({ kind: 'structure', symbol, structure3m: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 市场结构？`, `${symbol} 当前仍有${directionShort(card.direction)}头交易机会「${SETUPS[card.opportunity.type]}」。\n\n${STRUCTURES_3M[card.structure3m]} → ${STRUCTURES_3M[value]} 后，该机会将不再合法并结束为失效；交易方向保持不变。`, '确认改变');
-    else if (result.changed) mutate(`${symbol} 市场结构：${STRUCTURES_3M[value]}`, symbol); return;
+    const result = changeStructure(state, symbol, value, now());
+    if (result.changed) mutate(`${symbol} 市场结构：${STRUCTURES_3M[value]}`, symbol); return;
   }
   if (action === 'direction') {
     const result = changeDirection(state, symbol, value, now(), false);
-    if (result.needsConfirmation) openConfirmation({ kind: 'direction', symbol, direction: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前方向？`, `${DIRECTIONS[card.direction]} → ${DIRECTIONS[value]}\n改变方向将结束该机会并清空关键位置。其他品种保持不变。`, '确认改变', recordWarning(card.opportunity));
+    if (result.needsConfirmation) openConfirmation({ kind: 'direction', symbol, direction: value, opportunityId: card.opportunity.id }, `改变 ${symbol} 当前方向？`, `${DIRECTIONS[card.direction]} → ${DIRECTIONS[value]}\n改变方向将结束该机会。其他品种保持不变。`, '确认改变');
     else if (result.changed) mutate(`${symbol} 当前${DIRECTIONS[value]}`, symbol); return;
   }
-  if (action === 'setup') { const result = chooseSetup(state, symbol, value, now()); if (result.changed) mutate(`${symbol} ${SETUPS[value]}进入等待；填写位置后点击确认才会登记`, symbol, `input[data-zone="${symbol}"]`); return; }
-  if (action === 'confirm-zone') { if (confirmPosition(state, symbol, now())) mutate(`${symbol} 关键位置已确认；已登记或更新原记录`, symbol); return; }
+  if (action === 'setup') { const result = chooseSetup(state, symbol, value, now()); if (result.changed) mutate(`${symbol} ${SETUPS[value]}进入等待；已立即登记`, symbol); return; }
   if (action === 'stage') { if (setStage(state, symbol, value, now())) mutate(`${symbol} 已切换到${STAGES[value]}`, symbol); return; }
-  if (action === 'entry') { if (card.opportunity && ATTENTION.includes(stateOf(card))) openConfirmation({ kind: 'entry', symbol, opportunityId: card.opportunity.id }, `确认 ${symbol} 已实际入场？`, `${symbol} · ${DIRECTIONS[card.direction]} · ${SETUPS[card.opportunity.type]}\n已确认关键位置：${card.opportunity.zone || '尚未确认'}\n\n仅记录已经实际成交的事实，不发送订单。`, '确认已入场', recordWarning(card.opportunity)); return; }
-  if (action === 'exit') { if (stateOf(card) === 'position') openConfirmation({ kind: 'exit', symbol, opportunityId: card.opportunity.id }, `确认 ${symbol} 已全部平仓？`, `${symbol} · ${SETUPS[card.opportunity.type]}\n关键位置：${card.opportunity.zone || '尚未确认'}\n\n仅在本笔已经实际全部平仓后确认。部分减仓不属于已平仓。`, '确认已平仓', recordWarning(card.opportunity)); return; }
+  if (action === 'entry') { if (card.opportunity && ATTENTION.includes(stateOf(card))) openConfirmation({ kind: 'entry', symbol, opportunityId: card.opportunity.id }, `确认 ${symbol} 已实际入场？`, `${symbol} · ${DIRECTIONS[card.direction]} · ${SETUP_LABELS[card.opportunity.type]}\n\n仅记录已经实际成交的事实，不发送订单。`, '确认已入场'); return; }
+  if (action === 'exit') { if (stateOf(card) === 'position') openConfirmation({ kind: 'exit', symbol, opportunityId: card.opportunity.id }, `确认 ${symbol} 已全部平仓？`, `${symbol} · ${SETUP_LABELS[card.opportunity.type]}\n\n仅在本笔已经实际全部平仓后确认。部分减仓不属于已平仓。`, '确认已平仓'); return; }
   if (action === 'end') { if (endOpportunity(state, symbol, value, now())) mutate(`${symbol} 机会${RESULTS[value]}；方向保留，当前无机会`, symbol); }
 }
 function handleCommodityDashboardAction(button) {
@@ -243,8 +236,6 @@ function download(text, filename, type) { const url = URL.createObjectURL(new Bl
 
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
 commodityDashboardEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); });
-cardsEl.addEventListener('input', event => { const input = event.target.closest('input[data-zone]'); if (!input || pending || corruption || writeLocked()) return; safe(() => { if (updateDraft(state, input.dataset.zone, input.value)) { persist(); const card = state.cards[input.dataset.zone]; const status = registrationStatus(state, card.symbol); const article = input.closest('article'); article.querySelector('.zone-note').className = `zone-note ${status.kind}`; article.querySelector('.zone-note').textContent = status.text; const button = article.querySelector('.zone-confirm'); button.textContent = status.label; button.disabled = !status.enabled; } }, { phase: 'interaction', relevantSymbol: input.dataset.zone }); });
-cardsEl.addEventListener('keydown', event => { if (event.target.matches('input[data-zone]') && event.key === 'Enter' && !event.isComposing) { event.preventDefault(); event.target.closest('article').querySelector('.zone-confirm:not(:disabled)')?.focus(); } });
 historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
 document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => finishConfirmation(true)); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });
@@ -255,7 +246,7 @@ document.querySelector('#export-json').addEventListener('click', () => { const p
 document.querySelector('#export-risk-json').addEventListener('click', () => { download(JSON.stringify(unified?.sections.riskManager || { schemaVersion: 2, selectedAccountId: null, accounts: [] }, null, 2), `Trading_Risk_Manager_备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成风险管理器分项 JSON。'; });
 document.querySelector('#export-raw').addEventListener('click', () => { download(lastRaw || '', `日内状态卡_原始存档_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始存档；原数据未修改。'; });
 document.querySelector('#import-json').addEventListener('click', () => { if (writeLocked()) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
-document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind }, '确认导入备份？', `${importSummary(preview.kind, preview.state)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
+document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind, migrated: preview.migration?.migrated === true }, '确认导入备份？', `${importSummary(preview.kind, preview.state, preview.migration)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
 document.querySelector('#storage-retry').addEventListener('click', () => { if (!writeLocked()) persist(); });
 document.querySelector('#start-fresh').addEventListener('click', () => { if (!writeLocked()) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
 window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到其他标签页写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); externalConflict = true; saveError = 'Conflict'; storageStatus(); } });

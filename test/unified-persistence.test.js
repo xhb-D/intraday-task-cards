@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createWorkspace } from '../src/model.js';
 import { makeEnvelope } from '../src/persistence.js';
 import { LEGACY_RISK_KEY, PRE_IMPORT_KEY, UNIFIED_KEY, classifyBackup, commitUnified, loadUnified, makeUnified, normalizeImport, validateRisk } from '../src/unified-persistence.js';
+import { goldenFixtures } from './fixtures/compatibility/golden-fixtures.js';
 
 const store = values => { const map = new Map(Object.entries(values || {})); return { getItem: key => map.has(key) ? map.get(key) : null, setItem: (key, value) => map.set(key, value), map }; };
 const risk = () => ({ schemaVersion: 2, selectedAccountId: null, accounts: [] });
@@ -12,6 +13,21 @@ test('C03/C04: legacy risk migrates into a blank intraday section and canonical 
   const loaded = loadUnified(s); assert.equal(loaded.source, 'legacy-risk'); assert.deepEqual(loaded.state.sections.riskManager, risk()); assert.deepEqual(Object.keys(loaded.state.sections.intraday.state.cards), ['GC', 'CL', 'ES']);
   const canonical = makeUnified(makeEnvelope(createWorkspace(2), 2), risk()); s.setItem(UNIFIED_KEY, JSON.stringify(canonical)); s.setItem(LEGACY_RISK_KEY, JSON.stringify({ schemaVersion: 2, selectedAccountId: 'bad', accounts: [] }));
   assert.equal(loadUnified(s).source, 'canonical');
+});
+
+test('unified persistence: canonical V3 先在内存迁移，原始 raw 保留到显式提交', () => {
+  const legacy = goldenFixtures['unified-v1-active'].value;
+  const raw = JSON.stringify(legacy);
+  const s = store({ [UNIFIED_KEY]: raw });
+  const loaded = loadUnified(s);
+  assert.equal(loaded.source, 'canonical-migrated');
+  assert.equal(loaded.state.sections.intraday.schemaVersion, 4);
+  assert.equal(loaded.state.sections.intraday.state.cards.GC.opportunity, null);
+  assert.equal(loaded.state.sections.intraday.state.migrationAudit[0].reason, 'opportunity_taxonomy_upgrade');
+  assert.equal(s.getItem(UNIFIED_KEY), raw);
+  const saved = commitUnified(s, loaded.state, { expectedRaw: raw });
+  assert.equal(JSON.parse(s.getItem(UNIFIED_KEY)).sections.intraday.schemaVersion, 4);
+  assert.equal(saved.sections.intraday.state.records.find(record => record.id === 'op-legacy-gc').zone, '50,000–50,010');
 });
 
 test('C02/C13: old standalone intraday is rejected without changing the current state; risk import remains partial', () => {

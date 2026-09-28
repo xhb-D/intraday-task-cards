@@ -13,7 +13,7 @@ const core = state => ({
   }])), records: state.records
 });
 
-test('integrity: 当前 schema v3 存档可校验、恢复并稳定往返', () => {
+test('integrity: 当前 schema v4 存档可校验、恢复并稳定往返', () => {
   const before = serialize(createWorkspace(1), 2);
   const raw = before;
   const envelope = deserialize(raw); validateEnvelope(envelope); assertState(envelope.state);
@@ -26,9 +26,11 @@ test('integrity: 当前 schema v3 存档可校验、恢复并稳定往返', () =
   assert.deepEqual(core(roundTrip.state), core(JSON.parse(before).state));
 });
 
-test('integrity: 合法 idle 组合通过；偏见冲突的空闲方向仍被拒绝并携带路径', () => {
-  const state = createWorkspace(1); state.cards.GC.structure3m = 'range'; state.cards.GC.bias = 'bullish'; assert.doesNotThrow(() => assertState(state));
-  state.cards.CL.bias = 'bearish'; state.cards.CL.direction = 'long'; assert.throws(() => assertState(state), error => error.code === 'STATE_VALIDATION_ERROR' && error.path === 'cards.CL.direction');
+test('integrity: 三种偏见下的三个方向均可作为合法空闲组合', () => {
+  for (const bias of ['bullish', 'neutral', 'bearish']) for (const direction of ['long', 'short', 'none']) {
+    const state = createWorkspace(1); state.cards.GC.structure3m = 'range'; state.cards.GC.bias = bias; state.cards.GC.direction = direction;
+    assert.doesNotThrow(() => assertState(state), `${bias}/${direction}`);
+  }
 });
 
 test('integrity: 不兼容 schema v2 存档保留原始 JSON 并进入恢复保护态', () => {

@@ -1,4 +1,4 @@
-/* Frozen V1 visual hierarchy: state first, execution direction second. */
+/* Frozen V4 visual hierarchy: state first, execution direction second. */
 .card{grid-template-rows:31px 43px 43px 49px 98px 112px 34px 36px 34px;row-gap:5px;padding:13px 14px 14px}
 .page-head{align-items:flex-start;margin-bottom:10px}
 .restore-note{margin-top:2px;font-size:11px;line-height:16px;color:#8492a3}
@@ -17,11 +17,9 @@
 .opportunity-field .option{height:30px;border-color:#2c3b4c;font-size:12px}
 .opportunity-field .option.selected{background:#223042;border-color:#657f99;color:#e5eef8;font-weight:650}
 .option:disabled{cursor:not-allowed;opacity:.64;background:#101720;border-color:#22303d;border-style:dashed;color:#77869a}
-.option:focus-visible,.stage:focus-visible,.entry:focus-visible,.exit:focus-visible,.ending:focus-visible,.zone-confirm:focus-visible,.link:focus-visible,.history summary:focus-visible{outline:2px solid #a9c4df;outline-offset:2px}
+.option:focus-visible,.stage:focus-visible,.entry:focus-visible,.exit:focus-visible,.ending:focus-visible,.link:focus-visible,.history summary:focus-visible{outline:2px solid #a9c4df;outline-offset:2px}
 .migration-note{margin:3px 0 0;color:#dfbf8e;font-size:10px;line-height:14px}
-.zone{height:34px;border-color:#304155;background:#0e151e}
-.zone-confirm{height:26px;border-color:#536d89;background:#213247;color:#dce8f6}
-.zone-note{height:17px;font-size:10px;line-height:17px}
+.entry-signal{min-height:34px;padding:7px 9px;border-color:#304155;background:#0e151e;color:#aebbd0;font-size:10px;line-height:16px;white-space:normal}
 .card .task{display:flex;flex-direction:column;justify-content:center;border:1px solid #2b3949;border-left:3px solid var(--accent);border-radius:7px;background:#101720;padding:8px 10px}
 .card .task-meta{font-size:10px;line-height:14px}
 .card .state-title{margin-top:1px;font-size:31px;line-height:38px;font-weight:720;letter-spacing:.01em}
@@ -42,7 +40,7 @@
 .history-tools button,.delete{border-color:#314357}
 @media(min-width:960px) and (max-width:1050px){.shell{padding-left:12px;padding-right:12px}.cards{gap:10px}.card{padding:12px;grid-template-rows:30px 43px 43px 49px 98px 110px 33px 35px 33px}.symbol{font-size:25px}.card .option{font-size:11px}.direction-field .option{font-size:11px}.card .state-title{font-size:29px}}
 
-/* V3 compact card preference: controls can collapse without entering task data. */
+/* V4 compact card preference: controls can collapse without entering task data. */
 .cards{align-items:start}
 .card{grid-template-rows:unset;align-self:start;container-type:inline-size}
 .card-head-actions{display:flex;align-items:center;gap:7px}
@@ -64,7 +62,6 @@
 .task-summary div:nth-child(n+3){padding-top:9px;border-top:1px solid #483d33}
 .task-summary dd{margin:0;color:#edf2f9;font-size:18px;line-height:23px;font-weight:650}
 .summary-direction-active{display:inline-flex;align-items:center;max-width:100%;padding:1px 7px;border:1px solid color-mix(in srgb,var(--theme-accent) 58%,var(--border-primary));border-radius:7px;background:color-mix(in srgb,var(--theme-accent) 13%,var(--bg-surface-secondary));box-shadow:0 0 9px color-mix(in srgb,var(--theme-accent) 22%,transparent);color:var(--text-primary)}
-.summary-zone{display:block;margin-top:5px;color:#bac3d0;font-size:13px;line-height:18px;font-weight:500;overflow-wrap:anywhere}
 .commodity-dashboard{margin:12px 0 14px;padding:11px 13px;border:1px solid var(--border-primary);border-radius:10px;background:var(--bg-surface);color:var(--text-primary)}
 .commodity-dashboard-summary{min-height:24px;display:flex;align-items:center;justify-content:space-between;gap:12px}
 .commodity-dashboard h2{font-size:16px;line-height:22px;letter-spacing:.02em}

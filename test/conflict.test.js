@@ -49,7 +49,7 @@ test('external conflict: app binds the lock to all mutation paths, including an 
   assert.match(app, /importJson\.disabled = policy\.disableDangerousDataActions/);
   assert.match(app, /retry\.hidden = true; startFresh\.hidden = true/);
   assert.match(app, /if \(pending \|\| corruption \|\| writeLocked\(\) \|\| button\.disabled\) return/);
-  assert.match(app, /if \(!input \|\| pending \|\| corruption \|\| writeLocked\(\)\) return/);
+  assert.doesNotMatch(app, /data-zone|zone-confirm|keydown/);
   assert.match(app, /if \(!button \|\| writeLocked\(\) \|\| event\.detail > 1\) return/);
   assert.match(app, /if \(writeLocked\(\)\) \{ announce\('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'\); return; \}/);
   assert.match(app, /expectedRaw: action\.storageRaw/);

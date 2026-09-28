@@ -12,7 +12,7 @@ test('startup: getItem 抛异常时仍返回可操作的 GC/CL/ES 内存工作�
   assert.equal(result.mode, 'storage-unavailable'); assert.equal(cardsExist(result.state), true);
   assert.equal(changeStructure(result.state, 'GC', 'bullish', time + 1).changed, true);
   assert.equal(changeDirection(result.state, 'GC', 'long', time + 2).changed, true);
-  assert.equal(chooseSetup(result.state, 'GC', 'pullback', time + 3).changed, true);
+  assert.equal(chooseSetup(result.state, 'GC', 'mtf_pb', time + 3).changed, true);
 });
 
 test('startup: storage 不存在时不阻塞 UI，JSON/Markdown 所需的状态保持可用', () => {
