@@ -1,42 +1,38 @@
 # 日内交易状态卡 UI Design QA
 
-- Date: 2026-09-28
-- Scope: 仅将商品卡片标题 `市场结构（比较20均线和波段高低点）` 改为 `市场结构（MTF chanlun）`；布局、主题、控件、业务规则和数据格式不变。
-- Source visual truth path: `/Users/hongchujun/.codex/generated_images/01a079d6-c844-7fe0-b65f-ab3aedeebe71/exec-8f97f269-9ee9-4e80-aa06-d485a6f81aaa.png`。
-- Implementation screenshot path: Codex in-app browser inline capture；可复现页面 `http://127.0.0.1:4184/?preview=mtf-chanlun#/home`。
-- Viewport: 1280 x 720 CSS px，dark theme，1x density。
-- Source pixels: 1234 x 1275；implementation pixels: 1280 x 720。源图是单卡近景，实施截图是三卡完整页面，因此只比较授权范围内的标题文案、单行显示、对齐和相邻控件布局，不对两者整体比例作伪精确比较。
+- Date: 2026-09-29
+- Scope: 将商品卡片的“入场信号”固定提示改为两行，并统一当前偏见、市场结构、交易方向、当前机会四个字段标题的字号和垂直间距。
+- Approved visual reference: conversation visualization `entry-signal-two-lines.html`，用户确认后实施。
+- Implementation preview: `http://127.0.0.1:4185/?preview=entry-signal-two-lines#/home`。
+- Viewport: 1280 x 720 CSS px；分别检查浅色与深色外观。
 
 ## Full-view comparison evidence
 
-- GC、CL、ES 三张卡片均显示 `市场结构（MTF chanlun）`。
-- 三卡字段顺序仍为当前偏见 → 市场结构 → 交易方向 → 当前机会 → 当前状态。
-- 新标题未改变商品卡片宽度、市场结构按钮尺寸、下方交易方向间距或三列布局。
-- 深色主题的字体、边框、表面色和选中态均沿用既有 token，没有新增视觉资产或样式。
+- GC、CL、ES 三张卡片均显示相同的两行入场信号。
+- 第一行显示 `均线一侧·BB收窄·气泡攻击&吸收·流动性·信号K`。
+- 第二行显示 `原方向拒绝+新方向位移（COC）+价格接受（震荡）`。
+- 两行使用同一个父级颜色与字体规则，没有次级文字颜色。
+- 三列布局、商品卡片宽度、机会按钮和当前状态区域均未发生错位。
+- 四个字段标题实测均为 11 px 字号、14 px 行高和 6 px 下间距；相邻字段区之间统一为 8 px。
 
 ## Focused region comparison evidence
 
-- 重点检查每张卡片“当前偏见”与市场结构按钮之间的标题区域；新标题保持单行，左边缘与其他字段标题一致。
-- `MTF chanlun` 的大小写、空格和全角括号与冻结文案完全一致。
-- 相邻的 `多头 / 震荡（观察拍卖完成） / 空头` 按钮未发生挤压、换行或错位。
+- 在 1280 px 三列布局及 302 px 窄视口下，两段内容各自保持一行，没有横向溢出或遮挡。
+- “入场信号”标签与两行内容形成清晰的左标签、右内容结构。
+- 浅色与深色模式均保持两行同色，背景、边框与现有主题一致。
+- 302 px 窄视口实测：提示框宽 266 px、内容区宽 211 px；两行 `clientWidth` 与 `scrollWidth` 均为 211 px，没有换行、裁切或横向溢出。
+- 卡片字段区改用内容自适应行高，交易方向不再挤占当前机会标题空间。
 
 ## Required fidelity surfaces
 
-- Fonts and typography: 沿用现有字体、字号、字重、行高和抗锯齿；无可见漂移。
-- Spacing and layout rhythm: 标题上下间距与其他字段一致；三列卡片无溢出。
-- Colors and visual tokens: 未修改颜色、透明度、边框、圆角或状态色。
-- Image quality and asset fidelity: 本次没有图片、图标或其他视觉资产变更。
-- Copy and content: 页面、README、业务规范、测试和生产 bundle 均统一为 `市场结构（MTF chanlun）`；旧标题已无残留。
+- Fonts and typography: 两行继承相同字号、字重、行高与颜色。
+- Spacing and layout rhythm: 两行之间使用细分隔线和 4px 上内边距；提示区域高度自适应。
+- Colors and visual tokens: 沿用既有主题变量及只读区域颜色，不引入新配色。
+- Copy and content: 页面、README、业务规范、架构规范、测试和生产 bundle 已统一更新。
 
 ## Findings
 
-- 未发现 P0、P1 或 P2 问题。
-- P3：源效果图是单卡近景，实际页面为三卡密集布局；实际产品字号更小，但这是既有响应式布局，不属于本次文案修改造成的偏差。
-
-## Comparison history
-
-1. 首次自动测试在生产 bundle 尚未重建时发现旧标题仍存在；先重新构建生产 bundle，再复测。
-2. 最终页面截图确认三张卡片均使用新标题，且没有布局回归。
+- 未发现 P0、P1、P2 或 P3 问题。
 
 ## Verification
 
@@ -44,5 +40,6 @@
 - `npm test`: 219/219 passed。
 - `node --check dist/app.bundle.js` passed。
 - `git diff --check` passed。
+- 浅色与深色页面人工检查 passed。
 
 final result: passed

@@ -74,7 +74,7 @@ test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态�
   assert.match(app, /Object\.entries\(VISIBLE_STRUCTURES_3M\)/);
   assert.match(app, /isDirectionAllowed\(card\.bias, key\)/);
   assert.match(app, /isSetupAllowed\(card\.direction, card\.structure3m, key\)/);
-  assert.match(app, /入场信号：原方向拒绝\+新方向位移（COC）\+价格接受（震荡）/);
+  assert.match(app, /entry-signal-label">入场信号<\/span><span class="entry-signal-lines"><span>均线一侧·BB收窄·气泡攻击&amp;吸收·流动性·信号K<\/span><span>原方向拒绝\+新方向位移（COC）\+价格接受（震荡）<\/span>/);
   assert.doesNotMatch(app, /data-zone|zone-confirm|zone-note|updateDraft|confirmPosition/);
   assert.match(app, /<dt class="sr-only">当前偏见<\/dt>/);
   assert.match(app, /\$\{controls\}<section class="task/);
@@ -90,6 +90,8 @@ test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态�
   assert.match(app, /function renderAll\(\) \{ return preserveScrollPosition\(/);
   assert.match(readFileSync(new URL('../src/risk-manager-view.js', import.meta.url), 'utf8'), /function render\(\) \{ if \(disposed\) return; return preserveScrollPosition\(/);
   assert.match(css, /\.card\{grid-template-rows:unset;align-self:start;container-type:inline-size\}/);
+  assert.match(css, /\.card \.field-label\{margin-bottom:6px;font-size:11px;line-height:14px;letter-spacing:\.025em\}/);
+  assert.match(css, /\.card-controls\{display:grid;grid-template-rows:auto auto auto auto 34px;gap:8px\}/);
   assert.match(css, /@container \(max-width:390px\)\{\.task-content\{grid-template-columns:1fr/);
   assert.doesNotMatch(css, /\.task-summary dd\{[^}]*text-overflow:ellipsis/);
   assert.doesNotMatch(css, /\.summary-zone\{[^}]*text-overflow:ellipsis/);
@@ -97,6 +99,8 @@ test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态�
   assert.match(css, /\.card-hide\{[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface-secondary\);[^}]*color:var\(--text-secondary\)/);
   assert.match(css, /\.commodity-dashboard\{margin:12px 0 14px;[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface\);[^}]*color:var\(--text-primary\)/);
   assert.match(css, /\.commodity-dashboard-row\{[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface-secondary\)/);
+  assert.match(css, /\.entry-signal-lines>span\{min-width:0;color:inherit;font:inherit;white-space:nowrap\}/);
+  assert.match(css, /\.entry-signal-lines>span\+span\{padding-top:4px;border-top:1px solid var\(--border-secondary\)\}/);
   assert.match(css, /\.cards\.cards--count-2\{grid-template-columns:repeat\(2,minmax\(0,1fr\)\)\}/);
   assert.match(css, /@media\(max-width:629px\)\{[^]*?\.commodity-dashboard-row\{grid-template-columns:42px minmax\(0,1fr\)/);
 });
@@ -127,7 +131,7 @@ test('production bundle: 折叠与隐藏点击路径可执行，且不会写入�
   assert.doesNotMatch(cards.innerHTML, /未判断/);
   assert.match(cards.innerHTML, /当前机会[^]*?MTF PB[^]*?HTF PB[^]*?HTF BOF/);
   assert.match(cards.innerHTML, /交易方向（市场结构不明确时看HTF缺口）[^]*?暂无交易方向/);
-  assert.match(cards.innerHTML, /入场信号：原方向拒绝\+新方向位移（COC）\+价格接受（震荡）/);
+  assert.match(cards.innerHTML, /entry-signal-label">入场信号<\/span><span class="entry-signal-lines"><span>均线一侧·BB收窄·气泡攻击&amp;吸收·流动性·信号K<\/span><span>原方向拒绝\+新方向位移（COC）\+价格接受（震荡）<\/span>/);
   assert.doesNotMatch(cards.innerHTML, /趋势回调|data-zone|zone-confirm/);
   const button = { disabled: false, dataset: { action: 'toggle-collapse', symbol: 'GC' } };
   cards.listeners.click({ detail: 1, target: { closest: () => button } });
