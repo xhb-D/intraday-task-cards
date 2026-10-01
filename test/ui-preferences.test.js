@@ -67,10 +67,24 @@ test('UI preference: 重绘抛错或无 requestAnimationFrame 时仍恢复滚动
 
 test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态且具备可访问语义', () => {
   const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
-  const css = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
+  const css = `${readFileSync(new URL('../refinement.css', import.meta.url), 'utf8')}\n${readFileSync(new URL('../appearance.css', import.meta.url), 'utf8')}`;
   assert.match(app, /const summary = opportunity \?[^]*?BIASES\[card\.bias\][^]*?DIRECTIONS\[card\.direction\][^]*?STRUCTURES_3M\[card\.structure3m\][^]*?SETUP_LABELS\[opportunity\.type\]/);
-  assert.match(app, /\['long', 'short'\]\.includes\(card\.direction\) \? `<span class="summary-direction-active">\$\{DIRECTIONS\[card\.direction\]\}<\/span>` : DIRECTIONS\[card\.direction\]/);
-  assert.doesNotMatch(app, /summary-direction-long/);
+  const semanticToneSource = app.match(/const semanticTone = (value => [^;]+);/);
+  assert.ok(semanticToneSource);
+  const semanticTone = vm.runInNewContext(`(${semanticToneSource[1]})`);
+  assert.equal(semanticTone('bullish'), 'bullish');
+  assert.equal(semanticTone('long'), 'bullish');
+  assert.equal(semanticTone('bearish'), 'bearish');
+  assert.equal(semanticTone('short'), 'bearish');
+  assert.equal(semanticTone('neutral'), 'neutral');
+  assert.equal(semanticTone('sideways'), 'neutral');
+  assert.match(app, /data-tone="\$\{semanticTone\(value\)\}"/);
+  assert.match(app, /<dd data-tone="\$\{semanticTone\(card\.bias\)\}">\$\{BIASES\[card\.bias\]\}<\/dd>/);
+  assert.match(app, /<dd data-tone="\$\{semanticTone\(card\.direction\)\}"[^]*?class="summary-direction-active" data-tone="\$\{semanticTone\(card\.direction\)\}"/);
+  assert.match(app, /<dd data-tone="\$\{semanticTone\(card\.structure3m\)\}">\$\{STRUCTURES_3M\[card\.structure3m\]\}<\/dd>/);
+  assert.match(app, /<dd data-tone="neutral">\$\{SETUP_LABELS\[opportunity\.type\]\}<\/dd>/);
+  assert.match(app, /entry = `<button class="entry\$\{status === 'signal' \? ' hot' : ''\}"/);
+  assert.match(app, /if \(action === 'entry'\) \{ if \(card\.opportunity && ATTENTION\.includes\(stateOf\(card\)\)\) openConfirmation/);
   assert.match(app, /Object\.entries\(VISIBLE_STRUCTURES_3M\)/);
   assert.match(app, /isDirectionAllowed\(card\.bias, key\)/);
   assert.match(app, /isSetupAllowed\(card\.direction, card\.structure3m, key\)/);
@@ -95,7 +109,18 @@ test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态�
   assert.match(css, /@container \(max-width:390px\)\{\.task-content\{grid-template-columns:1fr/);
   assert.doesNotMatch(css, /\.task-summary dd\{[^}]*text-overflow:ellipsis/);
   assert.doesNotMatch(css, /\.summary-zone\{[^}]*text-overflow:ellipsis/);
-  assert.match(css, /\.summary-direction-active\{display:inline-flex;[^}]*border:1px solid color-mix\(in srgb,var\(--theme-accent\) 58%,var\(--border-primary\)\);[^}]*background:color-mix\(in srgb,var\(--theme-accent\) 13%,var\(--bg-surface-secondary\)\);[^}]*box-shadow:0 0 9px color-mix\(in srgb,var\(--theme-accent\) 22%,transparent\);[^}]*color:var\(--text-primary\)\}/);
+  assert.match(css, /\.bias-field \.option\.selected\[data-tone="bullish"\][^]*?color:var\(--semantic-bullish\)/);
+  assert.match(css, /\.bias-field \.option\.selected\[data-tone="bearish"\][^]*?color:var\(--semantic-bearish\)/);
+  assert.match(css, /\.task-summary dd\[data-tone="bullish"\]\{color:var\(--semantic-bullish\)\}/);
+  assert.match(css, /\.task-summary dd\[data-tone="bearish"\]\{color:var\(--semantic-bearish\)\}/);
+  assert.match(css, /\.summary-direction-active\[data-tone="bullish"\][^]*?color:var\(--semantic-bullish\)/);
+  assert.match(css, /\.summary-direction-active\[data-tone="bearish"\][^]*?color:var\(--semantic-bearish\)/);
+  assert.match(css, /--semantic-bullish: #6cefa6/);
+  assert.match(css, /--semantic-bearish: #ff6879/);
+  assert.match(css, /--semantic-bullish: #187a41/);
+  assert.match(css, /--semantic-bearish: #c53445/);
+  assert.match(css, /\.card \.entry,.card \.entry\.hot\{background:var\(--bg-surface-secondary\);border-color:var\(--border-primary\);border-style:dashed;color:var\(--text-secondary\)\}/);
+  assert.doesNotMatch(css, /\.card \.entry\{background:color-mix\(in srgb,var\(--theme-accent\)/);
   assert.match(css, /\.card-hide\{[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface-secondary\);[^}]*color:var\(--text-secondary\)/);
   assert.match(css, /\.commodity-dashboard\{margin:12px 0 14px;[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface\);[^}]*color:var\(--text-primary\)/);
   assert.match(css, /\.commodity-dashboard-row\{[^}]*border:1px solid var\(--border-primary\);[^}]*background:var\(--bg-surface-secondary\)/);

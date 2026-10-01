@@ -1,30 +1,30 @@
-# 日内交易状态卡 UI Design QA
+# 日内交易卡片 UI Design QA
 
 - Date: 2026-10-01
-- Scope: 将当前机会中的 `HTF PB` 改为 `MTF BOF（趋势走弱 1次）`；保持原字号，文字在按钮内换成两行。
-- Approved visual reference: conversation visualization `opportunity-mtf-bof-once.html`，用户确认后实施。
-- Implementation preview: `http://127.0.0.1:4186/?preview=mtf-bof-weak-once#/home`。
-- Viewport: 1280 x 720 CSS px，浅色外观，三列卡片布局。
+- Scope: 为偏见、市场结构、交易方向及当前状态摘要增加多空语义颜色；机会名称保持中性；将已入场按钮调整为与“机会失效/放弃机会”一致的低强调中性层级。
+- Approved visual references: `/Users/hongchujun/.codex/generated_images/01a079d6-c844-7fe0-b65f-ab3aedeebe71/exec-b9447eca-fb75-4a51-af6f-0076023f2601.png`（多头）和 `/Users/hongchujun/.codex/generated_images/01a079d6-c844-7fe0-b65f-ab3aedeebe71/exec-6bce8abc-d988-44e9-b9f8-eca76ecba07b.png`（空头）。
+- Implementation preview: `http://127.0.0.1:4187/#/home`。
+- Implementation screenshot evidence: Codex In-app Browser capture at the implementation preview URL，1280 × 720 CSS px；已分别检查浅色和深色主题，GC 为多头、CL 为空头、ES 保持中性。
 
 ## Full-view comparison evidence
 
-- GC、CL、ES 三张卡片的当前机会均显示 `MTF PB / MTF BOF（趋势走弱 1次） / HTF BOF`。
-- 中间按钮在现有卡片宽度内自然换为两行，没有缩小字号。
-- 三个按钮高度随最长文案统一拉齐，没有上下错位。
-- 下方入场信号和当前状态区域随内容自适应下移，没有重叠或遮挡。
+- 多头上方控件与当前任务摘要统一使用绿色语义；空头上方控件与当前任务摘要统一使用红色语义。
+- `MTF PB`、`MTF BOF（趋势走弱 1次）`、`HTF BOF` 不随方向自动染色；已选择机会仍保持机会控件自身的中性层级。
+- `暂无交易方向`、`无偏见`、`震荡（观察拍卖完成）`保持中性，不会继承多空颜色。
+- `GC 已入场`、`CL 已入场`与“机会失效/放弃机会”保持低强调中性灰色；原有字号、尺寸、布局和换行保持不变。
 
 ## Focused region comparison evidence
 
-- 三个按钮实测字号均为 12 px、行高均为 15 px、高度均为 38 px。
-- 中间按钮只换行，不裁切、不溢出，完整显示 `MTF BOF（趋势走弱 1次）`。
-- 按钮保留既有选中态、禁用态、边框、圆角和主题颜色。
+- 语义色使用主题变量：深色主题使用高亮绿/红，浅色主题使用可读的深绿/红；截图和浏览器计算样式均确认可读。
+- 摘要中的偏见、市场结构、方向以及方向徽章与上方控件保持同一语义映射。
+- 入场按钮的 `data-action="entry"` 与确认路径保持不变，仅覆盖视觉颜色。
 
 ## Required fidelity surfaces
 
-- Fonts and typography: 新文案与相邻按钮使用相同字号和字重。
-- Spacing and layout rhythm: 按钮组保持三等分；最长文案决定整行统一高度。
-- Colors and visual tokens: 沿用既有机会按钮样式，不引入新配色。
-- Copy and content: 页面、历史空状态、README、业务规范、架构规范、测试和生产 bundle 已同步更新。
+- Fonts and typography: 未改字号、字重、按钮尺寸或卡片布局。
+- Spacing and layout rhythm: 未改显示顺序、间距、网格、滚动恢复行为或换行规则。
+- Colors and visual tokens: 新增多空语义变量并覆盖亮色、暗色及跟随系统亮色分支；机会文本不使用方向色。
+- Copy and content: 未改业务文案；入场信号只读提示保持现有文案。
 
 ## Findings
 

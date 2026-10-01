@@ -45,6 +45,7 @@ const duration = card => {
 };
 const announce = text => { live.textContent = text; };
 const directionShort = direction => direction === 'long' ? '多' : direction === 'short' ? '空' : '—';
+const semanticTone = value => ['bullish', 'long'].includes(value) ? 'bullish' : ['bearish', 'short'].includes(value) ? 'bearish' : 'neutral';
 const writeLocked = () => externalConflict || storageUnsafe;
 function saveUnified(candidate, options = {}, phase = 'unified_storage_write') {
   try { return commitUnified(storage, candidate, options); }
@@ -127,14 +128,14 @@ function mutate(message, symbol, focus = '.state-title') {
   announce(message);
 }
 function option(symbol, action, value, text, selected, disabled = false) {
-  return `<button type="button" class="option ${action}${selected ? ' selected' : ''}" data-action="${action}" data-symbol="${symbol}" data-value="${value}" aria-pressed="${selected}"${disabled ? ' disabled aria-disabled="true"' : ''}>${text}</button>`;
+  return `<button type="button" class="option ${action}${selected ? ' selected' : ''}" data-action="${action}" data-symbol="${symbol}" data-value="${value}" data-tone="${semanticTone(value)}" aria-pressed="${selected}"${disabled ? ' disabled aria-disabled="true"' : ''}>${text}</button>`;
 }
 function renderCard(symbol) {
   const card = state.cards[symbol]; const opportunity = card.opportunity; const status = stateOf(card); const holding = status === 'position';
   const collapsed = collapsedCards.has(symbol);
   const [action, prohibition] = instruction(card);
   const bias = `<section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([key,label]) => option(symbol, 'bias', key, label, key === card.bias)).join('')}</div></section>`;
-  const direction = holding ? `<div class="readonly">本笔${DIRECTIONS[card.direction]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.bias, key))).join('')}</div>`;
+  const direction = holding ? `<div class="readonly" data-tone="${semanticTone(card.direction)}">本笔${DIRECTIONS[card.direction]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([key,label]) => option(symbol, 'direction', key, label, key === card.direction, card.needsStructureReview || !isDirectionAllowed(card.bias, key))).join('')}</div>`;
   const structure = `<section class="classifier structure-field"><span class="field-label">市场结构（MTF chanlun）</span><div class="segment structure-segment" role="group" aria-label="${symbol} 市场结构">${Object.entries(VISIBLE_STRUCTURES_3M).map(([key,label]) => option(symbol, 'structure', key, label, key === card.structure3m)).join('')}</div>${card.needsStructureReview ? '<p class="migration-note">旧版本机会：请先确认市场结构</p>' : ''}</section>`;
   const setups = holding ? `<div class="readonly">${SETUP_LABELS[opportunity.type]} <small>只读</small></div>` : `<div class="segment" role="group" aria-label="${symbol} 当前机会">${Object.entries(SETUPS).map(([key,label]) => option(symbol, 'setup', key, label, opportunity?.type === key, card.needsStructureReview || !isSetupAllowed(card.direction, card.structure3m, key))).join('')}</div>`;
   const entrySignal = '<div class="entry-signal readonly" aria-label="入场信号"><span class="entry-signal-label">入场信号</span><span class="entry-signal-lines"><span>均线一侧·BB收窄·气泡攻击&amp;吸收·流动性·信号K</span><span>原方向拒绝+新方向位移（COC）+价格接受（震荡）</span></span></div>';
@@ -144,7 +145,7 @@ function renderCard(symbol) {
     entry = `<button class="entry${status === 'signal' ? ' hot' : ''}" data-action="entry" data-symbol="${symbol}" type="button">${symbol} 已入场</button>`;
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
-  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd>${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd>${['long', 'short'].includes(card.direction) ? `<span class="summary-direction-active">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd>${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd>${SETUP_LABELS[opportunity.type]}</dd></div></dl>` : '';
+  const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd data-tone="${semanticTone(card.bias)}">${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd data-tone="${semanticTone(card.direction)}">${['long', 'short'].includes(card.direction) ? `<span class="summary-direction-active" data-tone="${semanticTone(card.direction)}">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd data-tone="${semanticTone(card.structure3m)}">${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd data-tone="neutral">${SETUP_LABELS[opportunity.type]}</dd></div></dl>` : '';
   const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向（市场结构不明确时看HTF缺口）'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${entrySignal}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   const conflictWarning = holdingConflictWarning(card);
