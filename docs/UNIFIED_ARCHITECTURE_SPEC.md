@@ -102,7 +102,7 @@ V4 新机会的内部键和标签为：
 | 内部键 | UI 文案 |
 | --- | --- |
 | `mtf_pb` | `MTF PB` |
-| `htf_pb` | `HTF PB` |
+| `htf_pb` | `MTF BOF（趋势走弱 1次）` |
 | `htf_bof` | `HTF BOF` |
 
 新机会必须满足 `direction !== "none"` 且 `structure3m !== "unjudged"`；满足后三个机会键全部可用。活动机会包含稳定 `id`、`symbol`、`direction`、`type`、`createdAt`、立即写入的 `registeredAt`、偏见/结构登记快照、入场/结束时间、当前注意力阶段和阶段时间线。V4 活动机会的 `zone` 固定为 `null`，不得依赖位置字段。

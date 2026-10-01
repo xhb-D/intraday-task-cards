@@ -129,7 +129,7 @@ test('production bundle: 折叠与隐藏点击路径可执行，且不会写入�
   assert.doesNotMatch(cards.innerHTML, /field-label">交易方向（HTF缺口）<\/span>/);
   assert.doesNotMatch(cards.innerHTML, /当前 3M 市场结构/);
   assert.doesNotMatch(cards.innerHTML, /未判断/);
-  assert.match(cards.innerHTML, /当前机会[^]*?MTF PB[^]*?HTF PB[^]*?HTF BOF/);
+  assert.match(cards.innerHTML, /当前机会[^]*?MTF PB[^]*?MTF BOF（趋势走弱 1次）[^]*?HTF BOF/);
   assert.match(cards.innerHTML, /交易方向（市场结构不明确时看HTF缺口）[^]*?暂无交易方向/);
   assert.match(cards.innerHTML, /entry-signal-label">入场信号<\/span><span class="entry-signal-lines"><span>均线一侧·BB收窄·气泡攻击&amp;吸收·流动性·信号K<\/span><span>原方向拒绝\+新方向位移（COC）\+价格接受（震荡）<\/span>/);
   assert.doesNotMatch(cards.innerHTML, /趋势回调|data-zone|zone-confirm/);

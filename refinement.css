@@ -14,7 +14,7 @@
 .structure-field .field-label,.direction-field .field-label{white-space:nowrap}
 .direction-field .option{height:32px;border-color:#394c61;background:#182330;color:#b8c6d6;font-size:12px;font-weight:600}
 .direction-field .option.selected{background:#30445a;border-color:#91a9c4;color:#f4f8fd;font-weight:700}
-.opportunity-field .option{height:30px;border-color:#2c3b4c;font-size:12px}
+.opportunity-field .option{height:auto;min-height:30px;padding:3px;border-color:#2c3b4c;font-size:12px;line-height:15px;white-space:normal}
 .opportunity-field .option.selected{background:#223042;border-color:#657f99;color:#e5eef8;font-weight:650}
 .option:disabled{cursor:not-allowed;opacity:.64;background:#101720;border-color:#22303d;border-style:dashed;color:#77869a}
 .option:focus-visible,.stage:focus-visible,.entry:focus-visible,.exit:focus-visible,.ending:focus-visible,.link:focus-visible,.history summary:focus-visible{outline:2px solid #a9c4df;outline-offset:2px}
