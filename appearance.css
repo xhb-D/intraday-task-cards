@@ -108,7 +108,8 @@ body{background:var(--bg-page);color:var(--text-primary)}
 .risk-dashboard{background:var(--bg-surface);border-color:var(--border-primary);box-shadow:var(--shadow-card)}
 .risk-summary{border-color:var(--border-primary)}
 .risk-kicker,.risk-base,.risk-title-row h2,.risk-link,.risk-entry,.risk-balance,.risk-account-type,.risk-feedback{color:var(--text-secondary)}
-.risk-account-card,.risk-add-account,.risk-button,.risk-mobile-picker,.risk-field input,.risk-field select,.risk-list-row{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-primary)}
+.risk-account-card,.risk-add-account,.risk-button,.risk-mobile-picker,.risk-mobile-account,.risk-field input,.risk-field select,.risk-list-row{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-primary)}
+.risk-mobile-details{border-color:var(--border-primary)}
 .risk-account-card:hover,.risk-account-card.selected,.risk-list-row.selected{background:color-mix(in srgb,var(--theme-accent) 8%,var(--bg-surface));border-color:var(--theme-accent);box-shadow:0 0 0 1px var(--theme-accent)}
 .risk-account-risk,.risk-dialog-body,.risk-dialog-body h2{color:var(--text-primary)}
 .risk-actions{border-color:var(--border-secondary)}

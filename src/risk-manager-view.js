@@ -70,6 +70,37 @@ export function mountRiskManager(host, controller, { compact = false } = {}) {
     });
   }
   function cards(state) { const row = el('div','risk-rail-row'); const previous = button('‹','risk-arrow'); previous.setAttribute('aria-label','向左查看更多账户'); const rail = el('div', 'risk-rail'); const next = button('›','risk-arrow'); next.setAttribute('aria-label','向右查看更多账户'); previous.addEventListener('click',()=>rail.scrollBy?.({left:-300,behavior:'smooth'})); next.addEventListener('click',()=>rail.scrollBy?.({left:300,behavior:'smooth'})); state.accounts.forEach(item => { const decision = deriveDecision(item); const [label, color] = status(decision); const card = button('', `risk-account-card${item.id === state.selectedAccountId ? ' selected' : ''}`); card.setAttribute('aria-pressed', String(item.id === state.selectedAccountId)); card.append(el('span','risk-account-name',item.name), el('span','risk-balance',fmtUSD(deriveCurrentBalance(item.currentSession))), el('span',`risk-account-risk ${color}`, `${label} · ${fmtUSD(decision.finalRisk ?? decision.allowedR)}`), el('span','risk-account-type',drawdownTypeLabel(item.drawdownType))); card.addEventListener('click', () => mutate(selectAccount(current(), item.id), '已切换账户。')); rail.appendChild(card); }); const add = button('+ 添加账户','risk-add-account'); add.addEventListener('click',()=>accountForm()); rail.appendChild(add); row.append(previous,rail,next); return row; }
+  function mobileAccountSummary(state, item) {
+    const wrap = el('div', 'risk-mobile-account');
+    wrap.setAttribute('aria-label', '当前账户风险摘要');
+    const picker = document.createElement('select');
+    picker.className = 'risk-mobile-picker';
+    picker.setAttribute('aria-label', '选择账户');
+    const placeholder = new Option('选择账户', '', !item, !item);
+    placeholder.disabled = true;
+    picker.add(placeholder);
+    state.accounts.forEach(account => picker.add(new Option(account.name, account.id, false, account.id === state.selectedAccountId)));
+    picker.add(new Option('+ 添加账户', '__add__'));
+    picker.addEventListener('change', () => picker.value === '__add__' ? accountForm() : picker.value && mutate(selectAccount(current(), picker.value), '已切换账户。'));
+    const detail = el('div', 'risk-mobile-details');
+    if (item) {
+      const decision = deriveDecision(item);
+      const [label, color] = status(decision);
+      detail.append(
+        el('span', 'risk-mobile-balance', fmtUSD(deriveCurrentBalance(item.currentSession))),
+        el('span', `risk-mobile-risk ${color}`, `${label} · ${fmtUSD(decision.finalRisk ?? decision.allowedR)}`),
+        el('span', 'risk-mobile-type', drawdownTypeLabel(item.drawdownType))
+      );
+    } else {
+      detail.append(
+        el('span', 'risk-mobile-balance', '—'),
+        el('span', 'risk-mobile-risk muted', '尚未选择账户'),
+        el('span', 'risk-mobile-type', '创建或选择账户')
+      );
+    }
+    wrap.append(picker, detail);
+    return wrap;
+  }
   function details(item) {
     const detail = el('section', 'risk-manager-detail');
     if (!item) {
@@ -155,7 +186,7 @@ export function mountRiskManager(host, controller, { compact = false } = {}) {
     detail.appendChild(history);
     return detail;
   }
-  function render() { if (disposed) return; return preserveScrollPosition(() => { const state = current(); const item = selected(); host.textContent = ''; const decision = item ? deriveDecision(item) : null; const [label,color] = status(decision); const section = el('section', compact ? 'risk-dashboard' : 'risk-manager'); if (compact) { const summary = el('section','risk-summary'); summary.append(el('p',`risk-status ${color}`,label),el('p','risk-kicker',decision?.status === 'TAIL_RISK' ? '下一单尾部最大允许 1R' : '下一单最大允许 1R'),el('p',`risk-amount ${color}`,decision ? fmtUSD(decision.finalRisk ?? decision.allowedR) : '—'),el('p','risk-base',`日初 Base R: ${decision ? fmtUSD(decision.baseR) : '—'}`)); section.appendChild(summary); } const accounts = el('section','risk-accounts'); const title = el('div','risk-title-row'); title.appendChild(el('h2',null,compact ? '账户' : '账户与交易时段')); if (compact) { const entry = document.createElement('a'); entry.className = 'risk-entry'; entry.href = '#/risk'; entry.textContent = '进入 Trading Risk Manager →'; title.appendChild(entry); } accounts.append(title,cards(state)); const picker = document.createElement('select'); picker.className='risk-mobile-picker'; picker.setAttribute('aria-label','选择账户'); const placeholder=new Option('选择账户','',!item,!item); placeholder.disabled=true; picker.add(placeholder); state.accounts.forEach(account=>picker.add(new Option(account.name,account.id,false,account.id===state.selectedAccountId))); picker.add(new Option('+ 添加账户','__add__')); picker.addEventListener('change',()=>picker.value==='__add__'?accountForm():picker.value&&mutate(selectAccount(current(),picker.value),'已切换账户。')); accounts.appendChild(picker); const actions = el('div','risk-actions'); const add = button('添加账户'); add.addEventListener('click',() => accountForm()); const balance = button('更新余额','risk-button primary'); balance.disabled = !item; balance.addEventListener('click',() => item && balanceForm(item)); const undo = button('撤销上一条余额更新'); undo.disabled = !item || !item.currentSession.balanceEvents.length; undo.addEventListener('click',() => item && undoConfirm(item)); const edit = button('编辑账户'); edit.disabled = !item; edit.addEventListener('click',() => item && accountForm(item)); actions.append(add,balance,undo,edit); if (!compact) { if (item && ['INTRADAY_TRAILING','STATIC'].includes(item.drawdownType)) { const floor = button('Hard Loss Floor'); floor.addEventListener('click',() => floorForm(item)); actions.appendChild(floor); } const rollover = button('结束当前并开始新交易日'); rollover.addEventListener('click',rolloverConfirm); actions.appendChild(rollover); } accounts.appendChild(actions); section.appendChild(accounts); host.appendChild(section); if (!compact) host.appendChild(details(item)); host.appendChild(el('p','risk-feedback',locked() ? '检测到外部修改：风险写入已锁定，仍可导出。' : '风险数据由统一交易控制中心保存。')); }); }
+  function render() { if (disposed) return; return preserveScrollPosition(() => { const state = current(); const item = selected(); host.textContent = ''; const decision = item ? deriveDecision(item) : null; const [label,color] = status(decision); const section = el('section', compact ? 'risk-dashboard' : 'risk-manager'); if (compact) { const summary = el('section','risk-summary'); summary.append(el('p',`risk-status ${color}`,label),el('p','risk-kicker',decision?.status === 'TAIL_RISK' ? '下一单尾部最大允许 1R' : '下一单最大允许 1R'),el('p',`risk-amount ${color}`,decision ? fmtUSD(decision.finalRisk ?? decision.allowedR) : '—'),el('p','risk-base',`日初 Base R: ${decision ? fmtUSD(decision.baseR) : '—'}`)); section.appendChild(summary); } const accounts = el('section','risk-accounts'); const title = el('div','risk-title-row'); title.appendChild(el('h2',null,compact ? '账户' : '账户与交易时段')); if (compact) { const entry = document.createElement('a'); entry.className = 'risk-entry'; entry.href = '#/risk'; entry.textContent = '进入 Trading Risk Manager →'; title.appendChild(entry); } accounts.append(title,cards(state),mobileAccountSummary(state,item)); const actions = el('div','risk-actions'); const add = button('添加账户'); add.addEventListener('click',() => accountForm()); const balance = button('更新余额','risk-button primary'); balance.disabled = !item; balance.addEventListener('click',() => item && balanceForm(item)); const undo = button('撤销上一条余额更新'); undo.disabled = !item || !item.currentSession.balanceEvents.length; undo.addEventListener('click',() => item && undoConfirm(item)); const edit = button('编辑账户'); edit.disabled = !item; edit.addEventListener('click',() => item && accountForm(item)); actions.append(add,balance,undo,edit); if (!compact) { if (item && ['INTRADAY_TRAILING','STATIC'].includes(item.drawdownType)) { const floor = button('Hard Loss Floor'); floor.addEventListener('click',() => floorForm(item)); actions.appendChild(floor); } const rollover = button('结束当前并开始新交易日'); rollover.addEventListener('click',rolloverConfirm); actions.appendChild(rollover); } accounts.appendChild(actions); section.appendChild(accounts); host.appendChild(section); if (!compact) host.appendChild(details(item)); host.appendChild(el('p','risk-feedback',locked() ? '检测到外部修改：风险写入已锁定，仍可导出。' : '风险数据由统一交易控制中心保存。')); }); }
   render(); return { render, destroy() { disposed = true; host.textContent = ''; } };
 }
 

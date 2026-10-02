@@ -59,6 +59,10 @@ test('risk dashboard DOM: 点击表单确认会真实创建、更新、撤销、
     byName(body, 'name').value = 'DEMO-ACCOUNT-001'; byName(body, 'nominal').value = '50000'; byName(body, 'reference').value = '50000'; byName(body, 'hardLoss').value = '2000'; byName(body, 'floor').value = '49400'; byName(body, 'initial').value = '50000';
     byButtonText(body, '添加账户').click();
     assert.ok(byClass(host, 'risk-account-card')); assert.ok(byClass(host, 'selected')); assert.equal(byText(host, '更新余额').disabled, false);
+    const mobileAccount = byClass(host, 'risk-mobile-account');
+    assert.ok(mobileAccount, '窄屏渲染账户与风险摘要卡');
+    assert.equal(byClass(mobileAccount, 'risk-mobile-picker').value, state.selectedAccountId, '窄屏账户选择器保持当前账户');
+    assert.match(renderedText(byClass(mobileAccount, 'risk-mobile-details')), /\$50,000\.00可以交易 · \$100\.00EOD 日终跟踪回撤/, '余额、1R 与回撤类型位于同一窄屏摘要卡');
 
     byText(host, '更新余额').click(); byName(body, 'balance').value = '50100'; byText(body, '确认更新').click();
     assert.ok(byText(host, '$50,100.00')); assert.equal(byText(host, '撤销上一条余额更新').disabled, false);
