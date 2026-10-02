@@ -39,10 +39,10 @@ Provide a local, user-controlled natural-time chime in the existing app. It remi
 The user is the local browser user of the existing manual GC/CL/ES state card.
 
 1. On `#/home`, view the unchanged risk summary beside current time, chime status, and zero to five configured-cycle tags.
-2. Open full settings at `#/chime`; configure up to five independent cycles, advance reminders, voice, and optional browser notifications.
-3. Explicitly click the global `开始报时` control to unlock audio and run eligible cycles in that page.
+2. Configure up to five independent cycles and advance reminders at `#/chime`; set voice, selected voice, and optional browser notifications on `#/home`.
+3. Explicitly click the home-page global `开始报时` control to unlock audio and run eligible cycles in that page.
 4. Pause or resume an individual configured cycle directly from its home-summary tag without changing other cycles.
-5. Use global `暂停` to stop actual scheduling/output while preserving each cycle's individual state.
+5. Use the home-page global `暂停` or `试听提示音` controls; global pause stops actual scheduling/output while preserving each cycle's individual state.
 6. Switch between `#/home`, `#/risk`, and `#/chime` without unmounting or restarting the app-shell scheduler.
 7. If a browser suspension causes a missed event, resume at the next future boundary; never replay missed events.
 8. Export/import intraday, risk-manager, chime, and appearance data through the existing single unified JSON backup flow.
@@ -59,8 +59,8 @@ The user is the local browser user of the existing manual GC/CL/ES state card.
 
 ### 4.2 Outputs
 
-- Home summary: current Beijing wall-clock time, global scheduler state, a short explanatory prompt, `已设置报时 N/5`, and one compact tag per enabled slot.
-- Full settings view: the five independent configurations and voice/notification controls.
+- Home summary: current Beijing wall-clock time, global scheduler state, `已设置报时 N/5`, one compact tag per enabled slot with its individual pause/resume control, voice enable/selection, browser notification preference, global start/pause, preview, and settings link.
+- Full settings view: only the five independent cycle configurations, including enable, period/custom minutes, advance notice, and individual pause/resume; it does not repeat voice/notification preferences or global runtime controls/status.
 - At a main boundary: the main sound, optional enabled speech, and optional permitted browser notification.
 - At an enabled early boundary: the distinct early sound, optional enabled speech, and optional permitted browser notification.
 - Visible status/error text when audio cannot be unlocked, the tab is not leader, a notification is denied, a setting is invalid, or storage is in recovery/conflict mode.
@@ -90,7 +90,8 @@ The same-origin global run intent, per-tab audio-unlocked/visibility state, and 
 ### 6.1 Home view
 
 - The upper risk-dashboard area is a two-column layout. The left risk summary and all of its current meaning, values, calculations, and behavior remain unchanged. The right column is the chime summary.
-- The chime summary contains, in order: `自然周期报时`, current `Asia/Shanghai` time, global runtime/leader status, a concise prompt that missed background/sleep events are not replayed, `已设置报时 N/5`, the configured-cycle tags, and the controls `开始报时`, `暂停`, and `试听提示音`, plus a link to `#/chime`.
+- The chime summary contains current `Asia/Shanghai` time, global runtime/leader status, `已设置报时 N/5`, configured-cycle tags with individual pause/resume controls, voice enable/selection and optional browser-notification preference, the controls `开始报时`, `暂停`, and `试听提示音`, plus a link to `#/chime`.
+- The home summary preserves the existing status priority: explicit operation/error feedback, coordinator error, global paused, no enabled/all cycles individually paused, this page is leader, another page is leader, no visible page, audio locked, then waiting for a visible page to take over. Status must not be moved to or duplicated on the settings route.
 - All open pages display the canonical unified chime settings they have loaded and an accurate same-origin run/leader state. Suggested concise states are `当前页面负责报时`, `由其他页面负责报时`, `等待可见页面接管`, and `当前没有可用报时页面`; final wording may follow existing app copy style without changing these meanings.
 - `N` is the number of enabled slots, whether individually paused or not. Display exactly N tags; do not render empty tag placeholders. With N=0, show no cycle tag and show an ordinary empty-state sentence (not a fake tag).
 - A tag identifies its configured period (including a custom period). It contains its own small circular pause/resume button inside the tag at the right. No extra row is added for these controls.
@@ -106,8 +107,8 @@ The same-origin global run intent, per-tab audio-unlocked/visibility state, and 
 - Provide the `#/chime` route without changing the semantics of `#/home` or `#/risk`.
 - Expose five independently editable slots with enable, cycle preset/custom minutes, early-seconds setting, and an individual pause/resume action.
 - Show the `自定义分钟` row only when that slot's cycle is `自定义`; under a preset, hide the whole row. Switching back to a preset must retain the saved custom minutes so selecting `自定义` again restores the prior value.
-- Expose global voice enable/selection and optional notification enable.
 - Per-cycle actions use only the terms `暂停` and `恢复`. The term `开始报时` is reserved for starting the whole scheduler.
+- Voice enable/selection, notification preference, global runtime status, global `开始报时`/`暂停`, and `试听提示音` are home-only controls and must not appear on this route.
 - Settings changes persist through the unified coordinator. Invalid edits remain visible with an error and do not silently mutate saved state.
 
 ## 7. Lifecycle and State Transitions

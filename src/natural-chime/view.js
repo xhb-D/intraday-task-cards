@@ -28,8 +28,19 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
 
   const summary = node('section', 'chime-panel'); summary.setAttribute('aria-label', '自然周期报时');
   const clock = node('time', 'chime-clock', '北京时间 --:--:--'); clock.dataset.chimeClock = 'true';
+  const runtimeStatus = node('p', 'chime-runtime', '全局已暂停'); runtimeStatus.dataset.chimeRuntime = 'true'; runtimeStatus.setAttribute('role', 'status'); runtimeStatus.setAttribute('aria-live', 'polite');
   const tags = node('div', 'chime-tags'); tags.dataset.chimeTags = 'true'; tags.setAttribute('role', 'list');
   const empty = node('p', 'chime-empty', '尚未启用周期；可在设置中启用。'); empty.dataset.chimeEmpty = 'true';
+  const count = node('p', 'chime-count', '已设置报时 0/5'); count.dataset.chimeCount = 'true';
+  const preferences = node('fieldset', 'chime-home-preferences');
+  const preferencesLegend = node('legend', '', '播放选项');
+  const voiceEnabled = document.createElement('input'); voiceEnabled.type = 'checkbox'; voiceEnabled.dataset.chimePreference = 'voiceEnabled';
+  const voiceToggle = controlLabel('启用语音播报', voiceEnabled, 'chime-check');
+  const voiceSelect = document.createElement('select'); voiceSelect.dataset.chimePreference = 'selectedVoiceURI'; voiceSelect.setAttribute('aria-label', '选择播报声音');
+  const notifyEnabled = document.createElement('input'); notifyEnabled.type = 'checkbox'; notifyEnabled.dataset.chimePreference = 'notifyEnabled';
+  const notifyToggle = controlLabel('浏览器系统通知', notifyEnabled, 'chime-check');
+  const preferenceError = node('p', 'chime-slot-error'); preferenceError.dataset.preferenceError = 'true'; preferenceError.setAttribute('role', 'status'); preferenceError.setAttribute('aria-live', 'polite');
+  append(preferences, preferencesLegend, voiceToggle, controlLabel('播放声音', voiceSelect, 'chime-field'), notifyToggle, preferenceError);
   const actions = node('div', 'chime-actions');
   const startButton = makeButton('开始报时', 'start', 'chime-primary');
   const pauseButton = makeButton('暂停', 'pause');
@@ -37,7 +48,7 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   const settingsLink = node('a', 'chime-link', '报时设置 →'); settingsLink.href = '#/chime';
   append(actions, startButton, pauseButton, previewButton, settingsLink);
   const message = node('p', 'chime-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite'); message.dataset.chimeMessage = 'true';
-  append(summary, clock, tags, empty, actions, message);
+  append(summary, clock, runtimeStatus, tags, empty, count, preferences, actions, message);
   summaryHost.replaceChildren(summary);
 
   const settings = node('section', 'chime-settings'); settings.setAttribute('aria-labelledby', 'chime-settings-title');
@@ -64,22 +75,7 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
     slotControls.set(slotId, { fieldset, enabled, preset, minutes, customMinutes, early, pause, error });
   }
 
-  const preferences = node('fieldset', 'chime-preferences');
-  const preferencesLegend = node('legend', '', '语音与通知');
-  const voiceEnabled = document.createElement('input'); voiceEnabled.type = 'checkbox'; voiceEnabled.dataset.chimePreference = 'voiceEnabled';
-  const voiceToggle = controlLabel('启用语音播报', voiceEnabled, 'chime-check');
-  const voiceSelect = document.createElement('select'); voiceSelect.dataset.chimePreference = 'selectedVoiceURI'; voiceSelect.setAttribute('aria-label', '选择中文语音');
-  const notifyEnabled = document.createElement('input'); notifyEnabled.type = 'checkbox'; notifyEnabled.dataset.chimePreference = 'notifyEnabled';
-  const notifyToggle = controlLabel('启用浏览器系统通知（默认关闭）', notifyEnabled, 'chime-check');
-  append(preferences, preferencesLegend, voiceToggle, controlLabel('播报声音', voiceSelect, 'chime-field'), notifyToggle);
-
-  const settingsStatus = node('p', 'chime-settings-status'); settingsStatus.setAttribute('role', 'status'); settingsStatus.setAttribute('aria-live', 'polite'); settingsStatus.dataset.chimeSettingsStatus = 'true';
-  const settingsActions = node('div', 'chime-actions');
-  const settingsStart = makeButton('开始报时', 'start', 'chime-primary');
-  const settingsPause = makeButton('暂停', 'pause');
-  const settingsPreview = makeButton('试听提示音', 'preview');
-  append(settingsActions, settingsStart, settingsPause, settingsPreview);
-  append(settings, settingsTitle, explanation, slotGrid, preferences, settingsStatus, settingsActions);
+  append(settings, settingsTitle, explanation, slotGrid);
   settingsHost.replaceChildren(settings);
 
   function settingError(slotId, error = '') {
@@ -106,8 +102,6 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   }
 
   let currentChime = null;
-  let preferenceError = node('p', 'chime-slot-error'); preferenceError.dataset.preferenceError = 'true'; preferenceError.setAttribute('role', 'status');
-  preferences.appendChild(preferenceError);
   slotControls.forEach((controls, slotId) => {
     controls.enabled.addEventListener('change', () => changeSlot(slotId, 'enabled', controls.enabled.checked));
     controls.preset.addEventListener('change', () => changeSlot(slotId, 'preset', controls.preset.value));
@@ -118,9 +112,9 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   voiceEnabled.addEventListener('change', () => changePreference('voiceEnabled', voiceEnabled.checked));
   voiceSelect.addEventListener('change', () => changePreference('selectedVoiceURI', voiceSelect.value));
   notifyEnabled.addEventListener('change', () => changePreference('notifyEnabled', notifyEnabled.checked));
-  [startButton, settingsStart].forEach(button => button.addEventListener('click', () => onStart?.()));
-  [pauseButton, settingsPause].forEach(button => button.addEventListener('click', () => onPause?.()));
-  [previewButton, settingsPreview].forEach(button => button.addEventListener('click', () => onPreview?.()));
+  startButton.addEventListener('click', () => onStart?.());
+  pauseButton.addEventListener('click', () => onPause?.());
+  previewButton.addEventListener('click', () => onPreview?.());
 
   function refreshVoices(chime = currentChime) {
     const voices = globalThis.speechSynthesis?.getVoices?.() || [];
@@ -191,13 +185,13 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
     else if (!status?.visible) statusText = '当前没有可用报时页面';
     else if (!status?.audioUnlocked) statusText = '报时已启动；本页面需点击后解锁音频';
     else statusText = '等待可见页面接管';
-    settingsStatus.textContent = statusText;
-    [startButton, settingsStart].forEach(button => { button.disabled = Boolean(status?.locked || !status?.visible); });
-    [pauseButton, settingsPause].forEach(button => { button.disabled = Boolean(status?.locked || runIntent !== 'running'); });
-    [previewButton, settingsPreview].forEach(button => { button.disabled = Boolean(status?.locked || !status?.visible); });
+    runtimeStatus.textContent = statusText;
+    startButton.disabled = Boolean(status?.locked || !status?.visible);
+    pauseButton.disabled = Boolean(status?.locked || runIntent !== 'running');
+    previewButton.disabled = Boolean(status?.locked || !status?.visible);
     message.textContent = status?.message || '';
     message.hidden = !message.textContent;
-    settingsStatus.dataset.kind = status?.message || status?.coordinationError ? 'error' : 'normal';
+    runtimeStatus.dataset.kind = messageText || status?.message || status?.coordinationError ? 'error' : 'normal';
   }
 
   return {
@@ -208,13 +202,15 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
       if (chime !== lastChime || force) { renderSettings(chime, locked); renderTags(chime, locked); }
       else {
         slotControls.forEach((controls, slotId) => { controls.fieldset.disabled = locked; controls.pause.disabled = locked; });
+        voiceEnabled.disabled = locked; voiceSelect.disabled = locked; notifyEnabled.disabled = locked;
         tags.querySelectorAll('button').forEach(button => { button.disabled = locked; });
       }
+      count.textContent = `已设置报时 ${chime.slots.filter(slot => slot.enabled).length}/5`;
       clock.textContent = clockText ? `北京时间 ${clockText}` : '北京时间 --:--:--';
       applyRuntime({ ...status, locked }, messageText);
     },
     refreshVoices() { refreshVoices(currentChime); },
-    showMessage(text) { message.textContent = text || ''; message.hidden = !message.textContent; settingsStatus.textContent = text || ''; },
+    showMessage(text) { runtimeStatus.textContent = text || '全局已暂停'; runtimeStatus.dataset.kind = text ? 'error' : 'normal'; },
     destroy() { summaryHost.replaceChildren(); settingsHost.replaceChildren(); }
   };
 }

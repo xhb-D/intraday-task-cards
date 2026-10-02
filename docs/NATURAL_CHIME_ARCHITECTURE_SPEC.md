@@ -221,7 +221,9 @@ The localStorage lease is coordination metadata, not user settings, and is never
 ## 9. UI, Routing, and Theme Integration
 
 - Home's upper region becomes a two-column composition: existing risk summary on the left is not edited; chime summary on the right. Intraday cards remain below in current order.
-- Summary creates only enabled-slot tags, each with fixed equal geometry and an in-tag keyboard button. Five tags use five equal same-row tracks; no empty tag DOM nodes. Tag icon state reads only persisted `slot.paused`; global status separately reports pause, leader, waiting, no leader, audio locked, and errors.
+- The home summary owns current Beijing time and the single visible global runtime/leader status, enabled-slot count and tags, voice enable/selection, browser notification preference, global start/pause, preview, and the settings link. Preserve status priority: explicit operation/error feedback, coordinator error, global pause, no enabled/all individually paused, this page leader, another page leader, no visible page, audio locked, then waiting for a visible page.
+- `#/chime` owns only the five cycle cards and their enable, interval/custom minutes, advance-notice, and individual pause/resume settings. Do not render a second copy of global voice/notification preferences, run status, start, pause, or preview on this route.
+- Summary creates only enabled-slot tags, each with fixed equal geometry and an in-tag keyboard button. Five tags use five equal same-row tracks; no empty tag DOM nodes. Tag icon state reads only persisted `slot.paused`; the global status separately reports pause, leader, waiting, no leader, audio locked, and errors.
 - Button action/`aria-label`/`title` derives from the slot's durable pause state and includes slot/period. `button` native keyboard handling, visible focus, icon shape, and text/status make meaning independent of color.
 - `#/chime` is added to route parsing and view selection. Existing `#/home`, `#/risk`, browser back/forward, unknown-route behavior, and scroll preservation remain unchanged.
 - All new colors/surfaces use current theme variables for light/dark/system. The scheduler is initialized once before route changes and is not owned by a route view.
@@ -273,7 +275,8 @@ The localStorage lease is coordination metadata, not user settings, and is never
 ### 12.4 UI and manual acceptance
 
 - DOM tests cover 0–5 tags, no empty placeholders, fixed equal dimensions, no wrap, five equal columns, right-side 20–22 px icons, symmetric text space, title/aria-label, keyboard activation/focus, and mixed real slot states.
-- Light/dark/system visual QA covers home two-column layout, unchanged left risk values/meaning, status variants, full settings route, five tags in one row, and narrow-container no-wrap behavior.
+- Light/dark/system visual QA covers home two-column layout, unchanged left risk values/meaning, status variants, home preference/control fit, cycle-only settings route, five tags in one row, and narrow-container control/select containment.
+- DOM tests exercise actual home start/pause/preview callbacks, preference persistence and failed-save echo, and all five individual home pause/resume buttons; lock/unlock state changes must also disable/enable all home preference controls without changing the canonical chime object.
 - Manual acceptance on current macOS Chrome and Safari: audio unlock, permission granted/denied, voice available/missing, two or more tabs, hidden-leader handoff, no-visible-candidate status, per-slot pause/resume persistence, global pause/start, route changes, background/sleep missed-event discard, and import/export.
 - Regression verification includes the existing `npm test`, `npm run build`, bundle syntax/content checks, `git diff --check`, risk/intraday/GC-CL-ES/appearance/scroll-preservation suites. Report actual test totals from the run; do not hard-code a future count in this spec.
 
