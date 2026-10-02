@@ -14,8 +14,7 @@ function controlLabel(text, control, className = '') { const label = node('label
 
 function slotInterval(slot) {
   const minutes = periodMinutes(slot);
-  if (slot.preset === 'custom') return `自定义 ${minutes}分`;
-  return minutes % 60 === 0 ? `每 ${minutes / 60} 小时` : `每 ${minutes} 分钟`;
+  return `${minutes} 分钟`;
 }
 
 function makeButton(text, action, className = '') {
@@ -27,12 +26,8 @@ function makeButton(text, action, className = '') {
 export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceChange, onStart, onPause, onPreview }) {
   if (!summaryHost || !settingsHost) return { render() {}, refreshVoices() {}, showMessage() {} };
 
-  const summary = node('section', 'chime-panel'); summary.setAttribute('aria-labelledby', 'chime-summary-title');
-  const title = node('h2', '', '自然周期报时'); title.id = 'chime-summary-title';
+  const summary = node('section', 'chime-panel'); summary.setAttribute('aria-label', '自然周期报时');
   const clock = node('time', 'chime-clock', '北京时间 --:--:--'); clock.dataset.chimeClock = 'true';
-  const runtime = node('p', 'chime-runtime', '已暂停'); runtime.setAttribute('role', 'status'); runtime.dataset.chimeRuntime = 'true';
-  const prompt = node('p', 'chime-prompt', '浏览器后台或设备休眠期间错过的报时不会补播。');
-  const count = node('p', 'chime-count', '已设置报时 0/5'); count.dataset.chimeCount = 'true';
   const tags = node('div', 'chime-tags'); tags.dataset.chimeTags = 'true'; tags.setAttribute('role', 'list');
   const empty = node('p', 'chime-empty', '尚未启用周期；可在设置中启用。'); empty.dataset.chimeEmpty = 'true';
   const actions = node('div', 'chime-actions');
@@ -42,7 +37,7 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   const settingsLink = node('a', 'chime-link', '报时设置 →'); settingsLink.href = '#/chime';
   append(actions, startButton, pauseButton, previewButton, settingsLink);
   const message = node('p', 'chime-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite'); message.dataset.chimeMessage = 'true';
-  append(summary, title, clock, runtime, prompt, count, tags, empty, actions, message);
+  append(summary, clock, tags, empty, actions, message);
   summaryHost.replaceChildren(summary);
 
   const settings = node('section', 'chime-settings'); settings.setAttribute('aria-labelledby', 'chime-settings-title');
@@ -168,7 +163,6 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
 
   function renderTags(chime, locked) {
     const enabled = chime.slots.filter(slot => slot.enabled);
-    count.textContent = `已设置报时 ${enabled.length}/5`;
     tags.replaceChildren(); tags.hidden = enabled.length === 0; empty.hidden = enabled.length > 0;
     tags.style.setProperty('--tag-count', String(Math.max(1, enabled.length)));
     enabled.forEach(slot => {
@@ -197,7 +191,6 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
     else if (!status?.visible) statusText = '当前没有可用报时页面';
     else if (!status?.audioUnlocked) statusText = '报时已启动；本页面需点击后解锁音频';
     else statusText = '等待可见页面接管';
-    runtime.textContent = statusText;
     settingsStatus.textContent = statusText;
     [startButton, settingsStart].forEach(button => { button.disabled = Boolean(status?.locked || !status?.visible); });
     [pauseButton, settingsPause].forEach(button => { button.disabled = Boolean(status?.locked || runIntent !== 'running'); });

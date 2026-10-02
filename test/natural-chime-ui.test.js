@@ -15,9 +15,9 @@ function rule(selector, source = css) {
   return source.slice(start, end + 1);
 }
 
-test('Chime tags use equal tracks without forcing their container wider than its panel', () => {
+test('Five compact chime tags stay in one row and scroll inside their panel when space runs out', () => {
   const tags = rule('.chime-tags');
-  assert.match(tags, /grid-template-columns:repeat\(var\(--tag-count\),minmax\(0,1fr\)\)/);
+  assert.match(tags, /grid-template-columns:repeat\(var\(--tag-count\),minmax\(68px,1fr\)\)/);
   assert.match(tags, /width:100%/);
   assert.match(tags, /max-width:100%/);
   assert.match(tags, /min-width:0/);
@@ -25,15 +25,22 @@ test('Chime tags use equal tracks without forcing their container wider than its
   assert.doesNotMatch(tags, /min-width:max|calc\(var\(--tag-count\)/);
 
   const mobile = css.slice(css.indexOf('@media(max-width:620px){'));
-  assert.match(mobile, /\.chime-tags\{grid-template-columns:repeat\(var\(--tag-count\),minmax\(132px,1fr\)\)\}/);
-  assert.match(rule('.chime-tag'), /grid-template-columns:minmax\(0,1fr\) 24px/);
+  assert.doesNotMatch(mobile, /\.chime-tags\{grid-template-columns/);
+  assert.match(rule('.chime-tag'), /grid-template-columns:minmax\(0,1fr\) 20px/);
   assert.match(rule('.chime-tag-label'), /white-space:nowrap/);
   assert.match(rule('.chime-custom-minutes[hidden]'), /display:none/);
 });
 
+test('Homepage keeps risk and chime summaries side by side at every responsive breakpoint', () => {
+  const responsiveCss = css.slice(css.indexOf('@media'));
+  assert.doesNotMatch(responsiveCss, /grid-template-areas:"summary" "chime" "accounts"/);
+  assert.doesNotMatch(responsiveCss, /#home-top-region\{[^}]*grid-template-columns/);
+  assert.match(rule('#home-top-region'), /grid-template-areas:"summary chime" "accounts accounts"/);
+});
+
 test('Chime pause/resume control remains a compact outlined circle with focus styling', () => {
   const toggle = rule('.chime-tag-toggle');
-  assert.match(toggle, /width:22px/); assert.match(toggle, /height:22px/);
+  assert.match(toggle, /width:18px/); assert.match(toggle, /height:18px/);
   assert.match(toggle, /border:1px solid var\(--border-primary\)/);
   assert.match(toggle, /border-radius:50%/);
   assert.match(rule('.chime-tag-toggle.is-paused'), /color:var\(--success\)/);
@@ -116,7 +123,7 @@ test('One- and five-slot summaries render only full period labels with accessibl
     five.slots.forEach((slot, index) => { slot.enabled = true; slot.preset = ['3', '5', '15', '30', '60'][index]; });
     view.render(five, {});
     tags = find(summaryHost, element => element.dataset.chimeTags === 'true');
-    assert.deepEqual(tags.children.map(tag => tag.children[0].textContent), ['每 3 分钟', '每 5 分钟', '每 15 分钟', '每 30 分钟', '每 1 小时']);
+    assert.deepEqual(tags.children.map(tag => tag.children[0].textContent), ['3 分钟', '5 分钟', '15 分钟', '30 分钟', '60 分钟']);
     assert.equal(tags.children.length, 5);
     for (const tag of tags.children) {
       const button = tag.children[1];
@@ -128,6 +135,25 @@ test('One- and five-slot summaries render only full period labels with accessibl
     const pausedButton = find(summaryHost, element => element.tagName === 'button' && element.dataset.chimeAction === 'slot-pause');
     assert.equal(pausedButton.textContent, '▶');
     assert.ok(pausedButton.className.includes('is-paused'));
+    view.destroy();
+  } finally { globalThis.document = priorDocument; }
+});
+
+test('Homepage chime summary removes redundant status prose while keeping settings guidance', () => {
+  const priorDocument = globalThis.document;
+  globalThis.document = { createElement: tag => new FakeElement(tag) };
+  try {
+    const summaryHost = new FakeElement(); const settingsHost = new FakeElement();
+    const view = initChimeView({ summaryHost, settingsHost });
+    view.render(defaultChime(), { runIntent: 'running', leader: true }, { clockText: '13:34:41' });
+
+    assert.match(summaryHost.textContent, /北京时间 13:34:41/);
+    assert.doesNotMatch(summaryHost.textContent, /自然周期报时/);
+    assert.doesNotMatch(summaryHost.textContent, /当前页面负责报时/);
+    assert.doesNotMatch(summaryHost.textContent, /浏览器后台或设备休眠期间错过的报时不会补播/);
+    assert.doesNotMatch(summaryHost.textContent, /已设置报时/);
+    assert.match(settingsHost.textContent, /自然周期报时设置/);
+    assert.match(settingsHost.textContent, /不补播错过的报时/);
     view.destroy();
   } finally { globalThis.document = priorDocument; }
 });
