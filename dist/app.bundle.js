@@ -2190,6 +2190,8 @@ function createOutputAdapter(environment = globalThis) {
 
   function beep(count) {
     if (!context || context.state !== 'running') return { ok: false, reason: '音频尚未解锁。' };
+    let remaining = count; let finish;
+    const done = new Promise(resolve => { finish = resolve; });
     try {
       const base = context.currentTime + 0.03;
       for (let index = 0; index < count; index += 1) {
@@ -2197,10 +2199,10 @@ function createOutputAdapter(environment = globalThis) {
         const startAt = base + index * 0.3;
         oscillator.type = 'sine'; oscillator.frequency.value = index === count - 1 && count > 1 ? 880 : 660;
         gain.gain.setValueAtTime(0.0001, startAt); gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.015); gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.18);
-        oscillator.connect(gain).connect(context.destination); oscillator.onended = () => activeOscillators.delete(oscillator); activeOscillators.add(oscillator); oscillator.start(startAt); oscillator.stop(startAt + 0.2);
+        oscillator.connect(gain).connect(context.destination); oscillator.onended = () => { activeOscillators.delete(oscillator); remaining -= 1; if (remaining === 0) finish(); }; activeOscillators.add(oscillator); oscillator.start(startAt); oscillator.stop(startAt + 0.2);
       }
-      return { ok: true };
-    } catch (error) { return { ok: false, reason: `提示音播放失败：${error?.message || '音频错误'}` }; }
+      return { ok: true, done };
+    } catch (error) { finish(); return { ok: false, reason: `提示音播放失败：${error?.message || '音频错误'}`, done }; }
   }
 
   function speak(text, chime) {
@@ -2241,7 +2243,9 @@ function createOutputAdapter(environment = globalThis) {
   async function preview(chime, canOutput = async () => true) {
     const sound = await canOutput() ? beep(2) : { ok: false, reason: '已取消试听输出。' };
     const speech = chime?.voiceEnabled ? await canOutput() ? speak('提示音试听。', chime) : { status: 'skipped', message: '已取消语音输出。' } : { status: 'off' };
-    return { sound, speech };
+    await (sound.done || Promise.resolve());
+    const { done: _done, ...soundResult } = sound;
+    return { sound: soundResult, speech };
   }
 
   function stop() {
