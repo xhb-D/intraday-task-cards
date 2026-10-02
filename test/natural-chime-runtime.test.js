@@ -81,6 +81,27 @@ test('Coordinator requires unlocked audio before changing shared run intent', as
   coordinator.destroy();
 });
 
+test('Running leader can preview without losing its verified audio ownership', async () => {
+  const storage = makeStorage(); const environment = makeEnvironment({ storage });
+  const coordinator = createCoordinator({ environment, isAudioUnlocked: () => true, isDataCurrent: () => true });
+  coordinator.setAudioUnlocked(true);
+  assert.equal((await coordinator.start()).ok, true);
+  await flush();
+  assert.equal(coordinator.getStatus().leader, true);
+
+  let previewCount = 0;
+  const result = await coordinator.runPreview(async () => {
+    assert.equal(await coordinator.canOutput(), true);
+    previewCount += 1;
+    return { sound: { ok: true }, speech: { status: 'off' } };
+  });
+
+  assert.equal(result.sound.ok, true);
+  assert.equal(previewCount, 1);
+  assert.equal(coordinator.getStatus().leader, true);
+  coordinator.destroy();
+});
+
 test('Two same-origin tabs never both hold the Web Lock; hidden leader releases without pausing intent', async () => {
   const storage = makeStorage(); const locks = makeLockManager(); const BroadcastChannel = makeChannelBus();
   const envA = makeEnvironment({ storage, locks, BroadcastChannel, id: 'a' });
@@ -138,6 +159,42 @@ test('Scheduler emits an early event at its future boundary and a main event onc
   await h.clock.advanceTo(mainAt);
   assert.equal(h.announced.length, 2); assert.equal(h.announced[1][0], 'main');
   h.scheduler.destroy(); assert.equal(h.clock.timeoutCount(), 0); assert.equal(h.clock.intervalCount(), 0);
+});
+
+test('Started coordinator and scheduler deliver the next visible main boundary together', async () => {
+  const start = BEIJING_MIDNIGHT + 4 * 60_000 + 59_000;
+  const clock = makeClock(start); const storage = makeStorage();
+  const environment = makeEnvironment({ storage, clock, id: 'integrated' });
+  const coordinator = createCoordinator({
+    environment,
+    isAudioUnlocked: () => true,
+    isDataCurrent: () => true,
+    timings: { now: clock.now, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: clock.setInterval, clearInterval: clock.clearInterval }
+  });
+  const announced = [];
+  const output = {
+    async announce(...args) {
+      assert.equal(await args[5](), true, 'the visible leader keeps output permission at the boundary');
+      announced.push(args);
+      return { sound: { ok: true }, speech: { status: 'off' }, notification: { status: 'off' } };
+    }
+  };
+  const scheduler = createScheduler({
+    coordinator,
+    output,
+    getChime: () => defaultChime(),
+    environment,
+    timings: { now: clock.now, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout, setInterval: clock.setInterval, clearInterval: clock.clearInterval }
+  });
+
+  coordinator.setAudioUnlocked(true);
+  assert.equal((await coordinator.start()).ok, true);
+  await flush();
+  await clock.advanceTo(BEIJING_MIDNIGHT + 5 * 60_000);
+
+  assert.equal(announced.length, 1);
+  assert.equal(announced[0][0], 'main');
+  scheduler.destroy(); coordinator.destroy();
 });
 
 test('Scheduler omits past early reminders, drops late main events, and isolates a changed slot', async () => {

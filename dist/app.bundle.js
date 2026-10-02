@@ -2485,6 +2485,22 @@ function createCoordinator({ environment = globalThis, isDataCurrent = () => tru
     emit();
   }
   function onPageHide() { visible = false; release('pagehide'); emit(); }
+  async function canOutput() {
+    const preview = ['web-lock-preview', 'lease-preview'].includes(leaderMode);
+    if (!leader || !eligible(preview) || (!preview && intent.intent !== 'running')) return false;
+    try {
+      const latest = readRun();
+      if (latest.generation !== intent.generation || latest.intent !== intent.intent) { intent = latest; release('run-intent-changed'); emit(); return false; }
+    } catch { coordinationError = '无法确认同源报时状态；已停止声音。'; release('runtime-read-failed'); emit(); return false; }
+    if (leaderMode === 'lease' || leaderMode === 'lease-preview') {
+      const lease = validCurrentLease();
+      const verified = Boolean(lease && lease.ownerTabId === tabId && lease.leaseToken === leaderToken && lease.runGeneration === intent.generation && lease.expiresAt > now());
+      if (!verified) { coordinationError ||= '无法验证当前同源租约；已停止声音。'; release('lease-unverified'); emit(); }
+      return verified;
+    }
+    if (leaderMode === 'web-lock-preview') return visible && audioUnlocked && !invalidated && isDataCurrent();
+    return leaderMode === 'web-lock' && visible && audioUnlocked && !invalidated && isDataCurrent();
+  }
   try { if (environment.BroadcastChannel) { channel = new environment.BroadcastChannel(CHIME_CHANNEL); channel.addEventListener?.('message', onMessage); if (!channel.addEventListener) channel.onmessage = onMessage; } } catch { channel = null; }
   try { intent = readRun(); } catch { coordinationError = '无法读取同源报时状态；报时输出已停用。'; }
   environment.document?.addEventListener?.('visibilitychange', onVisibility);
@@ -2542,22 +2558,7 @@ function createCoordinator({ environment = globalThis, isDataCurrent = () => tru
       } catch { return { ok: false, message: '无法验证同源试听权；未播放。' }; }
       finally { release('preview-complete'); }
     },
-    async canOutput() {
-      const preview = ['web-lock-preview', 'lease-preview'].includes(leaderMode);
-      if (!leader || !eligible(preview) || (!preview && intent.intent !== 'running')) return false;
-      try {
-        const latest = readRun();
-        if (latest.generation !== intent.generation || latest.intent !== intent.intent) { intent = latest; release('run-intent-changed'); emit(); return false; }
-      } catch { coordinationError = '无法确认同源报时状态；已停止声音。'; release('runtime-read-failed'); emit(); return false; }
-      if (leaderMode === 'lease' || leaderMode === 'lease-preview') {
-        const lease = validCurrentLease();
-        const verified = Boolean(lease && lease.ownerTabId === tabId && lease.leaseToken === leaderToken && lease.runGeneration === intent.generation && lease.expiresAt > now());
-        if (!verified) { coordinationError ||= '无法验证当前同源租约；已停止声音。'; release('lease-unverified'); emit(); }
-        return verified;
-      }
-      if (leaderMode === 'web-lock-preview') return visible && audioUnlocked && !invalidated && isDataCurrent();
-      return leaderMode === 'web-lock' && visible && audioUnlocked && !invalidated && isDataCurrent();
-    },
+    canOutput,
     destroy() { release('destroy'); clearTimers(); environment.document?.removeEventListener?.('visibilitychange', onVisibility); environment.removeEventListener?.('pagehide', onPageHide); environment.removeEventListener?.('pageshow', onVisibility); environment.removeEventListener?.('focus', onVisibility); environment.removeEventListener?.('storage', onStorage); try { channel?.close(); } catch {} }
   };
 }
