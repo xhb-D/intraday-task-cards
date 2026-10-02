@@ -82,8 +82,12 @@ function riskV2() {
 const emptyIntraday = makeEnvelope(createWorkspace(T0), T0);
 const emptyRisk = { schemaVersion: 2, selectedAccountId: null, accounts: [] };
 const unifiedEmpty = makeUnified(emptyIntraday, emptyRisk, { appearance: 'system' });
+unifiedEmpty.schemaVersion = 1;
+delete unifiedEmpty.sections.chime;
 unifiedEmpty.savedAt = T0;
 const unifiedComplete = makeUnified();
+unifiedComplete.schemaVersion = 1;
+delete unifiedComplete.sections.chime;
 unifiedComplete.sections.intraday = intradayV3();
 unifiedComplete.sections.riskManager = riskV2();
 unifiedComplete.preferences.appearance = 'dark';

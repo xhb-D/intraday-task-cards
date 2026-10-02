@@ -45,7 +45,9 @@ test('external conflict: app binds the lock to all mutation paths, including an 
   assert.match(app, /storageUnsafe = true/);
   assert.match(app, /cardsEl\.inert = policy\.cardsInert/);
   assert.match(app, /historyBody\.inert = policy\.historyInert/);
-  assert.match(app, /risk-dashboard-host'\)\.inert = policy\.cardsInert/);
+  assert.match(app, /risk-dashboard-host'\)\.inert = safeReadOnly/);
+  assert.match(app, /chime-summary-host'\)\.inert = safeReadOnly/);
+  assert.match(app, /chime-settings-host'\)\.inert = safeReadOnly/);
   assert.match(app, /importJson\.disabled = policy\.disableDangerousDataActions/);
   assert.match(app, /retry\.hidden = true; startFresh\.hidden = true/);
   assert.match(app, /if \(pending \|\| corruption \|\| writeLocked\(\) \|\| button\.disabled\) return/);
@@ -53,5 +55,6 @@ test('external conflict: app binds the lock to all mutation paths, including an 
   assert.match(app, /if \(!button \|\| writeLocked\(\) \|\| event\.detail > 1\) return/);
   assert.match(app, /if \(writeLocked\(\)\) \{ announce\('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'\); return; \}/);
   assert.match(app, /expectedRaw: action\.storageRaw/);
-  assert.match(app, /externalConflict = true; saveError = 'Conflict'; storageStatus\(\);/);
+  assert.match(app, /externalConflict = true; saveError = 'Conflict'; chimeCoordinator\?\.invalidate/);
+  assert.match(app, /chimeCoordinator\?\.invalidate\('检测到统一存档外部修改；本页报时已停止。'\); storageStatus\(\);/);
 });

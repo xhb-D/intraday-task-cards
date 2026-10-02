@@ -2,17 +2,20 @@ import { copy, createWorkspace, assertState } from './model.js';
 import { makeEnvelope, migrateEnvelope, validateEnvelope, MAX_FILE_BYTES } from './persistence.js';
 import { DRAW_DOWN_TYPES } from './risk-manager/account-service.js';
 import { migrateState, RISK_MANAGER_SCHEMA_VERSION } from './risk-manager/migration.js';
+import { CHIME_LEGACY_KEY, defaultChime, migrateLegacyChime, validateChime } from './natural-chime/model.js';
 
 export const UNIFIED_KEY = 'trading-control-center:v1';
 export const PRE_IMPORT_KEY = 'trading-control-center:v1:pre-import';
+export const PRE_UPGRADE_KEY = 'trading-control-center:v1:pre-upgrade';
 export const LEGACY_RISK_KEY = 'trading-risk-manager:v1';
 export const LEGACY_APPEARANCE_KEY = 'trading-risk-manager:appearance';
+export const CHIME_LEGACY_RECOVERY_MESSAGE = '旧版报时设置无法识别，报时已停用；原始存档与旧键均未修改。请恢复有效统一备份，或明确选择“忽略旧报时设置并使用默认值继续”。';
 const blankRisk = () => ({ schemaVersion: RISK_MANAGER_SCHEMA_VERSION, selectedAccountId: null, accounts: [] });
 const appearance = value => value === 'light' || value === 'dark' ? value : 'system';
 
-export function makeUnified(intraday = makeEnvelope(createWorkspace()), riskManager = blankRisk(), preferences = {}) {
-  assertState(intraday.state); validateRisk(riskManager);
-  return { app: 'trading-control-center', schemaVersion: 1, savedAt: Date.now(), timezone: 'Asia/Shanghai', revision: 0, sections: { intraday: copy(intraday), riskManager: copy(riskManager) }, preferences: { appearance: appearance(preferences.appearance) } };
+export function makeUnified(intraday = makeEnvelope(createWorkspace()), riskManager = blankRisk(), preferences = {}, chime = defaultChime()) {
+  assertState(intraday.state); validateRisk(riskManager); validateChime(chime);
+  return { app: 'trading-control-center', schemaVersion: 2, savedAt: Date.now(), timezone: 'Asia/Shanghai', revision: 0, sections: { intraday: copy(intraday), riskManager: copy(riskManager), chime: copy(chime) }, preferences: { appearance: appearance(preferences.appearance) } };
 }
 
 const fail = (message, path, code = 'RISK_VALIDATION_ERROR') => { throw Object.assign(new Error(message), { path, code }); };
@@ -82,19 +85,115 @@ export function validateRisk(state) {
   return true;
 }
 
-export function validateUnified(value) {
-  if (!value || value.app !== 'trading-control-center' || value.schemaVersion !== 1 || !value.sections) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
+function exactKeys(value, expected, path) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== expected.length || Object.keys(value).some(key => !expected.includes(key))) throw Object.assign(new Error('统一存档字段缺失或包含未知字段'), { path });
+}
+
+function validateEnvelopeHeader(value, version) {
+  exactKeys(value, ['app', 'schemaVersion', 'savedAt', 'timezone', 'revision', 'sections', 'preferences'], 'envelope');
+  if (!value || value.app !== 'trading-control-center' || value.schemaVersion !== version || !value.sections) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
   if (!Number.isSafeInteger(value.revision) || value.revision < 0) throw Object.assign(new Error('revision 无效'), { path: 'revision' });
   if (!(typeof value.savedAt === 'number' && Number.isFinite(value.savedAt)) || typeof value.timezone !== 'string') throw Object.assign(new Error('统一存档时间或时区无效'), { path: 'envelope' });
-  validateEnvelope(value.sections.intraday); assertState(value.sections.intraday?.state); validateRisk(value.sections.riskManager); if (!value.preferences || !['system', 'light', 'dark'].includes(value.preferences.appearance)) throw Object.assign(new Error('外观偏好无效'), { path: 'preferences.appearance' }); return true;
+}
+
+function validatePreferences(preferences) {
+  exactKeys(preferences, ['appearance'], 'preferences');
+  if (!['system', 'light', 'dark'].includes(preferences.appearance)) throw Object.assign(new Error('外观偏好无效'), { path: 'preferences.appearance' });
+}
+
+function validateUnifiedV1(value) {
+  validateEnvelopeHeader(value, 1);
+  exactKeys(value.sections, ['intraday', 'riskManager'], 'sections');
+  exactKeys(value.sections.intraday, ['app', 'schemaVersion', 'savedAt', 'state', 'timezone'], 'sections.intraday');
+  validateRisk(value.sections.riskManager); validatePreferences(value.preferences);
+  const intraday = migrateEnvelope(value.sections.intraday);
+  return intraday;
+}
+
+export function validateUnified(value) {
+  validateEnvelopeHeader(value, 2);
+  exactKeys(value.sections, ['intraday', 'riskManager', 'chime'], 'sections');
+  exactKeys(value.sections.intraday, ['app', 'schemaVersion', 'savedAt', 'state', 'timezone'], 'sections.intraday');
+  validateEnvelope(value.sections.intraday); assertState(value.sections.intraday?.state); validateRisk(value.sections.riskManager); validateChime(value.sections.chime); validatePreferences(value.preferences); return true;
 }
 
 export function migrateUnified(value) {
-  if (!value || value.app !== 'trading-control-center' || value.schemaVersion !== 1 || !value.sections) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
-  if (!Number.isSafeInteger(value.revision) || value.revision < 0) throw Object.assign(new Error('revision 无效'), { path: 'revision' });
-  if (!(typeof value.savedAt === 'number' && Number.isFinite(value.savedAt)) || typeof value.timezone !== 'string') throw Object.assign(new Error('统一存档时间或时区无效'), { path: 'envelope' });
-  const next = copy(value); const migration = migrateEnvelope(next.sections.intraday); next.sections.intraday = migration.envelope; validateUnified(next);
-  return { state: next, migrated: migration.migrated, migratedAt: migration.migratedAt || null, audits: migration.audits || [] };
+  if (value?.schemaVersion === 2) { validateUnified(value); return { state: copy(value), migrated: false, migration: null, audits: [] }; }
+  if (value?.schemaVersion !== 1) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
+  const migration = validateUnifiedV1(value);
+  const next = makeUnifiedV1Upgrade(value, migration, defaultChime({ status: 'unified-v1-import-default', sourceVersion: null }));
+  return { state: next, migrated: true, migration, migratedAt: migration.migratedAt || null, audits: migration.audits || [] };
+}
+
+function makeUnifiedV1Upgrade(value, intradayMigration, chime) {
+  const next = copy(value);
+  next.schemaVersion = 2;
+  next.sections.intraday = copy(intradayMigration.envelope);
+  next.sections.chime = copy(chime);
+  validateUnified(next);
+  return next;
+}
+
+function commitLocalV1Upgrade(storage, priorRaw, state) {
+  if (storage.getItem(UNIFIED_KEY) !== priorRaw) throw Object.assign(new Error('统一存档在迁移期间已被其他页面修改'), { code: 'REVISION_CONFLICT' });
+  try {
+    storage.setItem(PRE_UPGRADE_KEY, priorRaw);
+    if (storage.getItem(PRE_UPGRADE_KEY) !== priorRaw) throw new Error('pre-upgrade snapshot mismatch');
+  } catch (cause) {
+    throw Object.assign(new Error('统一存档升级前快照写入或回读失败'), { code: 'PRE_UPGRADE_SNAPSHOT_FAILED', cause });
+  }
+  if (storage.getItem(UNIFIED_KEY) !== priorRaw) throw Object.assign(new Error('统一存档在快照后已被其他页面修改'), { code: 'REVISION_CONFLICT' });
+
+  const next = copy(state);
+  next.revision += 1;
+  const nextRaw = JSON.stringify(next);
+  try {
+    storage.setItem(UNIFIED_KEY, nextRaw);
+    if (storage.getItem(UNIFIED_KEY) !== nextRaw) throw new Error('canonical read-back mismatch');
+    validateUnified(JSON.parse(nextRaw));
+    return next;
+  } catch (cause) {
+    let rolledBack = false;
+    try {
+      const currentRaw = storage.getItem(UNIFIED_KEY);
+      if (currentRaw === priorRaw) rolledBack = true;
+      else if (currentRaw === nextRaw) {
+        storage.setItem(UNIFIED_KEY, priorRaw);
+        rolledBack = storage.getItem(UNIFIED_KEY) === priorRaw;
+      }
+    } catch { rolledBack = false; }
+    throw Object.assign(new Error(rolledBack ? '统一存档升级失败，原始存档已恢复' : '统一存档升级失败且无法确认回滚；已进入恢复保护'), {
+      code: rolledBack ? 'CANONICAL_UPGRADE_FAILED' : 'UPGRADE_ROLLBACK_FAILED', cause, rolledBack
+    });
+  }
+}
+
+function migrateLocalUnifiedV1(storage, priorRaw, value, legacyRaw) {
+  const intradayMigration = validateUnifiedV1(value);
+  let chime;
+  try {
+    chime = legacyRaw === null ? defaultChime() : migrateLegacyChime(JSON.parse(legacyRaw));
+  } catch (error) {
+    const display = makeUnifiedV1Upgrade(value, intradayMigration, defaultChime({ status: 'recovery-default', sourceVersion: null }));
+    return { state: display, source: 'chime-recovery', error, raw: priorRaw, legacyRaw, migration: intradayMigration };
+  }
+  const candidate = makeUnifiedV1Upgrade(value, intradayMigration, chime);
+  const state = commitLocalV1Upgrade(storage, priorRaw, candidate);
+  return { state, source: 'canonical-migrated', migration: intradayMigration, raw: JSON.stringify(state), legacyRaw };
+}
+
+export function continueLegacyChimeRecovery(storage, { expectedRaw, expectedLegacyRaw } = {}) {
+  if (!storage?.getItem || !storage?.setItem) throw Object.assign(new Error('本地存储不可用'), { code: 'STORAGE_UNAVAILABLE' });
+  const priorRaw = storage.getItem(UNIFIED_KEY);
+  if (priorRaw !== expectedRaw) throw Object.assign(new Error('确认忽略期间统一存档已被修改'), { code: 'REVISION_CONFLICT' });
+  const legacyRaw = storage.getItem(CHIME_LEGACY_KEY);
+  if (legacyRaw !== expectedLegacyRaw) throw Object.assign(new Error('确认忽略期间旧报时设置已被修改'), { code: 'REVISION_CONFLICT' });
+  let value;
+  try { value = JSON.parse(priorRaw); } catch (cause) { throw Object.assign(new Error('统一存档已无法解析'), { code: 'RECOVERY_SOURCE_CHANGED', cause }); }
+  const intradayMigration = validateUnifiedV1(value);
+  const candidate = makeUnifiedV1Upgrade(value, intradayMigration, defaultChime({ status: 'recovery-default', sourceVersion: null }));
+  const state = commitLocalV1Upgrade(storage, priorRaw, candidate);
+  return { state, migration: intradayMigration, raw: JSON.stringify(state), legacyRaw };
 }
 
 export function classifyBackup(value) {
@@ -130,7 +229,18 @@ export function loadUnified(storage) {
   if (!storage?.getItem) return { state: makeUnified(), source: 'storage-unavailable' };
   let raw; try { raw = storage.getItem(UNIFIED_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
   if (raw !== null) {
-    try { const parsed = JSON.parse(raw); const result = migrateUnified(parsed); return { state: result.state, source: result.migrated ? 'canonical-migrated' : 'canonical', migration: result }; }
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.schemaVersion === 2) { validateUnified(parsed); return { state: copy(parsed), source: 'canonical', raw }; }
+      if (parsed?.schemaVersion === 1) {
+        validateUnifiedV1(parsed);
+        let legacyRaw;
+        try { legacyRaw = storage.getItem(CHIME_LEGACY_KEY); }
+        catch (error) { return { state: null, source: 'recovery-required', error, raw }; }
+        return migrateLocalUnifiedV1(storage, raw, parsed, legacyRaw);
+      }
+      throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
+    }
     catch (error) { return { state: null, source: 'recovery-required', error, raw }; }
   }
   let riskRaw; let preference;
@@ -150,9 +260,25 @@ export function commitUnified(storage, state, { preImport = false, expectedRaw }
     try { storage.setItem(PRE_IMPORT_KEY, prior ?? ''); } catch (cause) { throw Object.assign(new Error('导入前快照写入失败'), { code: 'PRE_IMPORT_SNAPSHOT_FAILED', cause }); }
     try { if (storage.getItem(PRE_IMPORT_KEY) !== (prior ?? '')) throw new Error('导入前快照回读失败'); } catch (cause) { throw Object.assign(new Error('导入前快照回读失败'), { code: 'PRE_IMPORT_SNAPSHOT_FAILED', cause }); }
   }
-  try { storage.setItem(UNIFIED_KEY, raw); } catch (cause) { throw Object.assign(new Error('统一存档写入失败'), { code: 'CANONICAL_WRITE_FAILED', cause }); }
-  let stored;
-  try { stored = storage.getItem(UNIFIED_KEY); } catch (cause) { throw Object.assign(new Error('统一存档回读失败'), { code: 'POST_WRITE_MISMATCH', cause }); }
-  if (stored !== raw) throw Object.assign(new Error('统一存档回读失败；已安全停止继续修改'), { code: 'POST_WRITE_MISMATCH' });
-  return next;
+  try {
+    storage.setItem(UNIFIED_KEY, raw);
+    const stored = storage.getItem(UNIFIED_KEY);
+    if (stored !== raw) throw new Error('统一存档写后回读不一致');
+    validateUnified(JSON.parse(stored));
+    return next;
+  } catch (cause) {
+    let rolledBack = false;
+    try {
+      const currentRaw = storage.getItem(UNIFIED_KEY);
+      if (currentRaw === prior) rolledBack = true;
+      else if (currentRaw === raw) {
+        if (prior === null) storage.removeItem(UNIFIED_KEY);
+        else storage.setItem(UNIFIED_KEY, prior);
+        rolledBack = storage.getItem(UNIFIED_KEY) === prior;
+      }
+    } catch { rolledBack = false; }
+    throw Object.assign(new Error(rolledBack ? '统一存档写入失败；原始存档已恢复' : '统一存档写入失败且无法确认回滚；已停止继续修改'), {
+      code: rolledBack ? 'CANONICAL_WRITE_FAILED' : 'POST_WRITE_MISMATCH', cause, rolledBack
+    });
+  }
 }

@@ -133,8 +133,12 @@ test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态�
 test('production bundle: 折叠与隐藏点击路径可执行，且不会写入交易状态', () => {
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
   const elements = new Map();
-  const element = () => ({ hidden: true, disabled: false, inert: false, textContent: '', innerHTML: '', value: '', dataset: {}, addEventListener(type, listener) { this.listeners ??= {}; this.listeners[type] = listener; }, querySelector() { return element(); }, setAttribute() {}, focus() { this.focused = true; }, showModal() {}, close() {} });
-  const ids = ['cards', 'commodity-dashboard', 'history-body', 'confirm-dialog', 'data-dialog', 'announcer', 'save-status', 'storage-banner', 'storage-message', 'storage-retry', 'start-fresh', 'import-json', 'import-file', 'dialog-confirm', 'restore-note', 'export-raw', 'export-json', 'export-today', 'export-all', 'history-count', 'history-empty', 'history-table', 'dialog-title', 'dialog-message', 'dialog-warning', 'dialog-cancel', 'data-feedback', 'data-tools', 'error-banner'];
+  const element = () => {
+    const children = [];
+    return { hidden: true, disabled: false, inert: false, textContent: '', innerHTML: '', value: '', dataset: {}, options: children, children, style: { setProperty() {} }, classList: { add() {} },
+      addEventListener(type, listener) { this.listeners ??= {}; this.listeners[type] = listener; }, querySelector() { return element(); }, querySelectorAll() { return []; }, setAttribute() {}, appendChild(child) { children.push(child); return child; }, append(...nodes) { children.push(...nodes); }, replaceChildren(...nodes) { children.splice(0, children.length, ...nodes); }, focus() { this.focused = true; }, showModal() {}, close() {} };
+  };
+  const ids = ['cards', 'commodity-dashboard', 'history-body', 'confirm-dialog', 'data-dialog', 'announcer', 'save-status', 'storage-banner', 'storage-message', 'storage-retry', 'start-fresh', 'ignore-legacy-chime', 'chime-summary-host', 'chime-settings-host', 'risk-dashboard-host', 'risk-manager-host', 'appearance-select', 'home-top-region', 'import-json', 'import-file', 'dialog-confirm', 'restore-note', 'export-raw', 'export-chime-raw', 'export-json', 'export-today', 'export-all', 'history-count', 'history-empty', 'history-table', 'dialog-title', 'dialog-message', 'dialog-warning', 'dialog-cancel', 'data-feedback', 'data-tools', 'error-banner'];
   ids.forEach(id => elements.set(`#${id}`, element()));
   const focusTarget = element();
   const document = {
@@ -144,7 +148,7 @@ test('production bundle: 折叠与隐藏点击路径可执行，且不会写入�
   };
   let writes = 0; const records = new Map();
   const localStorage = { getItem: key => records.get(key) ?? null, setItem: (key, value) => { writes += 1; records.set(key, String(value)); } };
-  const context = { document, localStorage, console: { error() {} }, setInterval() {}, setTimeout() {}, URL: { createObjectURL: () => '', revokeObjectURL() {} }, Blob, Intl, Date, JSON, Error, SyntaxError };
+  const context = { document, localStorage, console: { error() {} }, setInterval() { return 1; }, clearInterval() {}, setTimeout() { return 1; }, clearTimeout() {}, URL: { createObjectURL: () => '', revokeObjectURL() {} }, Blob, Intl, Date, JSON, Error, SyntaxError };
   context.window = { addEventListener() {} };
   vm.runInNewContext(bundle, context);
   const cards = elements.get('#cards'); const initialWrites = writes;

@@ -1,20 +1,20 @@
 # 统一交易控制中心 — Business Spec
 
-- 状态：APPROVED / IMPLEMENTATION-AUTHORIZED
-- 版本：2.0
-- 日期：2026-09-28
+- 状态：APPROVED SPECIFICATION / 本次统一 schema-v2 与 Natural Chime 实现已获明确授权
+- 版本：2.1
+- 日期：2026-10-02
 - 决策路径：REUSE_COMPONENTS
-- 修订：在既有 Vanilla JavaScript、纯函数状态模型、统一存档和风险管理器边界内，执行已授权的日内状态核心规则升级；风险管理器数据、公式和业务规则不变。
+- 修订：增加统一 envelope schema 2 与 Natural Chime 数据域；日内 V4、风险管理器数据/公式/业务规则及既有独立备份边界保持不变。
 
 ## 1. 产品目标
 
-把“日内交易状态卡”和“Trading Risk Manager”整合为一个浏览器工具，使用户在同一个公开网址中完成：
+把“日内交易状态卡”、“Trading Risk Manager”和自然周期报时整合为一个浏览器工具，使用户在同一个公开网址中完成：
 
 1. 查看账户风险结论；
 2. 维护 GC、CL、ES 日内交易状态；
 3. 进入完整风险管理功能并返回首页；
 4. 用一份完整 JSON 备份和恢复全部本地数据；
-5. 使用当前统一 JSON 恢复完整数据，并继续兼容风险管理器独立备份。
+5. 使用统一 JSON 备份/恢复日内、风险管理器、报时和外观数据，并继续兼容风险管理器独立备份。
 
 该产品是手动记录与风险约束工具，不是行情、信号或订单系统。
 
@@ -34,10 +34,11 @@
 
 ### 2.2 备份与恢复
 
-- 默认完整导出：一份 JSON，包含状态卡、风险管理器和外观偏好。
+- 默认完整导出：一份 schema-2 JSON，包含 `sections.intraday`、`sections.riskManager`、`sections.chime` 和 `preferences`。
 - 分项导出：风险管理器 JSON、现有 Markdown。
-- 完整导入：同时替换两个数据域和外观偏好。
-- 风险管理器独立导入：只替换风险域，状态卡与外观保持不变。
+- 完整导入 schema 2：严格校验所有 section 和 preferences；确认后一次替换全部数据域和外观偏好。
+- 完整导入 schema 1：执行既有适用的日内嵌套迁移并补入确定性报时默认值，预览影响并确认后，在 revision guard 下单次提交并回读验证；不得读取本机 legacy 报时键。
+- 风险管理器独立导入：只替换风险域，日内、报时与外观保持不变。
 - 旧版独立日内状态卡 JSON：明确拒绝；当前内存、界面和 localStorage 均不得变化。
 - 任何导入都必须先预览影响范围并由用户确认。
 
@@ -46,13 +47,16 @@
 - 公开站点首次启动时，如没有统一存档，只读取同一站点 origin 下的旧风险与外观键。
 - 旧风险数据可迁移、校验并写入新的统一存档；旧独立状态卡键不读取、不迁移。
 - 已存在统一存档时，不得自动再次吸收旧键。
+- 当前统一 envelope schema 1 自动、确定性升级到 schema 2，沿用 canonical key `trading-control-center:v1`；只新增并验证报时 section，已有 intraday/risk/preferences 必须值级保持。
+- 仅已核实的扁平 `natural-chime-settings` V1（version 缺失或数值 1）可在首次本地 unified-v1 canonical → unified-v2 迁移时吸收；旧键显式 `version: 2` 或其他未知/损坏/不可表示的值走统一只读恢复，不能猜测或改写。这里的 legacy chime version 与统一 envelope schema 2 无关。schema-2 canonical 永远优先，不重复读取/吸收；legacy key 保留且不清理。
+- local bootstrap 无 unified-v1 canonical 时完全忽略 `natural-chime-settings`（不读取、不检查、不校验、不吸收），直接使用冻结报时默认值。统一 V2 canonical 和 V1 文件导入也不读取该本机键。
 
 ## 3. MVP 功能范围
 
 ### 3.1 单入口与内部导航
 
 - 唯一入口为仓库根目录 `index.html`。
-- 首页路由为 `#/home`，完整风险管理路由为 `#/risk`。
+- 首页路由为 `#/home`，完整风险管理路由为 `#/risk`，报时设置路由为 `#/chime`。
 - 页面内提供明确的“进入 Trading Risk Manager”和“返回日内交易状态卡”入口。
 - 浏览器返回、前进和硬刷新后应保持正确视图。
 
@@ -61,7 +65,7 @@
 - 顶部展示当前选中账户的风险结论、下一单最大允许 1R 和日初 Base R。
 - 展示账户横向列表、添加账户、更新余额、撤销上一条余额更新、编辑账户。
 - 账户数量增加时保留滚动、查看全部和移动端选择器。
-- 下方保持 GC → CL → ES 三张相互隔离的状态卡及其当前已验收交互。
+- 风险摘要左侧现有含义、数值和计算不变；其右侧展示 Natural Chime 摘要；下方保持 GC → CL → ES 三张相互隔离的状态卡及其当前已验收交互。
 - 每张卡的可见顺序固定为：当前偏见 → 市场结构 → 交易方向 → 当前机会 → 当前状态。
 
 ### 3.3 完整风险管理视图
@@ -73,8 +77,8 @@
 ### 3.4 外观
 
 - 全站统一支持跟随系统、浅色、深色。
-- 两个视图使用同一选择值和视觉变量。
-- 完整备份包含外观偏好。
+- 首页、风险和报时三个视图使用同一选择值和视觉变量。
+- 完整备份包含外观偏好和全部五个报时周期的独立暂停状态。
 - 导入风险管理器独立备份不改变外观。
 
 ## 4. 冻结业务规则
@@ -150,8 +154,9 @@
 - 不把真实账户名、余额或备份提交到 Git。
 - 数据只存在于浏览器本地和用户主动下载的文件。
 - 新统一存档是唯一写入源；旧风险存储只作受限迁移来源，旧独立日内状态卡存储不再参与恢复。
+- 当前 canonical key 仍为 `trading-control-center:v1`；其 JSON 顶层 schema 为 2，完整备份包含 intraday、riskManager、chime 和 preferences。旧 `natural-chime-settings` 仅作一次性迁移来源，永不删除。
 - 备份格式识别不得依赖文件名。
-- 损坏或不支持的数据必须保留原始内容并进入恢复保护状态，不得用空白数据覆盖。
+- 损坏或不支持的 canonical/相关迁移输入必须保留原始内容并进入恢复保护状态，不得用空白数据覆盖。`natural-chime-settings` 只有在现有 unified-v1 canonical 首次升级时才是相关输入；无 canonical bootstrap 忽略该键并使用默认 chime，不改变旧键。
 - 日内 V4 新记录允许关键位置为空/缺省；旧记录的关键位置必须按原值保留。
 
 ## 6. 失败处理
@@ -159,6 +164,8 @@
 - 存储不可用：页面仍可使用内存状态并允许导出，明确提示尚未保存。
 - 导入失败：当前内存、界面和本地存档均不改变。
 - V3 统一存档迁移失败：进入恢复保护，保留原始统一 JSON；不得部分写入迁移结果。
+- existing local unified-v1 canonical→schema-2 迁移遇到损坏/未知 legacy：保留 canonical 与 legacy 原始字节，已验证的 intraday/risk 只读展示，锁定所有写入并禁用报时；只显示以下唯一提示：`旧版报时设置无法识别，报时已停用；原始存档与旧键均未修改。请恢复有效统一备份，或明确选择“忽略旧报时设置并使用默认值继续”。` 用户明确确认忽略后，以冻结默认值继续同一受 revision guard 的迁移；legacy key 不改写。
+- 完整导入 schema 1/2 遵循对应的预览、确认、快照、revision/raw guard、单次 commit 和回读流程；风险分项导入只改 riskManager。
 - 回读不一致或其他标签页写入：锁定所有修改与危险恢复操作，导出仍可用。
 - 旧风险存储损坏：不得自动生成统一存档；显示风险域诊断和恢复选择。
 - 新旧存档同时存在且内容可能分叉：统一存档优先，不自动覆盖。
@@ -188,4 +195,4 @@
 
 ## 9. 实现门槛
 
-本 Business Spec 与对应 Architecture Spec 已在已完成的 Prior-Art / Reuse Audit 和 Chat/Human Decision Gate 后获得实现授权。实现不得自行改变上述冻结内容；若发现规范矛盾、无法安全迁移或必须新增业务判断，必须停止并返回 Chat/Human Decision Gate。
+日内 V4 规则已有其先前实现授权；本次统一 schema-v2 与 Natural Chime 实现亦已获用户明确授权。不得自行改变上述冻结内容或扩大范围；禁止 commit、Push 和部署。若发现规范矛盾、无法安全迁移或必须新增业务判断，必须停止并返回 Chat/Human Decision Gate。

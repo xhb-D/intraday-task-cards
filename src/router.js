@@ -1,7 +1,7 @@
-export const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk' });
+export const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk', chime: '#/chime' });
 
 export function parseRoute(hash) {
-  return hash === ROUTES.risk ? 'risk' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
+  return hash === ROUTES.risk ? 'risk' : hash === ROUTES.chime ? 'chime' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
 }
 
 export function normalizeRoute(hash) {
@@ -22,6 +22,6 @@ export function applyRoute(root, hash = globalThis.location?.hash || '') {
     const heading = root?.querySelector?.('[data-route-error-heading]');
     heading?.focus?.();
   }
-  if (globalThis.document) document.title = active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
+  if (globalThis.document) document.title = active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'chime' ? '自然周期报时 · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
   return { route: active, unknown: route === 'unknown' };
 }

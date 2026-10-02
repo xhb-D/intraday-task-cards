@@ -1408,6 +1408,108 @@ function migrateWorkspace(legacyState, migrationTime) {
 }
 
 
+const CHIME_SCHEMA_VERSION = 1;
+const CHIME_LEGACY_KEY = 'natural-chime-settings';
+const CHIME_PRESETS = Object.freeze(['3', '5', '15', '30', '60', '240', 'custom']);
+const SLOT_IDS = Object.freeze(['slot-1', 'slot-2', 'slot-3', 'slot-4', 'slot-5']);
+const LEGACY_IMPORT_STATUSES = Object.freeze(['defaults', 'legacy-v1', 'unified-v1-import-default', 'recovery-default']);
+const chimeOwn = (object, key) => Object.prototype.hasOwnProperty.call(object, key);
+const chimeFail = (message, path = 'sections.chime') => { throw Object.assign(new Error(message), { code: 'CHIME_VALIDATION_ERROR', path }); };
+const chimeExactKeys = (value, allowed, path) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) chimeFail('对象结构无效', path);
+  const keys = Object.keys(value);
+  if (keys.some(key => !allowed.includes(key)) || allowed.some(key => !chimeOwn(value, key))) chimeFail('包含未知或缺少必需字段', path);
+};
+const integer = (value, min, max, path) => {
+  if (!Number.isInteger(value) || value < min || value > max) chimeFail('整数超出允许范围', path);
+};
+
+function maxEarlySeconds(minutes) { return Math.min(600, minutes * 60 - 1); }
+function periodMinutes(slot) {
+  if (slot.preset === 'custom') return slot.minutes;
+  return Number(slot.preset);
+}
+
+function defaultChime(legacyImport = { status: 'defaults', sourceVersion: null }) {
+  return {
+    schemaVersion: CHIME_SCHEMA_VERSION,
+    slots: SLOT_IDS.map((slotId, index) => ({ slotId, enabled: index === 0, paused: false, preset: '5', minutes: 5, earlySeconds: 30 })),
+    voiceEnabled: true,
+    selectedVoiceURI: '',
+    notifyEnabled: false,
+    legacyImport: { ...legacyImport }
+  };
+}
+
+function validateChime(value, path = 'sections.chime') {
+  chimeExactKeys(value, ['schemaVersion', 'slots', 'voiceEnabled', 'selectedVoiceURI', 'notifyEnabled', 'legacyImport'], path);
+  if (value.schemaVersion !== CHIME_SCHEMA_VERSION) chimeFail('Natural Chime section 版本不受支持', `${path}.schemaVersion`);
+  if (!Array.isArray(value.slots) || value.slots.length !== 5) chimeFail('必须恰有五个周期槽位', `${path}.slots`);
+  value.slots.forEach((slot, index) => {
+    const slotPath = `${path}.slots.${index}`;
+    chimeExactKeys(slot, ['slotId', 'enabled', 'paused', 'preset', 'minutes', 'earlySeconds'], slotPath);
+    if (slot.slotId !== SLOT_IDS[index]) chimeFail('周期槽位顺序或 ID 无效', `${slotPath}.slotId`);
+    if (typeof slot.enabled !== 'boolean' || typeof slot.paused !== 'boolean') chimeFail('启用和暂停字段必须为布尔值', slotPath);
+    if (!CHIME_PRESETS.includes(slot.preset)) chimeFail('周期预设无效', `${slotPath}.preset`);
+    integer(slot.minutes, 1, 1440, `${slotPath}.minutes`);
+    integer(slot.earlySeconds, 0, maxEarlySeconds(periodMinutes(slot)), `${slotPath}.earlySeconds`);
+  });
+  if (typeof value.voiceEnabled !== 'boolean' || typeof value.notifyEnabled !== 'boolean' || typeof value.selectedVoiceURI !== 'string') chimeFail('语音或通知偏好无效', path);
+  chimeExactKeys(value.legacyImport, ['status', 'sourceVersion'], `${path}.legacyImport`);
+  if (!LEGACY_IMPORT_STATUSES.includes(value.legacyImport.status) || ![null, 1].includes(value.legacyImport.sourceVersion)) chimeFail('legacyImport 标记无效', `${path}.legacyImport`);
+  if (value.legacyImport.status === 'legacy-v1' && value.legacyImport.sourceVersion !== 1) chimeFail('legacy-v1 来源版本无效', `${path}.legacyImport.sourceVersion`);
+  if (['defaults', 'unified-v1-import-default', 'recovery-default'].includes(value.legacyImport.status) && value.legacyImport.sourceVersion !== null) chimeFail('默认来源版本必须为空', `${path}.legacyImport.sourceVersion`);
+  return true;
+}
+
+function updateSlot(chime, slotId, patch) {
+  validateChime(chime);
+  const index = SLOT_IDS.indexOf(slotId);
+  if (index < 0) chimeFail('周期槽位不存在', `slots.${slotId}`);
+  const next = structuredCopy(chime);
+  next.slots[index] = { ...next.slots[index], ...patch };
+  validateChime(next);
+  return next;
+}
+
+function updateChimePreference(chime, key, value) {
+  validateChime(chime);
+  if (!['voiceEnabled', 'selectedVoiceURI', 'notifyEnabled'].includes(key)) chimeFail('偏好字段不可修改', key);
+  const next = structuredCopy(chime); next[key] = value; validateChime(next); return next;
+}
+
+function structuredCopy(value) { return JSON.parse(JSON.stringify(value)); }
+function legacyIntegerString(value, path, fallback) {
+  if (value === undefined) return fallback;
+  const parsed = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!Number.isInteger(parsed)) chimeFail('旧周期数值无效', path);
+  return parsed;
+}
+
+function migrateLegacyChime(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) chimeFail('旧报时设置不是对象');
+  const version = value.version === undefined ? 1 : value.version;
+  if (version !== 1) chimeFail('旧报时设置版本未知', 'legacy.version');
+  const allowed = ['version', 'preset', 'minutes', 'early', 'voice', 'notify'];
+  if (Object.keys(value).some(key => !allowed.includes(key))) chimeFail('旧版报时设置包含未知字段');
+
+  const preset = chimeOwn(value, 'preset') ? value.preset : '5';
+  if (!CHIME_PRESETS.includes(preset)) chimeFail('旧周期预设无效', 'legacy.preset');
+  const minutes = legacyIntegerString(value.minutes, 'legacy.minutes', 5);
+  const earlySeconds = legacyIntegerString(value.early, 'legacy.early', 30);
+  integer(minutes, 1, 1440, 'legacy.minutes');
+  integer(earlySeconds, 0, 60, 'legacy.early');
+
+  const base = defaultChime({ status: 'legacy-v1', sourceVersion: 1 });
+  base.slots[0] = { ...base.slots[0], enabled: true, preset, minutes, earlySeconds };
+  base.voiceEnabled = value.voice === undefined ? true : value.voice;
+  base.notifyEnabled = value.notify === undefined ? false : value.notify;
+  if (typeof base.voiceEnabled !== 'boolean' || typeof base.notifyEnabled !== 'boolean') chimeFail('旧语音/通知偏好无效', 'legacy');
+  validateChime(base);
+  return base;
+}
+
+
 const messageOf = error => error instanceof Error ? error.message : String(error || 'Unknown error');
 
 function diagnosticFromError(error, { phase = 'runtime', relevantSymbol = null, validationPath = null, errorCode: suppliedErrorCode = null } = {}) {
@@ -1504,14 +1606,16 @@ const cell = value => String(value).replace(/\|/g, '&#124;').replace(/[\r\n]+/g,
 
 const UNIFIED_KEY = 'trading-control-center:v1';
 const PRE_IMPORT_KEY = 'trading-control-center:v1:pre-import';
+const PRE_UPGRADE_KEY = 'trading-control-center:v1:pre-upgrade';
 const LEGACY_RISK_KEY = 'trading-risk-manager:v1';
 const LEGACY_APPEARANCE_KEY = 'trading-risk-manager:appearance';
+const CHIME_LEGACY_RECOVERY_MESSAGE = '旧版报时设置无法识别，报时已停用；原始存档与旧键均未修改。请恢复有效统一备份，或明确选择“忽略旧报时设置并使用默认值继续”。';
 const blankRisk = () => ({ schemaVersion: RISK_MANAGER_SCHEMA_VERSION, selectedAccountId: null, accounts: [] });
 const appearance = value => value === 'light' || value === 'dark' ? value : 'system';
 
-function makeUnified(intraday = makeEnvelope(createWorkspace()), riskManager = blankRisk(), preferences = {}) {
-  assertState(intraday.state); validateRisk(riskManager);
-  return { app: 'trading-control-center', schemaVersion: 1, savedAt: Date.now(), timezone: 'Asia/Shanghai', revision: 0, sections: { intraday: copy(intraday), riskManager: copy(riskManager) }, preferences: { appearance: appearance(preferences.appearance) } };
+function makeUnified(intraday = makeEnvelope(createWorkspace()), riskManager = blankRisk(), preferences = {}, chime = defaultChime()) {
+  assertState(intraday.state); validateRisk(riskManager); validateChime(chime);
+  return { app: 'trading-control-center', schemaVersion: 2, savedAt: Date.now(), timezone: 'Asia/Shanghai', revision: 0, sections: { intraday: copy(intraday), riskManager: copy(riskManager), chime: copy(chime) }, preferences: { appearance: appearance(preferences.appearance) } };
 }
 
 const fail = (message, path, code = 'RISK_VALIDATION_ERROR') => { throw Object.assign(new Error(message), { path, code }); };
@@ -1581,19 +1685,115 @@ function validateRisk(state) {
   return true;
 }
 
-function validateUnified(value) {
-  if (!value || value.app !== 'trading-control-center' || value.schemaVersion !== 1 || !value.sections) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
+function exactKeys(value, expected, path) {
+  if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).length !== expected.length || Object.keys(value).some(key => !expected.includes(key))) throw Object.assign(new Error('统一存档字段缺失或包含未知字段'), { path });
+}
+
+function validateEnvelopeHeader(value, version) {
+  exactKeys(value, ['app', 'schemaVersion', 'savedAt', 'timezone', 'revision', 'sections', 'preferences'], 'envelope');
+  if (!value || value.app !== 'trading-control-center' || value.schemaVersion !== version || !value.sections) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
   if (!Number.isSafeInteger(value.revision) || value.revision < 0) throw Object.assign(new Error('revision 无效'), { path: 'revision' });
   if (!(typeof value.savedAt === 'number' && Number.isFinite(value.savedAt)) || typeof value.timezone !== 'string') throw Object.assign(new Error('统一存档时间或时区无效'), { path: 'envelope' });
-  validateEnvelope(value.sections.intraday); assertState(value.sections.intraday?.state); validateRisk(value.sections.riskManager); if (!value.preferences || !['system', 'light', 'dark'].includes(value.preferences.appearance)) throw Object.assign(new Error('外观偏好无效'), { path: 'preferences.appearance' }); return true;
+}
+
+function validatePreferences(preferences) {
+  exactKeys(preferences, ['appearance'], 'preferences');
+  if (!['system', 'light', 'dark'].includes(preferences.appearance)) throw Object.assign(new Error('外观偏好无效'), { path: 'preferences.appearance' });
+}
+
+function validateUnifiedV1(value) {
+  validateEnvelopeHeader(value, 1);
+  exactKeys(value.sections, ['intraday', 'riskManager'], 'sections');
+  exactKeys(value.sections.intraday, ['app', 'schemaVersion', 'savedAt', 'state', 'timezone'], 'sections.intraday');
+  validateRisk(value.sections.riskManager); validatePreferences(value.preferences);
+  const intraday = migrateEnvelope(value.sections.intraday);
+  return intraday;
+}
+
+function validateUnified(value) {
+  validateEnvelopeHeader(value, 2);
+  exactKeys(value.sections, ['intraday', 'riskManager', 'chime'], 'sections');
+  exactKeys(value.sections.intraday, ['app', 'schemaVersion', 'savedAt', 'state', 'timezone'], 'sections.intraday');
+  validateEnvelope(value.sections.intraday); assertState(value.sections.intraday?.state); validateRisk(value.sections.riskManager); validateChime(value.sections.chime); validatePreferences(value.preferences); return true;
 }
 
 function migrateUnified(value) {
-  if (!value || value.app !== 'trading-control-center' || value.schemaVersion !== 1 || !value.sections) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
-  if (!Number.isSafeInteger(value.revision) || value.revision < 0) throw Object.assign(new Error('revision 无效'), { path: 'revision' });
-  if (!(typeof value.savedAt === 'number' && Number.isFinite(value.savedAt)) || typeof value.timezone !== 'string') throw Object.assign(new Error('统一存档时间或时区无效'), { path: 'envelope' });
-  const next = copy(value); const migration = migrateEnvelope(next.sections.intraday); next.sections.intraday = migration.envelope; validateUnified(next);
-  return { state: next, migrated: migration.migrated, migratedAt: migration.migratedAt || null, audits: migration.audits || [] };
+  if (value?.schemaVersion === 2) { validateUnified(value); return { state: copy(value), migrated: false, migration: null, audits: [] }; }
+  if (value?.schemaVersion !== 1) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
+  const migration = validateUnifiedV1(value);
+  const next = makeUnifiedV1Upgrade(value, migration, defaultChime({ status: 'unified-v1-import-default', sourceVersion: null }));
+  return { state: next, migrated: true, migration, migratedAt: migration.migratedAt || null, audits: migration.audits || [] };
+}
+
+function makeUnifiedV1Upgrade(value, intradayMigration, chime) {
+  const next = copy(value);
+  next.schemaVersion = 2;
+  next.sections.intraday = copy(intradayMigration.envelope);
+  next.sections.chime = copy(chime);
+  validateUnified(next);
+  return next;
+}
+
+function commitLocalV1Upgrade(storage, priorRaw, state) {
+  if (storage.getItem(UNIFIED_KEY) !== priorRaw) throw Object.assign(new Error('统一存档在迁移期间已被其他页面修改'), { code: 'REVISION_CONFLICT' });
+  try {
+    storage.setItem(PRE_UPGRADE_KEY, priorRaw);
+    if (storage.getItem(PRE_UPGRADE_KEY) !== priorRaw) throw new Error('pre-upgrade snapshot mismatch');
+  } catch (cause) {
+    throw Object.assign(new Error('统一存档升级前快照写入或回读失败'), { code: 'PRE_UPGRADE_SNAPSHOT_FAILED', cause });
+  }
+  if (storage.getItem(UNIFIED_KEY) !== priorRaw) throw Object.assign(new Error('统一存档在快照后已被其他页面修改'), { code: 'REVISION_CONFLICT' });
+
+  const next = copy(state);
+  next.revision += 1;
+  const nextRaw = JSON.stringify(next);
+  try {
+    storage.setItem(UNIFIED_KEY, nextRaw);
+    if (storage.getItem(UNIFIED_KEY) !== nextRaw) throw new Error('canonical read-back mismatch');
+    validateUnified(JSON.parse(nextRaw));
+    return next;
+  } catch (cause) {
+    let rolledBack = false;
+    try {
+      const currentRaw = storage.getItem(UNIFIED_KEY);
+      if (currentRaw === priorRaw) rolledBack = true;
+      else if (currentRaw === nextRaw) {
+        storage.setItem(UNIFIED_KEY, priorRaw);
+        rolledBack = storage.getItem(UNIFIED_KEY) === priorRaw;
+      }
+    } catch { rolledBack = false; }
+    throw Object.assign(new Error(rolledBack ? '统一存档升级失败，原始存档已恢复' : '统一存档升级失败且无法确认回滚；已进入恢复保护'), {
+      code: rolledBack ? 'CANONICAL_UPGRADE_FAILED' : 'UPGRADE_ROLLBACK_FAILED', cause, rolledBack
+    });
+  }
+}
+
+function migrateLocalUnifiedV1(storage, priorRaw, value, legacyRaw) {
+  const intradayMigration = validateUnifiedV1(value);
+  let chime;
+  try {
+    chime = legacyRaw === null ? defaultChime() : migrateLegacyChime(JSON.parse(legacyRaw));
+  } catch (error) {
+    const display = makeUnifiedV1Upgrade(value, intradayMigration, defaultChime({ status: 'recovery-default', sourceVersion: null }));
+    return { state: display, source: 'chime-recovery', error, raw: priorRaw, legacyRaw, migration: intradayMigration };
+  }
+  const candidate = makeUnifiedV1Upgrade(value, intradayMigration, chime);
+  const state = commitLocalV1Upgrade(storage, priorRaw, candidate);
+  return { state, source: 'canonical-migrated', migration: intradayMigration, raw: JSON.stringify(state), legacyRaw };
+}
+
+function continueLegacyChimeRecovery(storage, { expectedRaw, expectedLegacyRaw } = {}) {
+  if (!storage?.getItem || !storage?.setItem) throw Object.assign(new Error('本地存储不可用'), { code: 'STORAGE_UNAVAILABLE' });
+  const priorRaw = storage.getItem(UNIFIED_KEY);
+  if (priorRaw !== expectedRaw) throw Object.assign(new Error('确认忽略期间统一存档已被修改'), { code: 'REVISION_CONFLICT' });
+  const legacyRaw = storage.getItem(CHIME_LEGACY_KEY);
+  if (legacyRaw !== expectedLegacyRaw) throw Object.assign(new Error('确认忽略期间旧报时设置已被修改'), { code: 'REVISION_CONFLICT' });
+  let value;
+  try { value = JSON.parse(priorRaw); } catch (cause) { throw Object.assign(new Error('统一存档已无法解析'), { code: 'RECOVERY_SOURCE_CHANGED', cause }); }
+  const intradayMigration = validateUnifiedV1(value);
+  const candidate = makeUnifiedV1Upgrade(value, intradayMigration, defaultChime({ status: 'recovery-default', sourceVersion: null }));
+  const state = commitLocalV1Upgrade(storage, priorRaw, candidate);
+  return { state, migration: intradayMigration, raw: JSON.stringify(state), legacyRaw };
 }
 
 function classifyBackup(value) {
@@ -1629,7 +1829,18 @@ function loadUnified(storage) {
   if (!storage?.getItem) return { state: makeUnified(), source: 'storage-unavailable' };
   let raw; try { raw = storage.getItem(UNIFIED_KEY); } catch (error) { return { state: makeUnified(), source: 'storage-unavailable', error }; }
   if (raw !== null) {
-    try { const parsed = JSON.parse(raw); const result = migrateUnified(parsed); return { state: result.state, source: result.migrated ? 'canonical-migrated' : 'canonical', migration: result }; }
+    try {
+      const parsed = JSON.parse(raw);
+      if (parsed?.schemaVersion === 2) { validateUnified(parsed); return { state: copy(parsed), source: 'canonical', raw }; }
+      if (parsed?.schemaVersion === 1) {
+        validateUnifiedV1(parsed);
+        let legacyRaw;
+        try { legacyRaw = storage.getItem(CHIME_LEGACY_KEY); }
+        catch (error) { return { state: null, source: 'recovery-required', error, raw }; }
+        return migrateLocalUnifiedV1(storage, raw, parsed, legacyRaw);
+      }
+      throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
+    }
     catch (error) { return { state: null, source: 'recovery-required', error, raw }; }
   }
   let riskRaw; let preference;
@@ -1649,11 +1860,27 @@ function commitUnified(storage, state, { preImport = false, expectedRaw } = {}) 
     try { storage.setItem(PRE_IMPORT_KEY, prior ?? ''); } catch (cause) { throw Object.assign(new Error('导入前快照写入失败'), { code: 'PRE_IMPORT_SNAPSHOT_FAILED', cause }); }
     try { if (storage.getItem(PRE_IMPORT_KEY) !== (prior ?? '')) throw new Error('导入前快照回读失败'); } catch (cause) { throw Object.assign(new Error('导入前快照回读失败'), { code: 'PRE_IMPORT_SNAPSHOT_FAILED', cause }); }
   }
-  try { storage.setItem(UNIFIED_KEY, raw); } catch (cause) { throw Object.assign(new Error('统一存档写入失败'), { code: 'CANONICAL_WRITE_FAILED', cause }); }
-  let stored;
-  try { stored = storage.getItem(UNIFIED_KEY); } catch (cause) { throw Object.assign(new Error('统一存档回读失败'), { code: 'POST_WRITE_MISMATCH', cause }); }
-  if (stored !== raw) throw Object.assign(new Error('统一存档回读失败；已安全停止继续修改'), { code: 'POST_WRITE_MISMATCH' });
-  return next;
+  try {
+    storage.setItem(UNIFIED_KEY, raw);
+    const stored = storage.getItem(UNIFIED_KEY);
+    if (stored !== raw) throw new Error('统一存档写后回读不一致');
+    validateUnified(JSON.parse(stored));
+    return next;
+  } catch (cause) {
+    let rolledBack = false;
+    try {
+      const currentRaw = storage.getItem(UNIFIED_KEY);
+      if (currentRaw === prior) rolledBack = true;
+      else if (currentRaw === raw) {
+        if (prior === null) storage.removeItem(UNIFIED_KEY);
+        else storage.setItem(UNIFIED_KEY, prior);
+        rolledBack = storage.getItem(UNIFIED_KEY) === prior;
+      }
+    } catch { rolledBack = false; }
+    throw Object.assign(new Error(rolledBack ? '统一存档写入失败；原始存档已恢复' : '统一存档写入失败且无法确认回滚；已停止继续修改'), {
+      code: rolledBack ? 'CANONICAL_WRITE_FAILED' : 'POST_WRITE_MISMATCH', cause, rolledBack
+    });
+  }
 }
 
 
@@ -1816,10 +2043,10 @@ function preserveScrollPosition(render, viewport = globalThis) {
 }
 
 
-const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk' });
+const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk', chime: '#/chime' });
 
 function parseRoute(hash) {
-  return hash === ROUTES.risk ? 'risk' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
+  return hash === ROUTES.risk ? 'risk' : hash === ROUTES.chime ? 'chime' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
 }
 
 function normalizeRoute(hash) {
@@ -1840,8 +2067,811 @@ function applyRoute(root, hash = globalThis.location?.hash || '') {
     const heading = root?.querySelector?.('[data-route-error-heading]');
     heading?.focus?.();
   }
-  if (globalThis.document) document.title = active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
+  if (globalThis.document) document.title = active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'chime' ? '自然周期报时 · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
   return { route: active, unknown: route === 'unknown' };
+}
+
+
+const CHIME_TIMEZONE = 'Asia/Shanghai';
+const MINUTE = 60_000;
+const formatterCache = new Map();
+
+function formatter(timeZone) {
+  if (!formatterCache.has(timeZone)) formatterCache.set(timeZone, new Intl.DateTimeFormat('en-CA', {
+    timeZone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23'
+  }));
+  return formatterCache.get(timeZone);
+}
+
+function zonedParts(timeMs, timeZone = CHIME_TIMEZONE) {
+  const parts = Object.fromEntries(formatter(timeZone).formatToParts(new Date(timeMs)).map(part => [part.type, part.value]));
+  return { year: Number(parts.year), month: Number(parts.month), day: Number(parts.day), hour: Number(parts.hour), minute: Number(parts.minute), second: Number(parts.second) };
+}
+
+function zonedMidnight(parts, timeZone) {
+  const targetWall = Date.UTC(parts.year, parts.month - 1, parts.day, 0, 0, 0);
+  let guess = targetWall;
+  for (let index = 0; index < 4; index += 1) {
+    const actual = zonedParts(guess, timeZone);
+    const actualWall = Date.UTC(actual.year, actual.month - 1, actual.day, actual.hour, actual.minute, actual.second);
+    const correction = targetWall - actualWall;
+    if (correction === 0) return guess;
+    guess += correction;
+  }
+  return guess;
+}
+
+function nextCalendarDay(parts) {
+  const next = new Date(Date.UTC(parts.year, parts.month - 1, parts.day + 1));
+  return { year: next.getUTCFullYear(), month: next.getUTCMonth() + 1, day: next.getUTCDate() };
+}
+
+function nextBoundary(periodMinutes, nowMs = Date.now(), timeZone = CHIME_TIMEZONE) {
+  if (!Number.isInteger(periodMinutes) || periodMinutes < 1 || periodMinutes > 1440) throw new RangeError('periodMinutes must be an integer from 1 to 1440');
+  if (!Number.isFinite(nowMs)) throw new TypeError('nowMs must be finite');
+  const parts = zonedParts(nowMs, timeZone);
+  const start = zonedMidnight(parts, timeZone);
+  const period = periodMinutes * MINUTE;
+  if (periodMinutes === 1440) return zonedMidnight(nextCalendarDay(parts), timeZone);
+  const elapsed = nowMs - start;
+  const candidate = start + (Math.floor(elapsed / period) + 1) * period;
+  const nextDay = zonedMidnight(nextCalendarDay(parts), timeZone);
+  if (candidate < nextDay) return candidate;
+  if (24 * 60 % periodMinutes === 0) return nextDay;
+  return nextDay + period;
+}
+
+function earlyTarget(boundaryMs, earlySeconds, nowMs = Date.now()) {
+  if (!Number.isFinite(boundaryMs) || !Number.isInteger(earlySeconds) || earlySeconds < 0 || !Number.isFinite(nowMs)) throw new TypeError('invalid early-target input');
+  if (earlySeconds === 0) return null;
+  const targetAt = boundaryMs - earlySeconds * 1000;
+  return targetAt > nowMs ? targetAt : null;
+}
+
+function mergeDueEvents(events) {
+  const groups = new Map();
+  for (const event of events) {
+    if (!event || !Number.isFinite(event.targetAt) || !['main', 'early'].includes(event.kind)) continue;
+    const second = Math.floor(event.targetAt / 1000);
+    if (!groups.has(second)) groups.set(second, []);
+    groups.get(second).push(event);
+  }
+  const merged = [];
+  for (const [second, group] of [...groups.entries()].sort((a, b) => a[0] - b[0])) {
+    const hasMain = group.some(event => event.kind === 'main');
+    const selected = hasMain ? group.filter(event => event.kind === 'main') : group;
+    const deduped = new Map();
+    for (const event of selected) {
+      const key = `${event.kind}:${second}`;
+      if (!deduped.has(key)) deduped.set(key, { ...event, slotIds: [] });
+      const item = deduped.get(key);
+      for (const slotId of event.slotIds || [event.slotId].filter(Boolean)) if (!item.slotIds.includes(slotId)) item.slotIds.push(slotId);
+    }
+    merged.push(...Array.from(deduped.values(), event => ({ ...event, targetSecond: second })));
+  }
+  return merged;
+}
+
+function effectiveSlots(chime, runIntent, visible, audioUnlocked, isLeader) {
+  if (!runIntent || !visible || !audioUnlocked || !isLeader || !Array.isArray(chime?.slots)) return [];
+  return chime.slots.filter(slot => slot.enabled && !slot.paused);
+}
+
+function clockLabel(timeMs, timeZone = CHIME_TIMEZONE, seconds = true) {
+  return new Intl.DateTimeFormat('zh-CN', { timeZone, hour: '2-digit', minute: '2-digit', ...(seconds ? { second: '2-digit' } : {}), hourCycle: 'h23' }).format(timeMs);
+}
+
+
+function createOutputAdapter(environment = globalThis) {
+  let context = null;
+  const activeOscillators = new Set();
+  const AudioContextCtor = environment.AudioContext || environment.webkitAudioContext;
+
+  async function unlock() {
+    if (!AudioContextCtor) return { ok: false, reason: '当前浏览器不支持 Web Audio。' };
+    try {
+      if (!context) context = new AudioContextCtor();
+      if (context.state !== 'running') await context.resume();
+      if (context.state !== 'running') return { ok: false, reason: '浏览器音频仍未解锁；请再次点击开始报时。' };
+      return { ok: true };
+    } catch (error) { return { ok: false, reason: `音频解锁失败：${error?.message || '浏览器拒绝播放'}` }; }
+  }
+
+  async function requestNotificationPermission(chime) {
+    if (!chime?.notifyEnabled) return { status: 'off' };
+    if (!('Notification' in environment)) return { status: 'unavailable', message: '此浏览器不支持系统通知；声音仍可使用。' };
+    if (environment.Notification.permission === 'granted') return { status: 'granted' };
+    if (environment.Notification.permission === 'denied') return { status: 'denied', message: '系统通知权限已拒绝；声音仍可使用。' };
+    try {
+      const permission = await environment.Notification.requestPermission();
+      return permission === 'granted' ? { status: 'granted' } : { status: permission, message: '系统通知未获授权；声音仍可使用。' };
+    } catch { return { status: 'unavailable', message: '无法请求系统通知权限；声音仍可使用。' }; }
+  }
+
+  function beep(count) {
+    if (!context || context.state !== 'running') return { ok: false, reason: '音频尚未解锁。' };
+    try {
+      const base = context.currentTime + 0.03;
+      for (let index = 0; index < count; index += 1) {
+        const oscillator = context.createOscillator(); const gain = context.createGain();
+        const startAt = base + index * 0.3;
+        oscillator.type = 'sine'; oscillator.frequency.value = index === count - 1 && count > 1 ? 880 : 660;
+        gain.gain.setValueAtTime(0.0001, startAt); gain.gain.exponentialRampToValueAtTime(0.12, startAt + 0.015); gain.gain.exponentialRampToValueAtTime(0.0001, startAt + 0.18);
+        oscillator.connect(gain).connect(context.destination); oscillator.onended = () => activeOscillators.delete(oscillator); activeOscillators.add(oscillator); oscillator.start(startAt); oscillator.stop(startAt + 0.2);
+      }
+      return { ok: true };
+    } catch (error) { return { ok: false, reason: `提示音播放失败：${error?.message || '音频错误'}` }; }
+  }
+
+  function speak(text, chime) {
+    if (!chime?.voiceEnabled) return { status: 'off' };
+    const synth = environment.speechSynthesis; const Utterance = environment.SpeechSynthesisUtterance;
+    if (!synth || !Utterance) return { status: 'unavailable', message: '语音不可用；提示音仍可播放。' };
+    const voices = synth.getVoices?.() || [];
+    const selected = voices.find(voice => voice.voiceURI === chime.selectedVoiceURI);
+    const voice = selected || voices.find(item => item.lang?.toLowerCase() === 'zh-cn') || voices.find(item => item.lang?.toLowerCase().startsWith('zh-'));
+    if (!voice) return { status: 'unavailable', message: '未找到中文语音；提示音仍可播放。' };
+    try {
+      synth.cancel(); const utterance = new Utterance(text); utterance.lang = voice.lang || 'zh-CN'; utterance.voice = voice; utterance.rate = 0.95; synth.speak(utterance); return { status: 'ok' };
+    } catch { return { status: 'error', message: '语音播放失败；提示音仍可播放。' }; }
+  }
+
+  function notify(title, body, chime) {
+    if (!chime?.notifyEnabled) return { status: 'off' };
+    if (!('Notification' in environment)) return { status: 'unavailable', message: '此浏览器不支持系统通知；提示音仍可播放。' };
+    if (environment.Notification.permission !== 'granted') return { status: 'unavailable', message: environment.Notification.permission === 'denied' ? '系统通知权限已拒绝；提示音仍可播放。' : '系统通知尚未获授权；提示音仍可播放。' };
+    try { new environment.Notification(title, { body }); return { status: 'ok' }; }
+    catch { return { status: 'error', message: '系统通知发送失败；提示音仍可播放。' }; }
+  }
+
+  async function announce(kind, boundaryMs, earlySeconds, chime, timeLabel, canOutput = async () => true) {
+    const hhmm = timeLabel(boundaryMs).slice(0, 5);
+    let sound = { ok: false, reason: '已取消声音输出。' };
+    if (await canOutput()) sound = beep(kind === 'main' ? 3 : 1);
+    const speech = kind === 'main' ? `现在时间，${hhmm}。` : `距离${hhmm}报时还有${earlySeconds}秒`;
+    let speechResult = { status: 'off' };
+    if (chime?.voiceEnabled) speechResult = await canOutput() ? speak(speech, chime) : { status: 'skipped', message: '已取消语音输出。' };
+    let notification = { status: 'off' };
+    if (chime?.notifyEnabled) notification = await canOutput()
+      ? notify(kind === 'main' ? '报时' : '即将报时', kind === 'main' ? `现在时间 ${hhmm}` : `${hhmm}，还有 ${earlySeconds} 秒`, chime)
+      : { status: 'skipped', message: '已取消系统通知。' };
+    return { sound, speech: speechResult, notification };
+  }
+
+  async function preview(chime, canOutput = async () => true) {
+    const sound = await canOutput() ? beep(2) : { ok: false, reason: '已取消试听输出。' };
+    const speech = chime?.voiceEnabled ? await canOutput() ? speak('提示音试听。', chime) : { status: 'skipped', message: '已取消语音输出。' } : { status: 'off' };
+    return { sound, speech };
+  }
+
+  function stop() {
+    for (const oscillator of activeOscillators) { try { oscillator.stop(); } catch {} }
+    activeOscillators.clear();
+    try { environment.speechSynthesis?.cancel?.(); } catch {}
+  }
+
+  return { unlock, requestNotificationPermission, announce, preview, stop, get audioUnlocked() { return context?.state === 'running'; }, get context() { return context; } };
+}
+
+
+const CHIME_RUN_KEY = 'trading-control-center:natural-chime:run:v1';
+const CHIME_LEASE_KEY = 'trading-control-center:natural-chime:lease:v1';
+const CHIME_CHANNEL = 'trading-control-center:natural-chime:v1';
+const CHIME_LOCK_NAME = 'trading-control-center:natural-chime-audible-leader';
+const HEARTBEAT_MS = 2000;
+const LEASE_TTL_MS = 8000;
+const CLAIM_SETTLE_MS = 300;
+const VERIFY_SETTLE_MS = 300;
+
+function randomId(environment) {
+  try { return environment.crypto?.randomUUID?.() || `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`; }
+  catch { return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`; }
+}
+function parseRun(raw) {
+  if (raw === null) return { version: 1, intent: 'paused', generation: 0, updatedAt: 0 };
+  const item = JSON.parse(raw);
+  if (!item || Object.keys(item).length !== 4 || Object.keys(item).some(key => !['version', 'intent', 'generation', 'updatedAt'].includes(key)) || item.version !== 1 || !['running', 'paused'].includes(item.intent) || !Number.isSafeInteger(item.generation) || item.generation < 0 || !Number.isFinite(item.updatedAt)) throw new Error('invalid run record');
+  return item;
+}
+function parseLease(raw) {
+  if (raw === null) return null;
+  const item = JSON.parse(raw);
+  const expected = ['version', 'ownerTabId', 'leaseToken', 'runGeneration', 'heartbeatAt', 'expiresAt'];
+  if (!item || Object.keys(item).length !== expected.length || Object.keys(item).some(key => !expected.includes(key)) || item.version !== 1 || typeof item.ownerTabId !== 'string' || !item.ownerTabId || typeof item.leaseToken !== 'string' || !item.leaseToken || !Number.isSafeInteger(item.runGeneration) || item.runGeneration < 0 || !Number.isFinite(item.heartbeatAt) || !Number.isFinite(item.expiresAt) || item.expiresAt <= item.heartbeatAt) throw new Error('invalid lease');
+  return item;
+}
+
+function createCoordinator({ environment = globalThis, isDataCurrent = () => true, isAudioUnlocked = () => true, onChange = () => {}, timings = {} } = {}) {
+  const now = timings.now || (() => Date.now());
+  const setTimer = timings.setTimeout || environment.setTimeout?.bind(environment) || setTimeout;
+  const clearTimer = timings.clearTimeout || environment.clearTimeout?.bind(environment) || clearTimeout;
+  const setIntervalFn = timings.setInterval || environment.setInterval?.bind(environment) || setInterval;
+  const clearIntervalFn = timings.clearInterval || environment.clearInterval?.bind(environment) || clearInterval;
+  const storage = (() => { try { return environment.localStorage; } catch { return null; } })();
+  const tabId = randomId(environment);
+  let intent = { version: 1, intent: 'paused', generation: 0, updatedAt: 0 };
+  let leader = false; let leaderId = null; let leaderToken = null; let leaderMode = null;
+  let visible = environment.document?.visibilityState !== 'hidden'; let audioUnlocked = false; let invalidated = false;
+  let channel = null; let coordinationError = ''; let locksUsable = Boolean(environment.navigator?.locks?.request);
+  let lockRequesting = false; let releaseLock = null; let retryTimer = null; let heartbeatTimer = null; let electionTimer = null; let verificationTimer = null;
+  const claims = new Map();
+  const listeners = new Set();
+
+  function status() {
+    let contextUnlocked = false;
+    try { contextUnlocked = isAudioUnlocked() === true; } catch { contextUnlocked = false; }
+    return { runIntent: intent.intent, generation: intent.generation, leader, leaderId, selfId: tabId, visible, audioUnlocked: audioUnlocked && contextUnlocked, invalidated, coordinationError, mode: leaderMode, supported: Boolean(locksUsable || (storage && channel)) };
+  }
+  function emit() { onChange(status()); listeners.forEach(listener => listener(status())); }
+  function eligible(preview = false) { return !invalidated && visible && audioUnlocked && status().audioUnlocked && isDataCurrent() && (preview || intent.intent === 'running'); }
+  function channelPost(message) { try { channel?.postMessage({ ...message, tabId, generation: intent.generation, sentAt: now() }); } catch { coordinationError = '同源消息通道不可用。'; } }
+  function readRun() { if (!storage) throw new Error('localStorage unavailable'); return parseRun(storage.getItem(CHIME_RUN_KEY)); }
+  function writeRun(next) {
+    if (!storage) throw new Error('localStorage unavailable');
+    const raw = JSON.stringify(next); storage.setItem(CHIME_RUN_KEY, raw);
+    if (storage.getItem(CHIME_RUN_KEY) !== raw) throw new Error('run record verification failed');
+    intent = next; channelPost({ type: 'intent', record: next }); emit(); return true;
+  }
+  function syncRun() {
+    try { intent = readRun(); coordinationError = ''; }
+    catch { intent = { version: 1, intent: 'paused', generation: 0, updatedAt: now() }; coordinationError = '无法验证同源报时运行状态；已停止声音。'; release('runtime-read-failed'); }
+    emit();
+  }
+  function setLeader(value, mode = null, id = value ? tabId : null, token = null) {
+    const changed = leader !== value || leaderMode !== (value ? mode : null) || leaderId !== id;
+    leader = value; leaderMode = value ? mode : null; leaderId = value ? id : null; leaderToken = value ? token : null;
+    if (changed) emit();
+  }
+  function clearLeaseIfOwned() {
+    if (!['lease', 'lease-preview'].includes(leaderMode) || !storage || !leaderToken) return;
+    try {
+      const current = parseLease(storage.getItem(CHIME_LEASE_KEY));
+      if (current?.ownerTabId === tabId && current.leaseToken === leaderToken) storage.removeItem(CHIME_LEASE_KEY);
+    } catch { /* lease expiry is the safe fallback */ }
+  }
+  function clearTimers() {
+    if (retryTimer) clearTimer(retryTimer); retryTimer = null;
+    if (heartbeatTimer) clearIntervalFn(heartbeatTimer); heartbeatTimer = null;
+    if (electionTimer) clearTimer(electionTimer); electionTimer = null;
+    if (verificationTimer) clearTimer(verificationTimer); verificationTimer = null;
+  }
+  function release(reason = 'released') {
+    clearTimers();
+    if (leaderMode === 'lease' || leaderMode === 'lease-preview') clearLeaseIfOwned();
+    if (releaseLock) { const resolve = releaseLock; releaseLock = null; resolve(); }
+    if (leader) channelPost({ type: 'release', reason, leaderToken });
+    setLeader(false);
+  }
+  function retryElection(delay = 250) {
+    if (retryTimer) return;
+    retryTimer = setTimer(() => { retryTimer = null; compete(); }, delay);
+  }
+  function webLockCompetend() {
+    if (!locksUsable || lockRequesting || leader || !eligible()) return;
+    lockRequesting = true;
+    Promise.resolve(environment.navigator.locks.request(CHIME_LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, lock => {
+      if (!lock || !eligible()) { leaderId = lock ? null : 'other'; emit(); return undefined; }
+      setLeader(true, 'web-lock', tabId, `web-lock:${tabId}`);
+      return new Promise(resolve => { releaseLock = resolve; });
+    })).catch(() => {
+      locksUsable = false; coordinationError = 'Web Locks 不可用，正在尝试本地租约协调。'; emit(); fallbackCompete();
+    }).finally(() => { lockRequesting = false; if (!leader && eligible()) retryElection(HEARTBEAT_MS); });
+  }
+  function validCurrentLease() {
+    try {
+      const lease = parseLease(storage?.getItem(CHIME_LEASE_KEY) ?? null);
+      if (lease && now() < lease.heartbeatAt) { coordinationError = '系统时钟发生变化，租约状态不明确；已停止声音。'; return undefined; }
+      return lease && lease.expiresAt > now() ? lease : null;
+    } catch { coordinationError = '无法验证同源租约；已停止声音。'; return undefined; }
+  }
+  function becomeLeaseLeader(lease) {
+    leaderToken = lease.leaseToken; setLeader(true, 'lease', tabId, lease.leaseToken);
+    channelPost({ type: 'lease', lease });
+    heartbeatTimer = setIntervalFn(() => renewLease(), HEARTBEAT_MS);
+  }
+  function renewLease() {
+    if (!leader || leaderMode !== 'lease' || !eligible()) { release('eligibility-lost'); return; }
+    try {
+      const current = parseLease(storage.getItem(CHIME_LEASE_KEY));
+      if (!current || current.expiresAt <= now() || now() < current.heartbeatAt || current.ownerTabId !== tabId || current.leaseToken !== leaderToken || current.runGeneration !== intent.generation) { coordinationError = '同源租约发生变化或过期；本页已停止声音。'; release('lease-lost'); emit(); return; }
+      const next = { ...current, heartbeatAt: now(), expiresAt: now() + LEASE_TTL_MS };
+      const raw = JSON.stringify(next); storage.setItem(CHIME_LEASE_KEY, raw);
+      if (storage.getItem(CHIME_LEASE_KEY) !== raw) throw new Error('lease verification failed');
+      channelPost({ type: 'lease', lease: next });
+    } catch { coordinationError = '无法续租；本页已停止声音。'; release('lease-renew-failed'); emit(); }
+  }
+  function fallbackCompete() {
+    if (leader || electionTimer || !eligible()) return;
+    if (!storage || !channel) { coordinationError = '缺少可验证的同源协调能力；报时输出已停用。'; emit(); return; }
+    let existing = validCurrentLease();
+    if (existing === undefined) { emit(); return; }
+    if (existing && existing.ownerTabId !== tabId) { leaderId = existing.ownerTabId; emit(); retryElection(Math.max(250, existing.expiresAt - now() + 5)); return; }
+    claims.clear(); claims.set(tabId, now()); channelPost({ type: 'claim' });
+    electionTimer = setTimer(() => {
+      electionTimer = null;
+      if (!eligible()) return;
+      existing = validCurrentLease();
+      if (existing && existing.ownerTabId !== tabId) { leaderId = existing.ownerTabId; emit(); retryElection(Math.max(250, existing.expiresAt - now() + 5)); return; }
+      const contenders = [...claims.entries()].filter(([, at]) => now() - at <= CLAIM_SETTLE_MS + 100).map(([id]) => id).sort();
+      if (contenders[0] !== tabId) { leaderId = contenders[0] || null; emit(); retryElection(HEARTBEAT_MS); return; }
+      const lease = { version: 1, ownerTabId: tabId, leaseToken: randomId(environment), runGeneration: intent.generation, heartbeatAt: now(), expiresAt: now() + LEASE_TTL_MS };
+      try {
+        storage.setItem(CHIME_LEASE_KEY, JSON.stringify(lease));
+        const readBack = parseLease(storage.getItem(CHIME_LEASE_KEY));
+        if (!readBack || readBack.ownerTabId !== tabId || readBack.leaseToken !== lease.leaseToken || readBack.runGeneration !== intent.generation) throw new Error('lease was overwritten');
+        channelPost({ type: 'claim', provisional: true, lease });
+        verificationTimer = setTimer(() => {
+          verificationTimer = null;
+          const verified = validCurrentLease();
+          if (eligible() && verified?.ownerTabId === tabId && verified.leaseToken === lease.leaseToken && verified.runGeneration === intent.generation) becomeLeaseLeader(verified);
+          else retryElection(HEARTBEAT_MS);
+        }, VERIFY_SETTLE_MS);
+      } catch { coordinationError = '同源租约无法确认；没有页面获得报时权。'; emit(); retryElection(HEARTBEAT_MS); }
+    }, CLAIM_SETTLE_MS);
+  }
+  function compete() { syncRun(); if (!eligible()) { release('not-eligible'); return; } if (locksUsable) webLockCompetend(); else fallbackCompete(); }
+
+  function onMessage(event) {
+    const message = event?.data;
+    if (!message || message.tabId === tabId) return;
+    if (message.type === 'claim') { claims.set(message.tabId, Number(message.sentAt) || now()); if (!electionTimer && eligible() && !leader) retryElection(150); }
+    if (message.type === 'intent' && message.record) {
+      try { intent = parseRun(JSON.stringify(message.record)); if (intent.intent === 'paused') release('global-pause'); else compete(); }
+      catch { coordinationError = '同源运行状态消息无效；已停止声音。'; release('invalid-runtime-message'); }
+      emit();
+    }
+    if (message.type === 'release') {
+      if (leaderId === message.tabId) leaderId = null;
+      if (!leader && eligible()) retryElection(150);
+      emit();
+    }
+    if (message.type === 'lease') {
+      try {
+        const lease = parseLease(JSON.stringify(message.lease));
+        if (lease.runGeneration === intent.generation && lease.expiresAt > now() && lease.ownerTabId !== tabId) leaderId = lease.ownerTabId;
+      } catch { /* invalid broadcasts never grant leadership */ }
+      if (!leader && eligible()) retryElection(150);
+      emit();
+    }
+  }
+  function onStorage(event) {
+    if (event?.key === CHIME_RUN_KEY) { syncRun(); if (intent.intent === 'running') compete(); else release('global-pause'); }
+    if (event?.key === CHIME_LEASE_KEY) {
+      const lease = validCurrentLease();
+      if (lease && lease.ownerTabId !== tabId) leaderId = lease.ownerTabId;
+      else if (!lease || lease.ownerTabId === tabId) leaderId = null;
+      if (!leader && eligible()) retryElection(150);
+      emit();
+    }
+  }
+  function onVisibility() {
+    visible = environment.document?.visibilityState !== 'hidden';
+    if (!visible) release('hidden'); else { syncRun(); if (intent.intent === 'running') compete(); }
+    emit();
+  }
+  function onPageHide() { visible = false; release('pagehide'); emit(); }
+  try { if (environment.BroadcastChannel) { channel = new environment.BroadcastChannel(CHIME_CHANNEL); channel.addEventListener?.('message', onMessage); if (!channel.addEventListener) channel.onmessage = onMessage; } } catch { channel = null; }
+  try { intent = readRun(); } catch { coordinationError = '无法读取同源报时状态；报时输出已停用。'; }
+  environment.document?.addEventListener?.('visibilitychange', onVisibility);
+  environment.addEventListener?.('pagehide', onPageHide);
+  environment.addEventListener?.('pageshow', onVisibility);
+  environment.addEventListener?.('focus', onVisibility);
+  environment.addEventListener?.('storage', onStorage);
+
+  return {
+    getStatus: status,
+    subscribe(listener) { listeners.add(listener); return () => listeners.delete(listener); },
+    async start() {
+      if (!visible || !isDataCurrent()) return { ok: false, message: '请在当前可见且存档有效的页面启动报时。' };
+      if (!audioUnlocked || !status().audioUnlocked) return { ok: false, message: '音频尚未由本页面的用户操作解锁；未启动报时。' };
+      let previous;
+      try { previous = readRun(); const next = { version: 1, intent: 'running', generation: previous.generation + 1, updatedAt: now() }; writeRun(next); coordinationError = ''; compete(); return { ok: true }; }
+      catch { intent = previous || intent; coordinationError = '无法写入并验证同源报时状态；未启动。'; emit(); return { ok: false, message: coordinationError }; }
+    },
+    pause() {
+      try { const previous = readRun(); writeRun({ version: 1, intent: 'paused', generation: previous.generation + 1, updatedAt: now() }); release('global-pause'); coordinationError = ''; emit(); return { ok: true }; }
+      catch { coordinationError = '无法安全暂停同源运行状态；本页已停止并显示错误。'; release('pause-write-failed'); emit(); return { ok: false, message: coordinationError }; }
+    },
+    setAudioUnlocked(value) { audioUnlocked = value === true; if (!audioUnlocked) release('audio-locked'); else if (intent.intent === 'running') compete(); emit(); },
+    invalidate(reason = 'external-conflict') { invalidated = true; coordinationError = reason; release('invalidated'); emit(); },
+    settingsChanged() { if (intent.intent === 'running' && eligible()) compete(); emit(); },
+    async runPreview(action) {
+      if (!visible || !audioUnlocked || invalidated || !isDataCurrent()) return { ok: false, message: '当前页面不具备试听条件。' };
+      try { intent = readRun(); } catch { coordinationError = '无法确认同源报时状态；未试听。'; emit(); return { ok: false, message: coordinationError }; }
+      if (leader && await canOutput()) return action();
+      if (locksUsable) {
+        try {
+          let result = { ok: false, message: '另一个页面正在负责报时；本页没有试听权限。' };
+          await environment.navigator.locks.request(CHIME_LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, async lock => {
+            if (!lock) return;
+            setLeader(true, 'web-lock-preview', tabId, `preview:${tabId}`);
+            try { result = await action(); } finally { setLeader(false); }
+          });
+          return result;
+        } catch { locksUsable = false; }
+      }
+      if (!storage || !channel) return { ok: false, message: '无法验证同源试听权；未播放。' };
+      const lease = validCurrentLease();
+      if (lease === undefined) return { ok: false, message: coordinationError || '无法验证同源试听权；未播放。' };
+      if (lease && lease.expiresAt > now()) return { ok: false, message: '另一个页面正在负责报时；本页没有试听权限。' };
+      const previewLease = { version: 1, ownerTabId: tabId, leaseToken: randomId(environment), runGeneration: intent.generation, heartbeatAt: now(), expiresAt: now() + LEASE_TTL_MS };
+      try {
+        storage.setItem(CHIME_LEASE_KEY, JSON.stringify(previewLease));
+        const verify = parseLease(storage.getItem(CHIME_LEASE_KEY));
+        if (verify?.leaseToken !== previewLease.leaseToken) throw new Error('preview lease mismatch');
+        await new Promise(resolve => setTimer(resolve, VERIFY_SETTLE_MS));
+        const again = validCurrentLease();
+        if (again?.leaseToken !== previewLease.leaseToken) throw new Error('preview lease lost');
+        setLeader(true, 'lease-preview', tabId, previewLease.leaseToken);
+        return await action();
+      } catch { return { ok: false, message: '无法验证同源试听权；未播放。' }; }
+      finally { release('preview-complete'); }
+    },
+    async canOutput() {
+      const preview = ['web-lock-preview', 'lease-preview'].includes(leaderMode);
+      if (!leader || !eligible(preview) || (!preview && intent.intent !== 'running')) return false;
+      try {
+        const latest = readRun();
+        if (latest.generation !== intent.generation || latest.intent !== intent.intent) { intent = latest; release('run-intent-changed'); emit(); return false; }
+      } catch { coordinationError = '无法确认同源报时状态；已停止声音。'; release('runtime-read-failed'); emit(); return false; }
+      if (leaderMode === 'lease' || leaderMode === 'lease-preview') {
+        const lease = validCurrentLease();
+        const verified = Boolean(lease && lease.ownerTabId === tabId && lease.leaseToken === leaderToken && lease.runGeneration === intent.generation && lease.expiresAt > now());
+        if (!verified) { coordinationError ||= '无法验证当前同源租约；已停止声音。'; release('lease-unverified'); emit(); }
+        return verified;
+      }
+      if (leaderMode === 'web-lock-preview') return visible && audioUnlocked && !invalidated && isDataCurrent();
+      return leaderMode === 'web-lock' && visible && audioUnlocked && !invalidated && isDataCurrent();
+    },
+    destroy() { release('destroy'); clearTimers(); environment.document?.removeEventListener?.('visibilitychange', onVisibility); environment.removeEventListener?.('pagehide', onPageHide); environment.removeEventListener?.('pageshow', onVisibility); environment.removeEventListener?.('focus', onVisibility); environment.removeEventListener?.('storage', onStorage); try { channel?.close(); } catch {} }
+  };
+}
+
+
+
+function createScheduler({ coordinator, output, getChime, onStatus = () => {}, environment = globalThis, timings = {} }) {
+  const now = timings.now || (() => Date.now());
+  const setTimer = timings.setTimeout || environment.setTimeout?.bind(environment) || setTimeout;
+  const clearTimer = timings.clearTimeout || environment.clearTimeout?.bind(environment) || clearTimeout;
+  const setIntervalFn = timings.setInterval || environment.setInterval?.bind(environment) || setInterval;
+  const clearIntervalFn = timings.clearInterval || environment.clearInterval?.bind(environment) || clearInterval;
+  const slots = new Map(); const timers = new Map();
+  let watchdog = null; let destroyed = false; let statusMessage = '';
+
+  function eligible(slotId) {
+    const slot = getChime()?.slots?.find(item => item.slotId === slotId);
+    return Boolean(slot?.enabled && !slot.paused);
+  }
+  function clearTimers() { for (const id of timers.values()) clearTimer(id); timers.clear(); }
+  function clearSlot(slotId) { slots.delete(slotId); recompute(); }
+  function slotEvents() {
+    const values = [];
+    for (const [slotId, scheduled] of slots) {
+      if (!eligible(slotId)) continue;
+      values.push({ kind: 'main', targetAt: scheduled.boundaryAt, boundaryAt: scheduled.boundaryAt, slotId });
+      if (scheduled.earlyAt !== null && scheduled.earlyAt > now()) values.push({ kind: 'early', targetAt: scheduled.earlyAt, boundaryAt: scheduled.boundaryAt, earlySeconds: scheduled.earlySeconds, slotId });
+    }
+    return values;
+  }
+  function rescheduleSlot(slot) {
+    const current = now(); const boundaryAt = nextBoundary(periodMinutes(slot), current);
+    const earlyAt = earlyTarget(boundaryAt, slot.earlySeconds, current);
+    slots.set(slot.slotId, { boundaryAt, earlyAt, earlySeconds: slot.earlySeconds, periodMinutes: periodMinutes(slot) });
+  }
+  function scheduleAll({ reset = false } = {}) {
+    const chime = getChime();
+    const allowed = new Set((chime?.slots || []).filter(slot => slot.enabled && !slot.paused).map(slot => slot.slotId));
+    for (const slotId of [...slots.keys()]) if (!allowed.has(slotId)) slots.delete(slotId);
+    for (const slot of chime?.slots || []) {
+      if (!allowed.has(slot.slotId)) continue;
+      const prior = slots.get(slot.slotId);
+      const sameSettings = prior && prior.periodMinutes === periodMinutes(slot) && prior.earlySeconds === slot.earlySeconds;
+      if (reset || !sameSettings || !prior || prior.boundaryAt <= now()) rescheduleSlot(slot);
+    }
+    recompute();
+  }
+  function recompute() {
+    clearTimers();
+    if (destroyed || !coordinator.getStatus().leader || !coordinator.getStatus().runIntent || !coordinator.getStatus().audioUnlocked || !coordinator.getStatus().visible) return;
+    const events = mergeDueEvents(slotEvents());
+    for (const event of events) {
+      const key = `${event.kind}:${event.targetSecond}`;
+      const id = setTimer(() => fire(key, event), Math.max(0, event.targetAt - now()));
+      timers.set(key, id);
+    }
+    if (!watchdog) watchdog = setIntervalFn(() => {
+      if (!coordinator.getStatus().leader) { clearIntervalFn(watchdog); watchdog = null; return; }
+      const current = now();
+      for (const [slotId, scheduled] of slots) if (scheduled.boundaryAt <= current) {
+        const slot = getChime()?.slots?.find(item => item.slotId === slotId);
+        if (slot?.enabled && !slot.paused) rescheduleSlot(slot);
+      }
+      recompute();
+    }, 10_000);
+  }
+  async function fire(key, scheduledEvent) {
+    timers.delete(key);
+    const status = coordinator.getStatus();
+    if (!status.leader || !status.runIntent || !status.visible || !status.audioUnlocked || !(await coordinator.canOutput())) { scheduleAll(); return; }
+    const late = now() - scheduledEvent.targetAt;
+    if (scheduledEvent.kind === 'main' && late > 1500) { for (const slotId of scheduledEvent.slotIds) { const slot = getChime()?.slots?.find(item => item.slotId === slotId); if (slot) rescheduleSlot(slot); } scheduleAll(); return; }
+    if (scheduledEvent.kind === 'early' && now() >= scheduledEvent.boundaryAt) { scheduleAll(); return; }
+    const validSlotIds = scheduledEvent.slotIds.filter(slotId => {
+      const slot = getChime()?.slots?.find(item => item.slotId === slotId);
+      const scheduled = slots.get(slotId);
+      const targetAt = scheduledEvent.kind === 'main' ? scheduled?.boundaryAt : scheduled?.earlyAt;
+      return slot?.enabled && !slot.paused && targetAt !== null && targetAt !== undefined && Math.floor(targetAt / 1000) === scheduledEvent.targetSecond;
+    });
+    const canStillOutput = async () => {
+      const latest = getChime();
+      const stillEligible = scheduledEvent.slotIds.some(slotId => {
+        const slot = latest?.slots?.find(item => item.slotId === slotId);
+        const scheduled = slots.get(slotId);
+        const targetAt = scheduledEvent.kind === 'main' ? scheduled?.boundaryAt : scheduled?.earlyAt;
+        return slot?.enabled && !slot.paused && targetAt !== null && targetAt !== undefined && Math.floor(targetAt / 1000) === scheduledEvent.targetSecond;
+      });
+      return stillEligible && coordinator.canOutput();
+    };
+    if (!validSlotIds.length || !(await canStillOutput())) { scheduleAll(); return; }
+    const chime = getChime();
+    const result = await output.announce(scheduledEvent.kind, scheduledEvent.boundaryAt, scheduledEvent.earlySeconds || 0, chime, clockLabel, canStillOutput);
+    const issues = [result.sound.reason, result.speech.message, result.notification.message].filter(Boolean);
+    statusMessage = issues.join(' '); onStatus(statusMessage, result);
+    const latestChime = getChime();
+    if (scheduledEvent.kind === 'main') for (const slotId of validSlotIds) {
+      const slot = latestChime.slots.find(item => item.slotId === slotId);
+      if (slot) rescheduleSlot(slot);
+    }
+    scheduleAll();
+  }
+  const unsubscribe = coordinator.subscribe(status => {
+    if (!status.leader || !status.runIntent || !status.visible || !status.audioUnlocked || status.invalidated) {
+      clearTimers(); slots.clear();
+      if (watchdog) { clearIntervalFn(watchdog); watchdog = null; }
+    } else scheduleAll();
+  });
+
+  return {
+    update(changedSlotId = null) {
+      if (!coordinator.getStatus().leader) return;
+      if (changedSlotId) {
+        const slot = getChime()?.slots?.find(item => item.slotId === changedSlotId);
+        if (slot?.enabled && !slot.paused) rescheduleSlot(slot); else slots.delete(changedSlotId);
+        scheduleAll();
+      } else scheduleAll();
+    },
+    stop() { clearTimers(); slots.clear(); if (watchdog) clearIntervalFn(watchdog); watchdog = null; },
+    getStatus() { return { message: statusMessage, scheduledSlots: slots.size }; },
+    destroy() { destroyed = true; this.stop(); unsubscribe(); }
+  };
+}
+
+
+
+const PRESET_LABELS = Object.freeze({ '3': '每 3 分钟', '5': '每 5 分钟', '15': '每 15 分钟', '30': '每 30 分钟', '60': '每 1 小时', '240': '每 4 小时', custom: '自定义' });
+
+function node(tag, className, text = '') {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== '') element.textContent = text;
+  return element;
+}
+
+function append(parent, ...children) { children.forEach(child => parent.appendChild(child)); return parent; }
+function controlLabel(text, control, className = '') { const label = node('label', className, text); label.appendChild(control); return label; }
+
+function slotInterval(slot) {
+  const minutes = periodMinutes(slot);
+  if (slot.preset === 'custom') return `自定义 ${minutes}分`;
+  return minutes % 60 === 0 ? `每 ${minutes / 60} 小时` : `每 ${minutes} 分钟`;
+}
+
+function makeButton(text, action, className = '') {
+  const button = node('button', className, text);
+  button.type = 'button'; button.dataset.chimeAction = action;
+  return button;
+}
+
+function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceChange, onStart, onPause, onPreview }) {
+  if (!summaryHost || !settingsHost) return { render() {}, refreshVoices() {}, showMessage() {} };
+
+  const summary = node('section', 'chime-panel'); summary.setAttribute('aria-labelledby', 'chime-summary-title');
+  const title = node('h2', '', '自然周期报时'); title.id = 'chime-summary-title';
+  const clock = node('time', 'chime-clock', '北京时间 --:--:--'); clock.dataset.chimeClock = 'true';
+  const runtime = node('p', 'chime-runtime', '已暂停'); runtime.setAttribute('role', 'status'); runtime.dataset.chimeRuntime = 'true';
+  const prompt = node('p', 'chime-prompt', '浏览器后台或设备休眠期间错过的报时不会补播。');
+  const count = node('p', 'chime-count', '已设置报时 0/5'); count.dataset.chimeCount = 'true';
+  const tags = node('div', 'chime-tags'); tags.dataset.chimeTags = 'true'; tags.setAttribute('role', 'list');
+  const empty = node('p', 'chime-empty', '尚未启用周期；可在设置中启用。'); empty.dataset.chimeEmpty = 'true';
+  const actions = node('div', 'chime-actions');
+  const startButton = makeButton('开始报时', 'start', 'chime-primary');
+  const pauseButton = makeButton('暂停', 'pause');
+  const previewButton = makeButton('试听提示音', 'preview');
+  const settingsLink = node('a', 'chime-link', '报时设置 →'); settingsLink.href = '#/chime';
+  append(actions, startButton, pauseButton, previewButton, settingsLink);
+  const message = node('p', 'chime-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite'); message.dataset.chimeMessage = 'true';
+  append(summary, title, clock, runtime, prompt, count, tags, empty, actions, message);
+  summaryHost.replaceChildren(summary);
+
+  const settings = node('section', 'chime-settings'); settings.setAttribute('aria-labelledby', 'chime-settings-title');
+  const settingsTitle = node('h2', '', '自然周期报时设置'); settingsTitle.id = 'chime-settings-title';
+  const explanation = node('p', 'chime-explanation', '周期按北京时间自然边界计算；页面恢复后从下一个未来边界继续，不补播错过的报时。');
+  const slotGrid = node('div', 'chime-slot-grid');
+  const slotControls = new Map();
+  for (let index = 0; index < 5; index += 1) {
+    const slotId = `slot-${index + 1}`;
+    const fieldset = node('fieldset', 'chime-slot');
+    const legend = node('legend', '', `周期 ${index + 1}`);
+    const enabled = document.createElement('input'); enabled.type = 'checkbox'; enabled.dataset.slotField = 'enabled';
+    const enabledLabel = controlLabel('启用并显示在首页', enabled, 'chime-check');
+    const preset = document.createElement('select'); preset.dataset.slotField = 'preset';
+    CHIME_PRESETS.forEach(value => { const option = document.createElement('option'); option.value = value; option.textContent = PRESET_LABELS[value]; preset.appendChild(option); });
+    const minutes = document.createElement('input'); minutes.type = 'number'; minutes.min = '1'; minutes.max = '1440'; minutes.step = '1'; minutes.inputMode = 'numeric'; minutes.dataset.slotField = 'minutes';
+    const early = document.createElement('input'); early.type = 'number'; early.min = '0'; early.max = '600'; early.step = '1'; early.inputMode = 'numeric'; early.dataset.slotField = 'earlySeconds';
+    const pause = makeButton('暂停', 'slot-pause', 'chime-slot-pause'); pause.dataset.slotId = slotId;
+    const error = node('p', 'chime-slot-error'); error.dataset.slotError = slotId; error.setAttribute('role', 'status');
+    const customMinutes = controlLabel('自定义分钟', minutes, 'chime-field chime-custom-minutes');
+    fieldset.dataset.slotId = slotId;
+    append(fieldset, legend, enabledLabel, controlLabel('报时周期', preset, 'chime-field'), customMinutes, controlLabel('提前提醒（秒）', early, 'chime-field'), pause, error);
+    slotGrid.appendChild(fieldset);
+    slotControls.set(slotId, { fieldset, enabled, preset, minutes, customMinutes, early, pause, error });
+  }
+
+  const preferences = node('fieldset', 'chime-preferences');
+  const preferencesLegend = node('legend', '', '语音与通知');
+  const voiceEnabled = document.createElement('input'); voiceEnabled.type = 'checkbox'; voiceEnabled.dataset.chimePreference = 'voiceEnabled';
+  const voiceToggle = controlLabel('启用语音播报', voiceEnabled, 'chime-check');
+  const voiceSelect = document.createElement('select'); voiceSelect.dataset.chimePreference = 'selectedVoiceURI'; voiceSelect.setAttribute('aria-label', '选择中文语音');
+  const notifyEnabled = document.createElement('input'); notifyEnabled.type = 'checkbox'; notifyEnabled.dataset.chimePreference = 'notifyEnabled';
+  const notifyToggle = controlLabel('启用浏览器系统通知（默认关闭）', notifyEnabled, 'chime-check');
+  append(preferences, preferencesLegend, voiceToggle, controlLabel('播报声音', voiceSelect, 'chime-field'), notifyToggle);
+
+  const settingsStatus = node('p', 'chime-settings-status'); settingsStatus.setAttribute('role', 'status'); settingsStatus.setAttribute('aria-live', 'polite'); settingsStatus.dataset.chimeSettingsStatus = 'true';
+  const settingsActions = node('div', 'chime-actions');
+  const settingsStart = makeButton('开始报时', 'start', 'chime-primary');
+  const settingsPause = makeButton('暂停', 'pause');
+  const settingsPreview = makeButton('试听提示音', 'preview');
+  append(settingsActions, settingsStart, settingsPause, settingsPreview);
+  append(settings, settingsTitle, explanation, slotGrid, preferences, settingsStatus, settingsActions);
+  settingsHost.replaceChildren(settings);
+
+  function settingError(slotId, error = '') {
+    const controls = slotControls.get(slotId);
+    controls.error.textContent = error;
+    controls.error.hidden = !error;
+  }
+
+  function changeSlot(slotId, field, rawValue) {
+    try {
+      const patch = field === 'enabled' ? { enabled: rawValue } : field === 'preset' ? { preset: rawValue } : { [field]: rawValue };
+      const next = updateSlot(currentChime, slotId, patch);
+      if (onSlotChange?.(slotId, next) === false) { renderSettings(currentChime, currentLocked); renderTags(currentChime, currentLocked); throw new Error('设置尚未保存；已保留原值。'); }
+      settingError(slotId);
+    } catch (error) { settingError(slotId, error.message || '设置无效；已保留原值。'); }
+  }
+
+  function changePreference(key, value) {
+    try {
+      const next = updateChimePreference(currentChime, key, value);
+      if (onPreferenceChange?.(key, next) === false) { renderSettings(currentChime, currentLocked); throw new Error('设置尚未保存；已保留原值。'); }
+      preferenceError.textContent = '';
+    } catch (error) { preferenceError.textContent = error.message || '设置无效；已保留原值。'; }
+  }
+
+  let currentChime = null;
+  let preferenceError = node('p', 'chime-slot-error'); preferenceError.dataset.preferenceError = 'true'; preferenceError.setAttribute('role', 'status');
+  preferences.appendChild(preferenceError);
+  slotControls.forEach((controls, slotId) => {
+    controls.enabled.addEventListener('change', () => changeSlot(slotId, 'enabled', controls.enabled.checked));
+    controls.preset.addEventListener('change', () => changeSlot(slotId, 'preset', controls.preset.value));
+    controls.minutes.addEventListener('change', () => changeSlot(slotId, 'minutes', Number(controls.minutes.value)));
+    controls.early.addEventListener('change', () => changeSlot(slotId, 'earlySeconds', Number(controls.early.value)));
+    controls.pause.addEventListener('click', () => changeSlot(slotId, 'paused', !currentChime?.slots?.find(slot => slot.slotId === slotId)?.paused));
+  });
+  voiceEnabled.addEventListener('change', () => changePreference('voiceEnabled', voiceEnabled.checked));
+  voiceSelect.addEventListener('change', () => changePreference('selectedVoiceURI', voiceSelect.value));
+  notifyEnabled.addEventListener('change', () => changePreference('notifyEnabled', notifyEnabled.checked));
+  [startButton, settingsStart].forEach(button => button.addEventListener('click', () => onStart?.()));
+  [pauseButton, settingsPause].forEach(button => button.addEventListener('click', () => onPause?.()));
+  [previewButton, settingsPreview].forEach(button => button.addEventListener('click', () => onPreview?.()));
+
+  function refreshVoices(chime = currentChime) {
+    const voices = globalThis.speechSynthesis?.getVoices?.() || [];
+    const prior = chime?.selectedVoiceURI ?? voiceSelect.value ?? '';
+    voiceSelect.replaceChildren();
+    const automatic = document.createElement('option'); automatic.value = ''; automatic.textContent = '自动选择中文语音'; voiceSelect.appendChild(automatic);
+    if (prior && !voices.some(voice => voice.voiceURI === prior)) {
+      const unavailable = document.createElement('option'); unavailable.value = prior; unavailable.textContent = '已保存的声音当前不可用'; voiceSelect.appendChild(unavailable);
+    }
+    voices.forEach(voice => {
+      const option = document.createElement('option'); option.value = voice.voiceURI; option.textContent = `${voice.name}（${voice.lang || '未知语言'}）`; voiceSelect.appendChild(option);
+    });
+    voiceSelect.value = prior;
+    if (voiceSelect.value !== prior) voiceSelect.value = '';
+  }
+
+  let lastChime = null; let currentLocked = false;
+  function renderSettings(chime, locked) {
+    currentChime = chime;
+    currentLocked = locked;
+    slotControls.forEach((controls, slotId) => {
+      const slot = chime.slots.find(item => item.slotId === slotId);
+      controls.enabled.checked = slot.enabled; controls.preset.value = slot.preset;
+      controls.minutes.value = String(slot.minutes); controls.minutes.disabled = locked || slot.preset !== 'custom';
+      controls.customMinutes.hidden = slot.preset !== 'custom';
+      controls.early.value = String(slot.earlySeconds); controls.early.max = String(Math.min(600, periodMinutes(slot) * 60 - 1));
+      controls.fieldset.disabled = locked;
+      controls.pause.textContent = slot.paused ? '恢复' : '暂停';
+      const actionName = slot.paused ? '恢复' : '暂停';
+      const accessible = `${actionName}第 ${slotId.slice(-1)} 个周期（${slotInterval(slot)}）`;
+      controls.pause.setAttribute('aria-label', accessible); controls.pause.title = accessible;
+      controls.error.hidden = true;
+    });
+    voiceEnabled.checked = chime.voiceEnabled; notifyEnabled.checked = chime.notifyEnabled;
+    voiceEnabled.disabled = locked; notifyEnabled.disabled = locked; voiceSelect.disabled = locked;
+    if (voiceSelect.value !== chime.selectedVoiceURI || !voiceSelect.options.length) refreshVoices(chime);
+    preferenceError.textContent = '';
+    lastChime = chime;
+  }
+
+  function renderTags(chime, locked) {
+    const enabled = chime.slots.filter(slot => slot.enabled);
+    count.textContent = `已设置报时 ${enabled.length}/5`;
+    tags.replaceChildren(); tags.hidden = enabled.length === 0; empty.hidden = enabled.length > 0;
+    tags.style.setProperty('--tag-count', String(Math.max(1, enabled.length)));
+    enabled.forEach(slot => {
+      const tag = node('div', 'chime-tag'); tag.setAttribute('role', 'listitem');
+      const label = node('span', 'chime-tag-label', slotInterval(slot));
+      const control = makeButton(slot.paused ? '▶' : 'Ⅱ', 'slot-pause', 'chime-tag-toggle');
+      const actionName = slot.paused ? '恢复' : '暂停'; const accessible = `${actionName}第 ${slot.slotId.slice(-1)} 个周期（${slotInterval(slot)}）`;
+      control.setAttribute('aria-label', accessible); control.title = accessible; control.disabled = locked; control.dataset.slotId = slot.slotId;
+      if (slot.paused) control.classList.add('is-paused');
+      control.addEventListener('click', () => {
+        changeSlot(slot.slotId, 'paused', !slot.paused);
+      });
+      tag.append(label, control); tags.appendChild(tag);
+    });
+  }
+
+  function applyRuntime(status, messageText = '') {
+    const runIntent = status?.runIntent || 'paused';
+    let statusText;
+    if (messageText) statusText = messageText;
+    else if (status?.coordinationError) statusText = status.coordinationError;
+    else if (runIntent !== 'running') statusText = '全局已暂停';
+    else if (status?.eligibleSlots === 0) statusText = status?.enabledSlots === 0 ? '没有启用的周期' : '所有周期均已暂停';
+    else if (status?.leader) statusText = '当前页面负责报时';
+    else if (status?.leaderId && status.leaderId !== status.selfId) statusText = '由其他页面负责报时';
+    else if (!status?.visible) statusText = '当前没有可用报时页面';
+    else if (!status?.audioUnlocked) statusText = '报时已启动；本页面需点击后解锁音频';
+    else statusText = '等待可见页面接管';
+    runtime.textContent = statusText;
+    settingsStatus.textContent = statusText;
+    [startButton, settingsStart].forEach(button => { button.disabled = Boolean(status?.locked || !status?.visible); });
+    [pauseButton, settingsPause].forEach(button => { button.disabled = Boolean(status?.locked || runIntent !== 'running'); });
+    [previewButton, settingsPreview].forEach(button => { button.disabled = Boolean(status?.locked || !status?.visible); });
+    message.textContent = status?.message || '';
+    message.hidden = !message.textContent;
+    settingsStatus.dataset.kind = status?.message || status?.coordinationError ? 'error' : 'normal';
+  }
+
+  return {
+    render(chime, status = {}, { locked = false, clockText = '', messageText = '', force = false } = {}) {
+      if (!chime) return;
+      currentChime = chime;
+      currentLocked = locked;
+      if (chime !== lastChime || force) { renderSettings(chime, locked); renderTags(chime, locked); }
+      else {
+        slotControls.forEach((controls, slotId) => { controls.fieldset.disabled = locked; controls.pause.disabled = locked; });
+        tags.querySelectorAll('button').forEach(button => { button.disabled = locked; });
+      }
+      clock.textContent = clockText ? `北京时间 ${clockText}` : '北京时间 --:--:--';
+      applyRuntime({ ...status, locked }, messageText);
+    },
+    refreshVoices() { refreshVoices(currentChime); },
+    showMessage(text) { message.textContent = text || ''; message.hidden = !message.textContent; settingsStatus.textContent = text || ''; },
+    destroy() { summaryHost.replaceChildren(); settingsHost.replaceChildren(); }
+  };
 }
 
 
@@ -1859,6 +2889,9 @@ let saveError = '';
 let corruption = false;
 let externalConflict = false;
 let storageUnsafe = false;
+let legacyChimeRecovery = false;
+let recoveryCanonicalRaw = null;
+let recoveryLegacyRaw = null;
 let restoredNotice = '';
 let historyScope = 'today';
 let currentDay = '';
@@ -1869,6 +2902,12 @@ let unified = null;
 let dashboardView = null;
 let fullRiskView = null;
 let appearanceView = null;
+let chimeView = null;
+let chimeOutput = null;
+let chimeCoordinator = null;
+let chimeScheduler = null;
+let chimeStatusMessage = '';
+let audioStateListenerAttached = false;
 try { storage = globalThis.localStorage; } catch (_) { storage = null; }
 commodityPreferences = loadCommodityPreferences(storage, ORDER);
 
@@ -1882,7 +2921,11 @@ const duration = card => {
 const announce = text => { live.textContent = text; };
 const directionShort = direction => direction === 'long' ? '多' : direction === 'short' ? '空' : '—';
 const semanticTone = value => ['bullish', 'long'].includes(value) ? 'bullish' : ['bearish', 'short'].includes(value) ? 'bearish' : 'neutral';
-const writeLocked = () => externalConflict || storageUnsafe;
+const writeLocked = () => externalConflict || storageUnsafe || legacyChimeRecovery;
+function chimeDataCurrent() {
+  if (!unified || writeLocked() || corruption || !storage?.getItem || typeof lastRaw !== 'string') return false;
+  try { return storage.getItem(UNIFIED_KEY) === lastRaw; } catch { return false; }
+}
 function saveUnified(candidate, options = {}, phase = 'unified_storage_write') {
   try { return commitUnified(storage, candidate, options); }
   catch (error) {
@@ -1903,23 +2946,33 @@ function storageStatus() {
   const importFile = document.querySelector('#import-file');
   const confirm = document.querySelector('#dialog-confirm');
   const policy = externalConflictPolicy(writeLocked());
+  const safeReadOnly = policy.cardsInert || corruption;
   document.querySelector('#restore-note').textContent = restoredNotice;
   document.querySelector('#restore-note').hidden = !restoredNotice;
-  document.querySelector('#export-raw').hidden = !corruption;
-  document.querySelector('#export-json').disabled = corruption && !lastRaw;
+  document.querySelector('#export-raw').hidden = !corruption && !legacyChimeRecovery;
+  document.querySelector('#export-chime-raw').hidden = !legacyChimeRecovery;
+  document.querySelector('#export-json').disabled = legacyChimeRecovery || (corruption && !lastRaw);
   document.querySelector('#export-today').disabled = corruption;
   document.querySelector('#export-all').disabled = corruption;
   importJson.disabled = policy.disableDangerousDataActions;
   importFile.disabled = policy.disableDangerousDataActions;
   startFresh.disabled = policy.disableDangerousDataActions;
-  confirm.disabled = policy.disableDangerousDataActions;
-  historyBody.inert = policy.historyInert;
-  document.querySelector('#risk-dashboard-host').inert = policy.cardsInert;
-  document.querySelector('#risk-manager-host').inert = policy.cardsInert;
-  document.querySelectorAll('[data-delete]').forEach(button => { button.disabled = policy.historyInert; });
+  confirm.disabled = policy.disableDangerousDataActions && pending?.kind !== 'ignore-legacy-chime';
+  document.querySelector('#appearance-select').disabled = policy.disableDangerousDataActions;
+  historyBody.inert = policy.historyInert || corruption;
+  document.querySelector('#risk-dashboard-host').inert = safeReadOnly;
+  document.querySelector('#chime-summary-host').inert = safeReadOnly;
+  document.querySelector('#chime-settings-host').inert = safeReadOnly;
+  document.querySelector('#risk-manager-host').inert = safeReadOnly;
+  document.querySelectorAll('[data-delete]').forEach(button => { button.disabled = policy.historyInert || corruption; });
   if (corruption) {
+    document.querySelector('#ignore-legacy-chime').hidden = true;
     label.textContent = '存档异常 · 未覆盖'; message.textContent = '本地存档未通过校验。GC / CL / ES 已显示，但原存档未被清空或覆盖；请导出原始存档、恢复有效备份，或明确开始空白工作区。'; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = false; cardsEl.inert = true; return;
   }
+  if (legacyChimeRecovery) {
+    label.textContent = '旧版报时设置需确认 · 当前页面只读'; message.textContent = CHIME_LEGACY_RECOVERY_MESSAGE; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; document.querySelector('#ignore-legacy-chime').hidden = false; cardsEl.inert = true; return;
+  }
+  document.querySelector('#ignore-legacy-chime').hidden = true;
   if (externalConflict) {
     label.textContent = '检测到外部修改 · 当前页面只读'; message.textContent = policy.message; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; cardsEl.inert = policy.cardsInert; return;
   }
@@ -1950,12 +3003,15 @@ function load() {
     if (boot.source === 'recovery-required') { corruption = true; saveError = 'RecoveryRequired'; lastRaw = boot.raw || ''; return; }
     unified = boot.state;
     state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.sections.intraday.savedAt; restoredNotice = boot.notice || '';
-    if (boot.source === 'canonical-migrated') restoredNotice = '已将统一存档中的日内 V3 数据确定性迁移为 V4；旧历史名称和关键位置保持不变。';
-    if (boot.source === 'legacy' || boot.source === 'blank' || boot.source === 'canonical-migrated') {
+    if (boot.source === 'chime-recovery') { legacyChimeRecovery = true; recoveryCanonicalRaw = boot.raw; recoveryLegacyRaw = boot.legacyRaw; lastRaw = boot.raw; }
+    if (boot.source === 'canonical-migrated') restoredNotice = boot.migration?.migrated
+      ? '已将统一存档 schema 1 安全迁移为 schema 2，并将日内 V3 数据确定性迁移为 V4；旧历史名称和关键位置保持不变。'
+      : '已将统一存档 schema 1 安全迁移为 schema 2；已有日内记录、风险数据与外观偏好保持原值。';
+    if (boot.source === 'legacy' || boot.source === 'blank') {
       try { unified = saveUnified(unified, {}, 'unified_first_write'); state.lastSavedAt = unified.savedAt; }
       catch (error) { reportDiagnostic(error, { phase: 'unified_first_write' }); saveError = 'StorageUnavailable'; }
     }
-    lastRaw = JSON.stringify(unified); if (boot.source === 'storage-unavailable') saveError = 'StorageUnavailable'; return;
+    if (!legacyChimeRecovery) lastRaw = boot.raw ?? JSON.stringify(unified); if (boot.source === 'storage-unavailable') saveError = 'StorageUnavailable'; return;
   } catch (error) { reportDiagnostic(error, { phase: 'unified_startup' }); corruption = true; return; }
 }
 function mutate(message, symbol, focus = '.state-title') {
@@ -2005,19 +3061,44 @@ function renderHistory() {
   document.querySelectorAll('[data-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === historyScope)));
   historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUP_LABELS[record.type]}</td><td class="position">${escapeHtml(record.zone ?? '—')}</td><td>${recordProgress(record)}</td><td><button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button></td></tr>`).join('');
 }
-function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = visibleSymbols.map(renderCard).join(''); renderHistory(); storageStatus(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
+function renderChime() {
+  const chime = unified?.sections?.chime; if (!chime || !chimeView) return;
+  const enabledSlots = chime.slots.filter(slot => slot.enabled).length;
+  const eligibleSlots = chime.slots.filter(slot => slot.enabled && !slot.paused).length;
+  chimeView.render(chime, { ...(chimeCoordinator?.getStatus() || {}), enabledSlots, eligibleSlots }, { locked: writeLocked() || corruption, clockText: clockLabel(now()), messageText: chimeStatusMessage });
+}
+function persistChime(next, changedSlotId = null) {
+  if (!unified || writeLocked() || corruption) return false;
+  try {
+    const candidate = copy(unified); candidate.sections.chime = copy(next);
+    unified = saveUnified(candidate, {}, 'chime_settings_commit');
+    state.lastSavedAt = unified.savedAt; lastRaw = JSON.stringify(unified); saveError = ''; chimeStatusMessage = '';
+    chimeCoordinator?.settingsChanged(); chimeScheduler?.update(changedSlotId); storageStatus(); renderChime(); return true;
+  } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); renderChime(); return false; }
+}
+function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = visibleSymbols.map(renderCard).join(''); renderHistory(); storageStatus(); renderChime(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
 function openConfirmation(action, title, message, confirm, warning = '') {
   if (pending) return;
-  pending = { ...action, revision: state.revision, storageRaw: lastRaw }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm;
+  pending = { ...action, revision: state.revision, storageRaw: lastRaw }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm; document.querySelector('#dialog-confirm').disabled = writeLocked() && action.kind !== 'ignore-legacy-chime';
   const warningEl = document.querySelector('#dialog-warning'); warningEl.textContent = warning; warningEl.hidden = !warning; dialog.showModal(); document.querySelector('#dialog-cancel').focus();
 }
 function finishConfirmation(confirmed) {
   const action = pending; pending = null; dialog.close();
   if (!confirmed) { announce('已取消；任务、计时和机会记录保持不变'); return; }
+  if (action.kind === 'ignore-legacy-chime') {
+    if (!legacyChimeRecovery) return;
+    try {
+      const result = continueLegacyChimeRecovery(storage, { expectedRaw: recoveryCanonicalRaw, expectedLegacyRaw: recoveryLegacyRaw });
+      unified = result.state; state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.savedAt; lastRaw = result.raw;
+      legacyChimeRecovery = false; recoveryCanonicalRaw = null; recoveryLegacyRaw = null; saveError = ''; restoredNotice = '已按明确确认忽略无法识别的旧报时设置；原旧键保持不变，当前使用默认报时设置。';
+      appearanceView?.render(unified.preferences.appearance); dashboardView?.render(); fullRiskView?.render(); chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); renderAll(); announce('旧报时设置已忽略；统一存档已安全升级，原始旧键保持不变');
+    } catch (error) { reportDiagnostic(error, { phase: 'chime_legacy_recovery' }); saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('旧报时设置未忽略；原始数据保持不变，请重新检查存档'); }
+    return;
+  }
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内 V3 已迁移为 V4。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
-  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内 V3 已迁移为 V4。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['bias', 'direction', 'structure'].includes(action.kind)) return;
   if (action.kind === 'bias') { const result = changeBias(state, action.symbol, action.bias, now()); if (result.changed) mutate(`${action.symbol} 当前偏见：${BIASES[action.bias]}`, action.symbol); }
   if (action.kind === 'direction') { const result = changeDirection(state, action.symbol, action.direction, now(), true); if (result.changed) mutate(`${action.symbol} 旧机会因方向改变结束；当前无机会`, action.symbol); }
@@ -2071,6 +3152,45 @@ function handleCommodityDashboardAction(button) {
 }
 function download(text, filename, type) { const url = URL.createObjectURL(new Blob([text], { type })); const link = document.createElement('a'); link.href = url; link.download = filename; link.click(); setTimeout(() => URL.revokeObjectURL(url), 30000); }
 
+function attachAudioStateListener() {
+  if (audioStateListenerAttached) return;
+  const context = chimeOutput?.context;
+  if (!context) return;
+  const update = () => chimeCoordinator?.setAudioUnlocked(chimeOutput.audioUnlocked);
+  if (context.addEventListener) context.addEventListener('statechange', update);
+  else context.onstatechange = update;
+  audioStateListenerAttached = true;
+}
+async function startChime() {
+  if (writeLocked() || corruption || !unified) return;
+  const unlocked = await chimeOutput.unlock();
+  attachAudioStateListener();
+  chimeCoordinator.setAudioUnlocked(unlocked.ok && chimeOutput.audioUnlocked);
+  if (!unlocked.ok) { chimeStatusMessage = unlocked.reason; renderChime(); announce(unlocked.reason); return; }
+  const permission = await chimeOutput.requestNotificationPermission(unified.sections.chime);
+  const result = await chimeCoordinator.start();
+  chimeStatusMessage = result.ok ? (permission.message || '') : result.message;
+  if (result.ok) announce(permission.message || '自然周期报时已启动'); else announce(result.message);
+  renderChime();
+}
+function pauseChime() {
+  chimeOutput?.stop();
+  const result = chimeCoordinator?.pause();
+  chimeStatusMessage = result?.ok ? '' : result?.message || '无法安全暂停报时。';
+  announce(chimeStatusMessage || '自然周期报时已暂停'); renderChime();
+}
+async function previewChime() {
+  if (writeLocked() || corruption || !unified) return;
+  const unlocked = await chimeOutput.unlock();
+  attachAudioStateListener();
+  chimeCoordinator.setAudioUnlocked(unlocked.ok && chimeOutput.audioUnlocked);
+  if (!unlocked.ok) { chimeStatusMessage = unlocked.reason; renderChime(); return; }
+  const result = await chimeCoordinator.runPreview(() => chimeOutput.preview(unified.sections.chime, () => chimeCoordinator.canOutput()));
+  chimeStatusMessage = result?.message || [result?.sound?.reason, result?.speech?.message].filter(Boolean).join(' ');
+  if (chimeStatusMessage) announce(chimeStatusMessage);
+  renderChime();
+}
+
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
 commodityDashboardEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); });
 historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
@@ -2082,17 +3202,35 @@ document.querySelector('#export-all').addEventListener('click', () => { download
 document.querySelector('#export-json').addEventListener('click', () => { const payload = unified ? copy(unified) : makeEnvelope(state); download(JSON.stringify(payload, null, 2), `交易控制中心_完整备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成完整备份下载（状态卡、风险管理器与外观）。'; });
 document.querySelector('#export-risk-json').addEventListener('click', () => { download(JSON.stringify(unified?.sections.riskManager || { schemaVersion: 2, selectedAccountId: null, accounts: [] }, null, 2), `Trading_Risk_Manager_备份_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成风险管理器分项 JSON。'; });
 document.querySelector('#export-raw').addEventListener('click', () => { download(lastRaw || '', `日内状态卡_原始存档_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始存档；原数据未修改。'; });
+document.querySelector('#export-chime-raw').addEventListener('click', () => { download(recoveryLegacyRaw ?? '', `自然周期报时_原始旧设置_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始旧报时设置；本地原数据未修改。'; });
+document.querySelector('#ignore-legacy-chime').addEventListener('click', () => { if (!legacyChimeRecovery) return; openConfirmation({ kind: 'ignore-legacy-chime' }, '忽略无法识别的旧报时设置？', '将保留旧报时键原始内容，并以默认报时设置升级统一存档。状态卡、风险管理器及外观保持原值；此选择不会删除或改写旧键。', '忽略并使用默认值', '只有确认不再迁移旧报时设置时继续。'); });
 document.querySelector('#import-json').addEventListener('click', () => { if (writeLocked()) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
 document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind, migrated: preview.migration?.migrated === true }, '确认导入备份？', `${importSummary(preview.kind, preview.state, preview.migration)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.message}。原数据未改变。`; } finally { event.target.value = ''; } });
 document.querySelector('#storage-retry').addEventListener('click', () => { if (!writeLocked()) persist(); });
 document.querySelector('#start-fresh').addEventListener('click', () => { if (!writeLocked()) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
-window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到其他标签页写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); externalConflict = true; saveError = 'Conflict'; storageStatus(); } });
+window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { reportDiagnostic(Object.assign(new Error('检测到其他标签页写入'), { code: 'EXTERNAL_WRITE_CONFLICT' }), { phase: 'external_write' }); externalConflict = true; saveError = 'Conflict'; chimeCoordinator?.invalidate('检测到统一存档外部修改；本页报时已停止。'); storageStatus(); renderChime(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { ORDER.forEach(symbol => { const element = document.querySelector(`article[data-symbol="${symbol}"] .duration`); if (element) element.textContent = duration(state.cards[symbol]); }); if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
+setInterval(renderChime, 1000);
+globalThis.speechSynthesis?.addEventListener?.('voiceschanged', () => chimeView?.refreshVoices());
 function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; renderTextBanner(banner, message); cardsEl.inert = true; } }
 
 load();
+chimeOutput = createOutputAdapter();
+let hadChimeLeadership = false;
+chimeCoordinator = createCoordinator({
+  isDataCurrent: chimeDataCurrent,
+  isAudioUnlocked: () => chimeOutput.audioUnlocked,
+  onChange: status => { if (hadChimeLeadership && !status.leader) chimeOutput.stop(); hadChimeLeadership = status.leader; chimeScheduler?.update(); renderChime(); }
+});
+chimeScheduler = createScheduler({ coordinator: chimeCoordinator, output: chimeOutput, getChime: () => unified?.sections?.chime, onStatus: message => { chimeStatusMessage = message; renderChime(); } });
+chimeView = initChimeView({
+  summaryHost: document.querySelector('#chime-summary-host'), settingsHost: document.querySelector('#chime-settings-host'),
+  onSlotChange: (slotId, next) => persistChime(next, slotId),
+  onPreferenceChange: (_key, next) => persistChime(next),
+  onStart: () => { void startChime(); }, onPause: pauseChime, onPreview: () => { void previewChime(); }
+});
 appearanceView = initAppearance(document.querySelector('#appearance-select'), { getItem: () => unified?.preferences?.appearance }, document.documentElement, nextAppearance => {
-  if (!unified || writeLocked()) return false;
+  if (!unified || writeLocked() || corruption) return false;
   const candidate = copy(unified); candidate.preferences.appearance = nextAppearance;
   try { unified = saveUnified(candidate, {}, 'appearance_update'); lastRaw = JSON.stringify(unified); state.lastSavedAt = unified.savedAt; dashboardView?.render(); fullRiskView?.render(); storageStatus(); return true; } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); return false; }
 });
@@ -2113,6 +3251,6 @@ try { fullRiskView = initRiskManagerView(document.querySelector('#risk-manager-h
   navigateHome: () => { globalThis.location.hash = '#/home'; },
   commit: nextRisk => { const candidate = copy(unified); candidate.sections.riskManager = copy(nextRisk); const saved = saveUnified(candidate, {}, 'risk_view_commit'); unified = saved; lastRaw = JSON.stringify(saved); state.lastSavedAt = saved.savedAt; dashboardView?.render(); storageStatus(); }
 }); } catch (error) { reportDiagnostic(error, { phase: 'risk_view_init' }); }
-renderAll(); storageStatus();
+renderAll(); storageStatus(); renderChime();
 
 })();
