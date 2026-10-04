@@ -66,10 +66,23 @@ test('S3 01: fixed family mapping preserves exact execution contract and context
   for (const [family, product] of Object.entries({ GC: 'MGC', ES: 'MES', CL: 'MCL' })) {
     assert.equal(executionProductForFamily(family), product); assert.equal(researchFamilyForProduct(product), family);
     const r = research(opportunity({ symbol: family }), execution({ product }));
-    assert.equal(r.matchingStatus, 'MATCHED'); assert.equal(r.researchFamily, family); assert.equal(r.contextSymbol, family);
+    assert.equal(r.matchingStatus, 'MATCHED'); assert.equal(r.researchFamily, family); assert.equal(r.contextSymbol, null);
     assert.equal(r.executionContract, `${product}Z9`); assert.equal(r.executionProduct, product);
   }
   assert.equal(researchFamilyForProduct('GC'), null);
+});
+test('S3: context symbol is nullable and preserves only an explicit Task Card symbol', () => {
+  const implicit = opportunity(), before = structuredClone(implicit);
+  assert.equal(research(implicit).contextSymbol, null);
+  assert.deepEqual(implicit, before);
+  assert.equal(research({ ...implicit, contextSymbol: null }).contextSymbol, null);
+  const explicit = { ...implicit, contextSymbol: 'SYNTHETIC:CONTEXT' };
+  const result = research(explicit);
+  assert.equal(result.contextSymbol, 'SYNTHETIC:CONTEXT');
+  assert.equal(result.researchFamily, 'ES');
+  assert.equal(result.executionProduct, 'MES');
+  assert.equal(result.executionContract, 'MESZ9');
+  assert.equal(JSON.parse(JSON.stringify(research(implicit))).contextSymbol, null);
 });
 test('S3 02: family mismatch excludes candidate', () => assert.equal(reconcile(opportunity({ symbol: 'GC' })).matchingStatus, 'NO_MATCH'));
 test('S3 03: direction mismatch excludes candidate', () => assert.equal(reconcile(opportunity({ direction: 'short' })).matchingStatus, 'NO_MATCH'));

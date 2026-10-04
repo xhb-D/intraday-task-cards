@@ -30,7 +30,7 @@ export function buildResearchTrades(records, trades, options = {}) {
     const quality = assessResearchQuality({ match, initialStop, direction, actualEntryPrice, executionQa, executionFlags });
     return { researchTradeId: 'rt:' + encodeURIComponent(JSON.stringify([record.id, match.logicalTradeId])),
       opportunityId: record.id, logicalTradeId: match.logicalTradeId, researchFamily: record.symbol,
-      contextSymbol: record.contextSymbol ?? record.symbol, executionProduct: trade?.product ?? executionProductForFamily(record.symbol), executionContract: trade?.contract ?? null,
+      contextSymbol: record.contextSymbol ?? null, executionProduct: trade?.product ?? executionProductForFamily(record.symbol), executionContract: trade?.contract ?? null,
       direction, originalSetup: record.type, researchSetupClass: researchSetupClass(record.type), manualEvents,
       manualSetupTransitions: manualEvents.filter(event => ['BOF_TO_PB_RECORDED', 'BOF_TO_PB_REVERTED'].includes(event.type)),
       registeredAt: record.registeredAt, taskEntryConfirmedAt: record.enteredAt, taskExitConfirmedAt: record.endedAt,
