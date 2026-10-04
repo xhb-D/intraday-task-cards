@@ -27,7 +27,10 @@ const index=await readFile(new URL('../index.html',import.meta.url),'utf8');
 const head=index.slice(0,index.indexOf('</head>')).replace(/<script[\s\S]*?<\/script>/g,'');
 const header=index.match(/<header class="page-head">[\s\S]*?<\/header>/)[0];
 for(const match of index.matchAll(/href="([^"?]+\.css)\?/g))await writeFile(resolve(dir,match[1]),await readFile(new URL('../'+match[1],import.meta.url),'utf8'));
-for(const theme of ['light','dark']){
+for(const [name,id] of [['layout','ES1'],['ready','GC0'],['blocked','CL2'],['ambiguous','GC3']]){
+ controller.select(f.ids[id]);
+ for(const theme of ['light','dark']){
  const html=head.replace('<html lang="zh-CN">',`<html lang="zh-CN" data-theme="${theme}">`)+`</head><body><main class="shell">${header}<p class="er-muted">SYNTHETIC · 静态布局检查；使用正式 renderer / CSS，交互另行在完整工作台验证。</p><section>${renderWorkbench(controller.snapshot())}</section></main></body></html>`;
- await writeFile(resolve(dir,`layout-${theme}.html`),html,'utf8');
+ await writeFile(resolve(dir,`${name}-${theme}.html`),html,'utf8');
+}
 }
