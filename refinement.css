@@ -77,3 +77,14 @@
 @media(max-width:1050px){.card-controls{grid-template-rows:auto auto auto auto 34px}.card .task{min-height:unset}.task-content{grid-template-columns:1fr;gap:9px}.task-summary{gap:8px 14px}.task-summary dd{font-size:17px;line-height:22px}}
 @media(max-width:629px){.card-head-actions{gap:6px}.card-hide{min-height:29px;padding:0 6px}.card-toggle{width:29px;height:29px}.commodity-dashboard{margin-top:10px;padding:10px}.commodity-dashboard-summary{align-items:flex-start}.commodity-dashboard-actions{padding-top:1px}.commodity-dashboard-row{grid-template-columns:42px minmax(0,1fr);gap:6px 9px}.commodity-dashboard-row button{grid-column:2;justify-self:start}.cards.cards--count-2,.cards.cards--count-1{grid-template-columns:1fr}.card .task{padding:10px}.task-summary dd{font-size:16px}}
 @container (max-width:390px){.task-content{grid-template-columns:1fr;gap:10px}.task-summary{gap:9px 14px}.task-summary dd{white-space:normal;overflow-wrap:anywhere}.card .task{min-height:unset}.is-collapsed .task{min-height:0}}
+
+/* Step 1: compact manual capture, confined to the holding card. */
+.research-capture{display:grid;gap:6px;padding:8px 10px;border:1px solid var(--border-primary);border-radius:7px;background:var(--bg-surface-secondary);color:var(--text-secondary);font-size:12px;line-height:18px}
+.research-stop,.research-management{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+.research-capture button{min-height:28px;padding:3px 8px;border:1px solid var(--border-primary);border-radius:5px;background:var(--bg-surface);color:var(--text-primary);font:inherit}
+.research-stop-form{display:flex;align-items:center;gap:5px;flex-wrap:wrap;min-width:0}
+.research-stop-form input{width:110px;min-width:0;min-height:28px;padding:3px 6px;border:1px solid var(--border-primary);border-radius:5px;background:var(--bg-surface);color:var(--text-primary);font:inherit}
+.research-capture button:focus-visible,.research-stop-form input:focus-visible{outline:2px solid var(--theme-accent);outline-offset:2px}
+.research-capture small{font-size:11px;overflow-wrap:anywhere}
+.research-error{margin:0;color:var(--danger);font-size:11px}
+.research-error[hidden]{display:none}

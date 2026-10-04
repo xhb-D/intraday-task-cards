@@ -1160,7 +1160,8 @@ function initRiskManagerView(host, controller) { return mountRiskManager(host, c
 
 
 const ORDER = Object.freeze(['GC', 'CL', 'ES']);
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
+const V4_SCHEMA_VERSION = 4;
 const LEGACY_SCHEMA_VERSION = 3;
 const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' });
 const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
@@ -1253,7 +1254,8 @@ function chooseSetup(state, symbol, type, time = Date.now()) {
     biasAtRegistration: card.bias, structure3mAtRegistration: card.structure3m,
     invalidReason: null, migrationReason: null,
     enteredAt: null, endedAt: null, reason: null, attention: 'wait', stageSince: time,
-    stages: [{ state: 'wait', start: time, end: null }]
+    stages: [{ state: 'wait', start: time, end: null }],
+    researchCapture: emptyResearchCapture()
   };
   card.opportunity = opportunity; state.records.push(recordSnapshot(opportunity));
   touch(state); assertState(state); return { changed: true, opportunity: card.opportunity };
@@ -1299,8 +1301,11 @@ function instruction(card) {
   return ['只管理当前持仓', '本卡不找新入场'];
 }
 
-function assertState(state) {
-  if (!state || state.schemaVersion !== SCHEMA_VERSION || !Array.isArray(state.records) || !Array.isArray(state.migrationAudit) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw stateError('状态结构无效', 'state');
+function assertState(state) { return assertWorkspaceState(state, SCHEMA_VERSION); }
+function assertV4State(state) { return assertWorkspaceState(state, V4_SCHEMA_VERSION); }
+
+function assertWorkspaceState(state, version) {
+  if (!state || state.schemaVersion !== version || !Array.isArray(state.records) || !Array.isArray(state.migrationAudit) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw stateError('状态结构无效', 'state');
   const active = new Map(); const ids = new Set();
   for (const symbol of ORDER) {
     const card = state.cards?.[symbol];
@@ -1312,6 +1317,7 @@ function assertState(state) {
     if ((opportunity.enteredAt !== null && !safeTime(opportunity.enteredAt)) || !Array.isArray(opportunity.stages) || !opportunity.stages.length) throw stateError('活动机会时间字段无效', `cards.${symbol}.opportunity`);
     const last = assertTimeline(opportunity, `cards.${symbol}.opportunity`, true);
     if (last.start !== opportunity.stageSince || last.state !== stateOf(card) || (opportunity.enteredAt !== null) !== holding) throw stateError('阶段状态无效', `cards.${symbol}.opportunity.stages`);
+    if (version === SCHEMA_VERSION) assertResearchCapture(opportunity, `cards.${symbol}.opportunity.researchCapture`);
     active.set(opportunity.id, opportunity);
   }
   for (const [index, record] of state.records.entries()) {
@@ -1321,6 +1327,7 @@ function assertState(state) {
     if (!['wait', 'signal'].includes(record.attention) || (record.enteredAt !== null && !safeTime(record.enteredAt)) || (record.endedAt !== null && !safeTime(record.endedAt))) throw stateError('记录时间或阶段无效', path);
     if (record.invalidReason !== null && !['structure_change', 'bias_change'].includes(record.invalidReason)) throw stateError('失效原因无效', `${path}.invalidReason`);
     if (record.migrationReason !== null && record.migrationReason !== 'opportunity_taxonomy_upgrade') throw stateError('迁移原因无效', `${path}.migrationReason`);
+    if (version === SCHEMA_VERSION) assertResearchCapture(record, `${path}.researchCapture`);
     ids.add(record.id);
     const last = assertTimeline(record, path, record.endedAt === null);
     if (last.start !== record.stageSince || last.state !== (record.enteredAt === null ? record.attention : 'position')) throw stateError('记录阶段状态无效', `${path}.stages`);
@@ -1329,7 +1336,7 @@ function assertState(state) {
   }
   for (const [index, audit] of state.migrationAudit.entries()) {
     const path = `migrationAudit.${index}`;
-    if (!audit || audit.fromSchemaVersion !== LEGACY_SCHEMA_VERSION || audit.toSchemaVersion !== SCHEMA_VERSION || audit.reason !== 'opportunity_taxonomy_upgrade' || !ORDER.includes(audit.symbol) || typeof audit.opportunityId !== 'string' || !legacySetup(audit.legacyType) || typeof audit.legacyTypeLabel !== 'string' || typeof audit.zone !== 'string' || typeof audit.originalStage !== 'string' || typeof audit.hadRecord !== 'boolean' || (audit.recordId !== null && typeof audit.recordId !== 'string') || !safeTime(audit.migratedAt) || !safeTime(audit.endedAt)) throw stateError('迁移审计无效', path);
+    if (!audit || audit.fromSchemaVersion !== LEGACY_SCHEMA_VERSION || audit.toSchemaVersion !== V4_SCHEMA_VERSION || audit.reason !== 'opportunity_taxonomy_upgrade' || !ORDER.includes(audit.symbol) || typeof audit.opportunityId !== 'string' || !legacySetup(audit.legacyType) || typeof audit.legacyTypeLabel !== 'string' || typeof audit.zone !== 'string' || typeof audit.originalStage !== 'string' || typeof audit.hadRecord !== 'boolean' || (audit.recordId !== null && typeof audit.recordId !== 'string') || !safeTime(audit.migratedAt) || !safeTime(audit.endedAt)) throw stateError('迁移审计无效', path);
   }
   return true;
 }
@@ -1415,7 +1422,7 @@ function collectLegacyTimes(state) {
   return times;
 }
 
-function migrateWorkspace(legacyState, migrationTime) {
+function migrateV3Workspace(legacyState, migrationTime) {
   assertLegacyState(legacyState);
   const next = copy(legacyState); const times = collectLegacyTimes(next); const requested = safeTime(migrationTime) ? migrationTime : 0;
   const migratedAt = Math.max(requested, ...times, 0); const audits = [];
@@ -1424,7 +1431,7 @@ function migrateWorkspace(legacyState, migrationTime) {
     if (!opportunity) { card.needsStructureReview = false; continue; }
     const record = next.records.find(candidate => candidate.id === opportunity.id && candidate.endedAt === null);
     const audit = {
-      fromSchemaVersion: LEGACY_SCHEMA_VERSION, toSchemaVersion: SCHEMA_VERSION, reason: 'opportunity_taxonomy_upgrade', migratedAt: migratedAt,
+      fromSchemaVersion: LEGACY_SCHEMA_VERSION, toSchemaVersion: V4_SCHEMA_VERSION, reason: 'opportunity_taxonomy_upgrade', migratedAt: migratedAt,
       endedAt: migratedAt, symbol, opportunityId: opportunity.id, legacyType: opportunity.type, legacyTypeLabel: setupLabel(opportunity.type),
       zone: record?.zone || opportunity.zone || '', originalStage: stateOf(card), hadRecord: Boolean(record), recordId: record?.id || null
     };
@@ -1434,8 +1441,126 @@ function migrateWorkspace(legacyState, migrationTime) {
     card.opportunity = null; card.idleSince = migratedAt; card.needsStructureReview = false; audits.push(audit);
   }
   for (const record of next.records) if (!Object.hasOwn(record, 'migrationReason')) record.migrationReason = null;
-  next.schemaVersion = SCHEMA_VERSION; next.migrationAudit = [...(Array.isArray(next.migrationAudit) ? next.migrationAudit : []), ...audits];
-  assertState(next); return { state: next, migratedAt, audits };
+  next.schemaVersion = V4_SCHEMA_VERSION; next.migrationAudit = [...(Array.isArray(next.migrationAudit) ? next.migrationAudit : []), ...audits];
+  assertV4State(next); return { state: next, migratedAt, audits };
+}
+
+
+// V4 -> V5 only supplements the capture; trading facts and V3 -> V4 audits stay intact.
+function migrateV4Workspace(state) {
+  assertV4State(state);
+  const next = copy(state);
+  for (const card of Object.values(next.cards)) if (card.opportunity) {
+    if (own(card.opportunity, 'researchCapture')) throw stateError('V4 不应包含 Research Capture', 'researchCapture');
+    card.opportunity.researchCapture = emptyResearchCapture();
+  }
+  for (const record of next.records) {
+    if (own(record, 'researchCapture')) throw stateError('V4 不应包含 Research Capture', 'researchCapture');
+    record.researchCapture = emptyResearchCapture();
+  }
+  next.schemaVersion = SCHEMA_VERSION;
+  assertState(next); return next;
+}
+
+function migrateWorkspace(state, migrationTime) {
+  if (state?.schemaVersion === SCHEMA_VERSION) { assertState(state); return { state: copy(state), audits: [] }; }
+  const result = state?.schemaVersion === LEGACY_SCHEMA_VERSION
+    ? migrateV3Workspace(state, migrationTime)
+    : { state, audits: [] };
+  return { ...result, state: migrateV4Workspace(result.state) };
+}
+
+const emptyResearchCapture = () => ({ eventSequence: 0, manualEvents: [] });
+const validStopPrice = value => typeof value === 'number' && Number.isFinite(value) && value > 0;
+const researchSetupClass = type => type === 'mtf_pb' ? 'PB' : ['htf_pb', 'htf_bof'].includes(type) ? 'BOF' : null;
+
+function effectiveInitialStop(item) {
+  let price = null;
+  for (const event of item?.researchCapture?.manualEvents || []) {
+    if (['INITIAL_STOP_RECORDED', 'INITIAL_STOP_LATE_RECORDED'].includes(event.type)) price = event.payload.stopPrice;
+    if (event.type === 'INITIAL_STOP_CORRECTED') price = event.payload.newValue;
+  }
+  return price;
+}
+
+function effectiveBofToPbEvent(item) {
+  let active = null;
+  for (const event of item?.researchCapture?.manualEvents || []) {
+    if (event.type === 'BOF_TO_PB_RECORDED') active = event;
+    if (event.type === 'BOF_TO_PB_REVERTED') active = null;
+  }
+  return active;
+}
+const derivedManagementState = item => effectiveBofToPbEvent(item) ? 'PB' : researchSetupClass(item?.type);
+const formatStopPrice = price => Number.isInteger(price) ? price.toFixed(1) : String(price);
+
+function researchPosition(state, symbol) {
+  assertState(state);
+  const card = cardFor(state, symbol);
+  if (stateOf(card) !== 'position') throw new Error('仅持仓中可记录 Research Capture');
+  return card.opportunity;
+}
+function appendManualEvent(state, opportunity, type, payload, time, effectiveAt = time) {
+  const events = opportunity.researchCapture.manualEvents;
+  if (!safeTime(time) || !safeTime(effectiveAt) || effectiveAt < opportunity.enteredAt || effectiveAt > time || time < opportunity.enteredAt || (events.length && time < events.at(-1).recordedAt)) throw new Error('人工事件时间无效');
+  const sequence = opportunity.researchCapture.eventSequence + 1;
+  const event = { id: `${opportunity.id}:manual-${sequence}`, type, recordedAt: time, effectiveAt, source: 'manual_intraday', payload };
+  // Validate the candidate before mutating the caller, including its historical snapshot.
+  const candidate = recordSnapshot(opportunity);
+  candidate.researchCapture.eventSequence = sequence; candidate.researchCapture.manualEvents.push(event);
+  assertResearchCapture(candidate, 'researchCapture');
+  opportunity.researchCapture.eventSequence = sequence; events.push(event);
+  syncRecord(state, opportunity); touch(state); assertState(state); return { changed: true, event: copy(event) };
+}
+function recordInitialStop(state, symbol, stopPrice, time = Date.now(), effectiveAt = time) {
+  const opportunity = researchPosition(state, symbol);
+  if (!validStopPrice(stopPrice)) throw new Error('Initial Stop 必须是大于 0 的有限数字');
+  if (effectiveInitialStop(opportunity) !== null) throw new Error('Initial Stop 已记录，请使用修正');
+  return appendManualEvent(state, opportunity, effectiveAt < time ? 'INITIAL_STOP_LATE_RECORDED' : 'INITIAL_STOP_RECORDED', { stopPrice }, time, effectiveAt);
+}
+function correctInitialStop(state, symbol, newValue, time = Date.now()) {
+  const opportunity = researchPosition(state, symbol); const oldValue = effectiveInitialStop(opportunity);
+  if (!validStopPrice(newValue)) throw new Error('Initial Stop 必须是大于 0 的有限数字');
+  if (oldValue === null) throw new Error('尚未记录 Initial Stop');
+  if (oldValue === newValue) return { changed: false };
+  return appendManualEvent(state, opportunity, 'INITIAL_STOP_CORRECTED', { oldValue, newValue }, time);
+}
+function recordBofToPb(state, symbol, time = Date.now()) {
+  const opportunity = researchPosition(state, symbol);
+  if (researchSetupClass(opportunity.type) !== 'BOF') throw new Error('仅 BOF 原始机会可转换');
+  if (effectiveBofToPbEvent(opportunity)) return { changed: false };
+  return appendManualEvent(state, opportunity, 'BOF_TO_PB_RECORDED', { from: 'BOF', to: 'PB' }, time);
+}
+function revertBofToPb(state, symbol, time = Date.now()) {
+  const opportunity = researchPosition(state, symbol); const active = effectiveBofToPbEvent(opportunity);
+  if (!active) return { changed: false };
+  return appendManualEvent(state, opportunity, 'BOF_TO_PB_REVERTED', { from: 'PB', to: 'BOF', revertedEventId: active.id }, time);
+}
+
+function assertResearchCapture(item, path) {
+  const capture = item.researchCapture;
+  const exact = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every(key => own(value, key));
+  const reject = () => { throw stateError('Research Capture 事件链无效', path); };
+  if (!exact(capture, ['eventSequence', 'manualEvents']) || !Number.isSafeInteger(capture.eventSequence) || capture.eventSequence < 0 || !Array.isArray(capture.manualEvents) || capture.eventSequence !== capture.manualEvents.length) reject();
+  let stop = null; let conversion = null; let previousTime = item.enteredAt;
+  for (const [index, event] of capture.manualEvents.entries()) {
+    if (!exact(event, ['id', 'type', 'recordedAt', 'effectiveAt', 'source', 'payload']) || event.id !== `${item.id}:manual-${index + 1}` || event.source !== 'manual_intraday' || item.enteredAt === null || !safeTime(event.recordedAt) || !safeTime(event.effectiveAt) || event.recordedAt < previousTime || event.effectiveAt < item.enteredAt || event.effectiveAt > event.recordedAt || (item.endedAt !== null && event.recordedAt > item.endedAt)) reject();
+    previousTime = event.recordedAt;
+    const payload = event.payload;
+    if (['INITIAL_STOP_RECORDED', 'INITIAL_STOP_LATE_RECORDED'].includes(event.type)) {
+      if (stop !== null || !exact(payload, ['stopPrice']) || !validStopPrice(payload.stopPrice) || (event.type === 'INITIAL_STOP_RECORDED' ? event.effectiveAt !== event.recordedAt : event.effectiveAt >= event.recordedAt)) reject();
+      stop = payload.stopPrice;
+    } else if (event.type === 'INITIAL_STOP_CORRECTED') {
+      if (stop === null || !exact(payload, ['oldValue', 'newValue']) || payload.oldValue !== stop || !validStopPrice(payload.newValue) || payload.newValue === stop || event.effectiveAt !== event.recordedAt) reject();
+      stop = payload.newValue;
+    } else if (event.type === 'BOF_TO_PB_RECORDED') {
+      if (researchSetupClass(item.type) !== 'BOF' || conversion || !exact(payload, ['from', 'to']) || payload.from !== 'BOF' || payload.to !== 'PB' || event.effectiveAt !== event.recordedAt) reject();
+      conversion = event;
+    } else if (event.type === 'BOF_TO_PB_REVERTED') {
+      if (!conversion || !exact(payload, ['from', 'to', 'revertedEventId']) || payload.from !== 'PB' || payload.to !== 'BOF' || payload.revertedEventId !== conversion.id || event.effectiveAt !== event.recordedAt) reject();
+      conversion = null;
+    } else reject();
+  }
 }
 
 
@@ -1590,7 +1715,7 @@ function makeEnvelope(state, savedAt = Date.now()) {
 }
 
 function validateEnvelope(envelope) {
-  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== SCHEMA_VERSION || !validSavedAt(envelope.savedAt) || typeof envelope.timezone !== 'string') throw persistenceError('不是受支持的 V4 状态卡备份，或版本不兼容', 'envelope');
+  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== SCHEMA_VERSION || !validSavedAt(envelope.savedAt) || typeof envelope.timezone !== 'string') throw persistenceError('不是受支持的 V5 状态卡备份，或版本不兼容', 'envelope');
   assertState(envelope.state); return true;
 }
 
@@ -1601,7 +1726,10 @@ function validateLegacyEnvelope(envelope) {
 
 function migrateEnvelope(envelope) {
   if (envelope?.schemaVersion === SCHEMA_VERSION) { validateEnvelope(envelope); return { envelope, migrated: false, audits: [] }; }
-  validateLegacyEnvelope(envelope);
+  if (envelope?.schemaVersion === V4_SCHEMA_VERSION) {
+    if (envelope.app !== APP_ID || !validSavedAt(envelope.savedAt) || typeof envelope.timezone !== 'string') throw persistenceError('V4 状态卡迁移输入无效', 'envelope');
+    assertV4State(envelope.state);
+  } else validateLegacyEnvelope(envelope);
   const result = migrateWorkspace(envelope.state, envelope.savedAt);
   const migrated = { ...copy(envelope), schemaVersion: SCHEMA_VERSION, state: result.state };
   validateEnvelope(migrated);
@@ -1619,11 +1747,11 @@ function deserialize(raw) {
 function exportMarkdown(state, scope = 'today', now = Date.now()) {
   assertState(state); const day = dateKey(now);
   const rows = state.records.filter(record => scope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || (record.endedAt !== null && dateKey(record.endedAt) === day)).sort((a,b) => b.registeredAt - a.registeredAt);
-  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。新机会选择即登记，入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 市场结构 | 进展／结果 |', '| --- | --- | --- | --- | --- | --- | --- |'];
+  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。新机会选择即登记，入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 市场结构 | 进展／结果 | Research Capture |', '| --- | --- | --- | --- | --- | --- | --- | --- |'];
   for (const record of rows) {
     const direction = DIRECTIONS[record.direction] || (record.direction === 'long' ? '做多' : '做空');
     const structure = ({ unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' })[record.structure3mAtRegistration] || record.structure3mAtRegistration;
-    lines.push(`| ${fullTime(record.registeredAt)} | ${record.symbol} | ${direction} | ${setupLabel(record.type)} | ${cell(record.zone ?? '—')} | 偏见：${({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' })[record.biasAtRegistration]}<br>市场结构：${structure} | ${recordProgress(record)} |`);
+    lines.push(`| ${fullTime(record.registeredAt)} | ${record.symbol} | ${direction} | ${setupLabel(record.type)} | ${cell(record.zone ?? '—')} | 偏见：${({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' })[record.biasAtRegistration]}<br>市场结构：${structure} | ${recordProgress(record)} | ${researchSummary(record)} |`);
   }
   if (!rows.length) lines.push('', '本范围内尚无已登记且仍保留的记录。');
   return lines.concat(['', '---', '阶段起止时间和当前任务快照保存在完整 JSON 备份中。']).join('\n');
@@ -1632,6 +1760,15 @@ const dateKey = time => { const d = new Date(time); return `${d.getFullYear()}-$
 const timeText = time => { const d = new Date(time); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(value => String(value).padStart(2,'0')).join(':'); };
 const fullTime = time => `${dateKey(time)} ${timeText(time)}`;
 const cell = value => String(value).replace(/\|/g, '&#124;').replace(/[\r\n]+/g, '<br>');
+
+function researchSummary(record) {
+  const stop = effectiveInitialStop(record); const conversion = effectiveBofToPbEvent(record);
+  const corrected = record.researchCapture.manualEvents.some(event => event.type === 'INITIAL_STOP_CORRECTED');
+  return [
+    stop === null ? '' : `Initial Stop：${formatStopPrice(stop)}${corrected ? '（已修正）' : ''}`,
+    conversion ? `管理变化：BOF → PB（${timeText(conversion.effectiveAt).slice(0, 5)}）` : ''
+  ].filter(Boolean).join('<br>') || '—';
+}
 
 
 
@@ -1749,7 +1886,17 @@ function validateUnified(value) {
 }
 
 function migrateUnified(value) {
-  if (value?.schemaVersion === 2) { validateUnified(value); return { state: copy(value), migrated: false, migration: null, audits: [] }; }
+  if (value?.schemaVersion === 2) {
+    // Validate every domain before the existing guarded migration transaction can write.
+    validateEnvelopeHeader(value, 2);
+    exactKeys(value.sections, ['intraday', 'riskManager', 'chime'], 'sections');
+    exactKeys(value.sections.intraday, ['app', 'schemaVersion', 'savedAt', 'state', 'timezone'], 'sections.intraday');
+    validateRisk(value.sections.riskManager); validateChime(value.sections.chime); validatePreferences(value.preferences);
+    const migration = migrateEnvelope(value.sections.intraday);
+    const next = copy(value); next.sections.intraday = copy(migration.envelope);
+    validateUnified(next);
+    return { state: next, migrated: migration.migrated, migration, audits: migration.audits };
+  }
   if (value?.schemaVersion !== 1) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
   const migration = validateUnifiedV1(value);
   const next = makeUnifiedV1Upgrade(value, migration, defaultChime({ status: 'unified-v1-import-default', sourceVersion: null }));
@@ -1852,7 +1999,7 @@ function importSummary(kind, state, migration = { migrated: false }) {
   const cards = Object.keys(state.sections.intraday.state.cards || {}).length;
   const records = state.sections.intraday.state.records?.length || 0;
   const accounts = state.sections.riskManager.accounts?.length || 0;
-  const migrated = kind === 'unified' && migration.migrated ? '；日内 V3 将先确定性迁移为 V4' : '';
+  const migrated = kind === 'unified' && migration.migrated ? '；将执行所需版本迁移，日内记录补入 Research Capture' : '';
   return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好${migrated}。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
 }
 
@@ -1862,7 +2009,12 @@ function loadUnified(storage) {
   if (raw !== null) {
     try {
       const parsed = JSON.parse(raw);
-      if (parsed?.schemaVersion === 2) { validateUnified(parsed); return { state: copy(parsed), source: 'canonical', raw }; }
+      if (parsed?.schemaVersion === 2) {
+        const result = migrateUnified(parsed);
+        if (!result.migrated) return { state: result.state, source: 'canonical', raw };
+        const state = commitLocalV1Upgrade(storage, raw, result.state);
+        return { state, source: 'canonical-migrated', migration: result.migration, raw: JSON.stringify(state) };
+      }
       if (parsed?.schemaVersion === 1) {
         validateUnifiedV1(parsed);
         let legacyRaw;
@@ -2909,6 +3061,7 @@ const dataDialog = document.querySelector('#data-dialog');
 const live = document.querySelector('#announcer');
 let state = createWorkspace();
 let pending = null;
+const stopEditors = new Map();
 let lastRaw = null;
 let saveError = '';
 let corruption = false;
@@ -3029,9 +3182,7 @@ function load() {
     unified = boot.state;
     state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.sections.intraday.savedAt; restoredNotice = boot.notice || '';
     if (boot.source === 'chime-recovery') { legacyChimeRecovery = true; recoveryCanonicalRaw = boot.raw; recoveryLegacyRaw = boot.legacyRaw; lastRaw = boot.raw; }
-    if (boot.source === 'canonical-migrated') restoredNotice = boot.migration?.migrated
-      ? '已将统一存档 schema 1 安全迁移为 schema 2，并将日内 V3 数据确定性迁移为 V4；旧历史名称和关键位置保持不变。'
-      : '已将统一存档 schema 1 安全迁移为 schema 2；已有日内记录、风险数据与外观偏好保持原值。';
+    if (boot.source === 'canonical-migrated') restoredNotice = '已安全升级统一存档；日内数据已迁移为 V5，原有历史和交易事实按对应迁移规则保留。';
     if (boot.source === 'legacy' || boot.source === 'blank') {
       try { unified = saveUnified(unified, {}, 'unified_first_write'); state.lastSavedAt = unified.savedAt; }
       catch (error) { reportDiagnostic(error, { phase: 'unified_first_write' }); saveError = 'StorageUnavailable'; }
@@ -3046,6 +3197,31 @@ function mutate(message, symbol, focus = '.state-title') {
 }
 function option(symbol, action, value, text, selected, disabled = false) {
   return `<button type="button" class="option ${action}${selected ? ' selected' : ''}" data-action="${action}" data-symbol="${symbol}" data-value="${value}" data-tone="${semanticTone(value)}" aria-pressed="${selected}"${disabled ? ' disabled aria-disabled="true"' : ''}>${text}</button>`;
+}
+function renderResearchCapture(symbol, opportunity) {
+  const stop = effectiveInitialStop(opportunity);
+  const editor = stopEditors.get(opportunity.id);
+  const editing = stop === null || Boolean(editor);
+  const priceInput = editing ? `<form class="research-stop-form" data-stop-form="${symbol}"><label class="sr-only" for="stop-${symbol}">${symbol} Initial Stop 价格</label><input id="stop-${symbol}" data-stop-input="${symbol}" type="number" step="any" min="0" required inputmode="decimal" value="${escapeHtml(editor?.draft ?? '')}" aria-describedby="stop-error-${symbol}" placeholder="止损价格"><button type="submit">${stop === null ? '记录' : '保存修正'}</button>${stop !== null ? `<button type="button" data-action="stop-cancel" data-symbol="${symbol}">取消</button>` : ''}</form>` : `<button type="button" data-action="stop-edit" data-symbol="${symbol}">修正</button>`;
+  const conversion = effectiveBofToPbEvent(opportunity);
+  const management = researchSetupClass(opportunity.type) === 'BOF' ? `<div class="research-management"><span>当前管理：${derivedManagementState(opportunity)}</span>${conversion ? `<span>BOF → PB：${timeText(conversion.effectiveAt).slice(0, 5)}</span><button type="button" data-action="bof-revert" data-symbol="${symbol}">撤销</button>` : `<button type="button" data-action="bof-to-pb" data-symbol="${symbol}">BOF → PB</button>`}</div>${conversion ? `<small>原始机会：${escapeHtml(SETUP_LABELS[opportunity.type])}</small>` : ''}` : '';
+  return `<section class="research-capture" aria-label="${symbol} Research Capture"><div class="research-stop"><span>Initial Stop：${stop === null ? '待记录' : formatStopPrice(stop)}</span>${priceInput}</div><p class="research-error" id="stop-error-${symbol}" role="status"${editor?.error ? '' : ' hidden'}>${escapeHtml(editor?.error || '')}</p>${management}</section>`;
+}
+function submitInitialStop(form) {
+  if (pending || corruption || writeLocked()) return;
+  const symbol = form.dataset.stopForm; if (!ORDER.includes(symbol)) return;
+  const opportunity = state.cards[symbol].opportunity;
+  if (stateOf(state.cards[symbol]) !== 'position') return;
+  const input = form.querySelector('[data-stop-input]');
+  const price = input.value.trim() === '' ? NaN : Number(input.value);
+  if (!Number.isFinite(price) || price <= 0) {
+    stopEditors.set(opportunity.id, { draft: input.value, error: '请输入大于 0 的有限数字' });
+    renderAll(); document.querySelector(`#stop-${symbol}`)?.focus({ preventScroll: true }); return;
+  }
+  const result = effectiveInitialStop(opportunity) === null ? recordInitialStop(state, symbol, price, now()) : correctInitialStop(state, symbol, price, now());
+  stopEditors.delete(opportunity.id);
+  if (result.changed) mutate(`${symbol} Initial Stop 已记录`, symbol);
+  else renderAll();
 }
 function renderCard(symbol) {
   const card = state.cards[symbol]; const opportunity = card.opportunity; const status = stateOf(card); const holding = status === 'position';
@@ -3062,12 +3238,13 @@ function renderCard(symbol) {
     entry = `<button class="entry${status === 'signal' ? ' hot' : ''}" data-action="entry" data-symbol="${symbol}" type="button">${symbol} 已入场</button>`;
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
+  const research = holding ? renderResearchCapture(symbol, opportunity) : '';
   const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd data-tone="${semanticTone(card.bias)}">${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd data-tone="${semanticTone(card.direction)}">${['long', 'short'].includes(card.direction) ? `<span class="summary-direction-active" data-tone="${semanticTone(card.direction)}">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd data-tone="${semanticTone(card.structure3m)}">${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd data-tone="neutral">${SETUP_LABELS[opportunity.type]}</dd></div></dl>` : '';
   const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向（市场结构不明确时看HTF缺口）'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${entrySignal}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   const conflictWarning = holdingConflictWarning(card);
   const hideLabel = `隐藏 ${symbol} 卡片`;
-  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><button class="card-hide" data-action="hide-card" data-symbol="${symbol}" type="button" title="${hideLabel}" aria-label="${hideLabel}">隐藏</button><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${entry}${ending}</article>`;
+  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><button class="card-hide" data-action="hide-card" data-symbol="${symbol}" type="button" title="${hideLabel}" aria-label="${hideLabel}">隐藏</button><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${research}${entry}${ending}</article>`;
 }
 function renderCommodityDashboard() {
   const hiddenSymbols = commodityPreferences.hiddenSymbols;
@@ -3122,7 +3299,7 @@ function finishConfirmation(confirmed) {
   }
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内 V3 已迁移为 V4。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V5。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
   if (action.kind === 'fresh') { try { const fresh = makeEnvelope(createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['bias', 'direction', 'structure'].includes(action.kind)) return;
   if (action.kind === 'bias') { const result = changeBias(state, action.symbol, action.bias, now()); if (result.changed) mutate(`${action.symbol} 当前偏见：${BIASES[action.bias]}`, action.symbol); }
@@ -3144,6 +3321,13 @@ function handleAction(button) {
   }
   if (pending || corruption || writeLocked() || button.disabled) return;
   const card = state.cards[symbol];
+  if (action === 'stop-edit' && stateOf(card) === 'position') {
+    stopEditors.set(card.opportunity.id, { draft: String(effectiveInitialStop(card.opportunity)), error: '' }); renderAll();
+    document.querySelector(`#stop-${symbol}`)?.focus({ preventScroll: true }); return;
+  }
+  if (action === 'stop-cancel') { if (card.opportunity) stopEditors.delete(card.opportunity.id); renderAll(); return; }
+  if (action === 'bof-to-pb') { if (recordBofToPb(state, symbol, now()).changed) mutate(`${symbol} 当前管理：PB`, symbol); return; }
+  if (action === 'bof-revert') { if (revertBofToPb(state, symbol, now()).changed) mutate(`${symbol} 已撤销 BOF → PB；当前管理：BOF`, symbol); return; }
   if (action === 'bias') {
     const result = changeBias(state, symbol, value, now());
     if (result.changed) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol);
@@ -3216,6 +3400,8 @@ async function previewChime() {
   renderChime();
 }
 
+cardsEl.addEventListener('submit', event => { const form = event.target.closest('[data-stop-form]'); if (!form) return; event.preventDefault(); safe(() => submitInitialStop(form), { phase: 'research_capture', relevantSymbol: form.dataset.stopForm }); });
+cardsEl.addEventListener('input', event => { const input = event.target.closest('[data-stop-input]'); if (!input) return; const opportunity = state.cards[input.dataset.stopInput]?.opportunity; if (opportunity && !writeLocked() && !corruption) stopEditors.set(opportunity.id, { draft: input.value, error: '' }); });
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
 commodityDashboardEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); });
 historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });

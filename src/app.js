@@ -1,4 +1,4 @@
-import { ORDER, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, SETUP_LABELS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, instruction, changeBias, changeStructure, chooseSetup, changeDirection, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy } from './model.js';
+import { ORDER, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, SETUP_LABELS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, instruction, changeBias, changeStructure, chooseSetup, changeDirection, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy, researchSetupClass, effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, formatStopPrice, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb } from './model.js';
 import { makeEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './persistence.js';
 import { renderBannerVisibility, renderTextBanner } from './banner.js';
 import { reportDiagnostic } from './diagnostics.js';
@@ -23,6 +23,7 @@ const dataDialog = document.querySelector('#data-dialog');
 const live = document.querySelector('#announcer');
 let state = createWorkspace();
 let pending = null;
+const stopEditors = new Map();
 let lastRaw = null;
 let saveError = '';
 let corruption = false;
@@ -143,9 +144,7 @@ function load() {
     unified = boot.state;
     state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.sections.intraday.savedAt; restoredNotice = boot.notice || '';
     if (boot.source === 'chime-recovery') { legacyChimeRecovery = true; recoveryCanonicalRaw = boot.raw; recoveryLegacyRaw = boot.legacyRaw; lastRaw = boot.raw; }
-    if (boot.source === 'canonical-migrated') restoredNotice = boot.migration?.migrated
-      ? '已将统一存档 schema 1 安全迁移为 schema 2，并将日内 V3 数据确定性迁移为 V4；旧历史名称和关键位置保持不变。'
-      : '已将统一存档 schema 1 安全迁移为 schema 2；已有日内记录、风险数据与外观偏好保持原值。';
+    if (boot.source === 'canonical-migrated') restoredNotice = '已安全升级统一存档；日内数据已迁移为 V5，原有历史和交易事实按对应迁移规则保留。';
     if (boot.source === 'legacy' || boot.source === 'blank') {
       try { unified = saveUnified(unified, {}, 'unified_first_write'); state.lastSavedAt = unified.savedAt; }
       catch (error) { reportDiagnostic(error, { phase: 'unified_first_write' }); saveError = 'StorageUnavailable'; }
@@ -160,6 +159,31 @@ function mutate(message, symbol, focus = '.state-title') {
 }
 function option(symbol, action, value, text, selected, disabled = false) {
   return `<button type="button" class="option ${action}${selected ? ' selected' : ''}" data-action="${action}" data-symbol="${symbol}" data-value="${value}" data-tone="${semanticTone(value)}" aria-pressed="${selected}"${disabled ? ' disabled aria-disabled="true"' : ''}>${text}</button>`;
+}
+function renderResearchCapture(symbol, opportunity) {
+  const stop = effectiveInitialStop(opportunity);
+  const editor = stopEditors.get(opportunity.id);
+  const editing = stop === null || Boolean(editor);
+  const priceInput = editing ? `<form class="research-stop-form" data-stop-form="${symbol}"><label class="sr-only" for="stop-${symbol}">${symbol} Initial Stop 价格</label><input id="stop-${symbol}" data-stop-input="${symbol}" type="number" step="any" min="0" required inputmode="decimal" value="${escapeHtml(editor?.draft ?? '')}" aria-describedby="stop-error-${symbol}" placeholder="止损价格"><button type="submit">${stop === null ? '记录' : '保存修正'}</button>${stop !== null ? `<button type="button" data-action="stop-cancel" data-symbol="${symbol}">取消</button>` : ''}</form>` : `<button type="button" data-action="stop-edit" data-symbol="${symbol}">修正</button>`;
+  const conversion = effectiveBofToPbEvent(opportunity);
+  const management = researchSetupClass(opportunity.type) === 'BOF' ? `<div class="research-management"><span>当前管理：${derivedManagementState(opportunity)}</span>${conversion ? `<span>BOF → PB：${timeText(conversion.effectiveAt).slice(0, 5)}</span><button type="button" data-action="bof-revert" data-symbol="${symbol}">撤销</button>` : `<button type="button" data-action="bof-to-pb" data-symbol="${symbol}">BOF → PB</button>`}</div>${conversion ? `<small>原始机会：${escapeHtml(SETUP_LABELS[opportunity.type])}</small>` : ''}` : '';
+  return `<section class="research-capture" aria-label="${symbol} Research Capture"><div class="research-stop"><span>Initial Stop：${stop === null ? '待记录' : formatStopPrice(stop)}</span>${priceInput}</div><p class="research-error" id="stop-error-${symbol}" role="status"${editor?.error ? '' : ' hidden'}>${escapeHtml(editor?.error || '')}</p>${management}</section>`;
+}
+function submitInitialStop(form) {
+  if (pending || corruption || writeLocked()) return;
+  const symbol = form.dataset.stopForm; if (!ORDER.includes(symbol)) return;
+  const opportunity = state.cards[symbol].opportunity;
+  if (stateOf(state.cards[symbol]) !== 'position') return;
+  const input = form.querySelector('[data-stop-input]');
+  const price = input.value.trim() === '' ? NaN : Number(input.value);
+  if (!Number.isFinite(price) || price <= 0) {
+    stopEditors.set(opportunity.id, { draft: input.value, error: '请输入大于 0 的有限数字' });
+    renderAll(); document.querySelector(`#stop-${symbol}`)?.focus({ preventScroll: true }); return;
+  }
+  const result = effectiveInitialStop(opportunity) === null ? recordInitialStop(state, symbol, price, now()) : correctInitialStop(state, symbol, price, now());
+  stopEditors.delete(opportunity.id);
+  if (result.changed) mutate(`${symbol} Initial Stop 已记录`, symbol);
+  else renderAll();
 }
 function renderCard(symbol) {
   const card = state.cards[symbol]; const opportunity = card.opportunity; const status = stateOf(card); const holding = status === 'position';
@@ -176,12 +200,13 @@ function renderCard(symbol) {
     entry = `<button class="entry${status === 'signal' ? ' hot' : ''}" data-action="entry" data-symbol="${symbol}" type="button">${symbol} 已入场</button>`;
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
+  const research = holding ? renderResearchCapture(symbol, opportunity) : '';
   const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd data-tone="${semanticTone(card.bias)}">${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd data-tone="${semanticTone(card.direction)}">${['long', 'short'].includes(card.direction) ? `<span class="summary-direction-active" data-tone="${semanticTone(card.direction)}">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd data-tone="${semanticTone(card.structure3m)}">${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd data-tone="neutral">${SETUP_LABELS[opportunity.type]}</dd></div></dl>` : '';
   const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向（市场结构不明确时看HTF缺口）'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${entrySignal}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   const conflictWarning = holdingConflictWarning(card);
   const hideLabel = `隐藏 ${symbol} 卡片`;
-  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><button class="card-hide" data-action="hide-card" data-symbol="${symbol}" type="button" title="${hideLabel}" aria-label="${hideLabel}">隐藏</button><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${entry}${ending}</article>`;
+  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><button class="card-hide" data-action="hide-card" data-symbol="${symbol}" type="button" title="${hideLabel}" aria-label="${hideLabel}">隐藏</button><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${research}${entry}${ending}</article>`;
 }
 function renderCommodityDashboard() {
   const hiddenSymbols = commodityPreferences.hiddenSymbols;
@@ -236,7 +261,7 @@ function finishConfirmation(confirmed) {
   }
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内 V3 已迁移为 V4。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V5。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
   if (action.kind === 'fresh') { try { const fresh = makeEnvelope(createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   const card = state.cards[action.symbol]; if (!card || card.opportunity?.id !== action.opportunityId && !['bias', 'direction', 'structure'].includes(action.kind)) return;
   if (action.kind === 'bias') { const result = changeBias(state, action.symbol, action.bias, now()); if (result.changed) mutate(`${action.symbol} 当前偏见：${BIASES[action.bias]}`, action.symbol); }
@@ -258,6 +283,13 @@ function handleAction(button) {
   }
   if (pending || corruption || writeLocked() || button.disabled) return;
   const card = state.cards[symbol];
+  if (action === 'stop-edit' && stateOf(card) === 'position') {
+    stopEditors.set(card.opportunity.id, { draft: String(effectiveInitialStop(card.opportunity)), error: '' }); renderAll();
+    document.querySelector(`#stop-${symbol}`)?.focus({ preventScroll: true }); return;
+  }
+  if (action === 'stop-cancel') { if (card.opportunity) stopEditors.delete(card.opportunity.id); renderAll(); return; }
+  if (action === 'bof-to-pb') { if (recordBofToPb(state, symbol, now()).changed) mutate(`${symbol} 当前管理：PB`, symbol); return; }
+  if (action === 'bof-revert') { if (revertBofToPb(state, symbol, now()).changed) mutate(`${symbol} 已撤销 BOF → PB；当前管理：BOF`, symbol); return; }
   if (action === 'bias') {
     const result = changeBias(state, symbol, value, now());
     if (result.changed) mutate(`${symbol} 当前偏见：${BIASES[value]}`, symbol);
@@ -330,6 +362,8 @@ async function previewChime() {
   renderChime();
 }
 
+cardsEl.addEventListener('submit', event => { const form = event.target.closest('[data-stop-form]'); if (!form) return; event.preventDefault(); safe(() => submitInitialStop(form), { phase: 'research_capture', relevantSymbol: form.dataset.stopForm }); });
+cardsEl.addEventListener('input', event => { const input = event.target.closest('[data-stop-input]'); if (!input) return; const opportunity = state.cards[input.dataset.stopInput]?.opportunity; if (opportunity && !writeLocked() && !corruption) stopEditors.set(opportunity.id, { draft: input.value, error: '' }); });
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
 commodityDashboardEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); });
 historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (deleteRecord(state, button.dataset.delete)) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });

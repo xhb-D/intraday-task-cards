@@ -82,6 +82,9 @@ function riskV2() {
 const emptyIntraday = makeEnvelope(createWorkspace(T0), T0);
 const emptyRisk = { schemaVersion: 2, selectedAccountId: null, accounts: [] };
 const unifiedEmpty = makeUnified(emptyIntraday, emptyRisk, { appearance: 'system' });
+// Freeze this historical fixture at its original V4 shape; never regenerate its hash from the current schema.
+unifiedEmpty.sections.intraday.schemaVersion = 4;
+unifiedEmpty.sections.intraday.state.schemaVersion = 4;
 unifiedEmpty.schemaVersion = 1;
 delete unifiedEmpty.sections.chime;
 unifiedEmpty.savedAt = T0;

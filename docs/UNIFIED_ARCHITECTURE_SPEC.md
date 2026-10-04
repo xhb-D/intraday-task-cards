@@ -1,5 +1,7 @@
 # 统一交易控制中心 — Architecture / Technical Spec
 
+> 2026-10-04 独立开发分支的 Exit Research Step 1 授权补充见 [EXIT_RESEARCH_STEP1_SPEC.md](EXIT_RESEARCH_STEP1_SPEC.md)。本分支日内版本为 V5，统一版本保持 V2；原文保留为 e25ba69 基线规范。当前授权允许本地开发分支 commit，禁止合并、push 和正式部署；尚待人工验收。
+
 - 状态：APPROVED SPECIFICATION / 本次统一 schema-v2 与 Natural Chime 实现已获明确授权
 - 版本：2.1
 - 日期：2026-10-02

@@ -25,7 +25,7 @@ test('C04a: 本地 unified V1 启动时快照并一次性迁移到 schema 2，�
   const s = { getItem(key) { reads.push(key); return data.has(key) ? data.get(key) : null; }, setItem(key, value) { data.set(key, String(value)); }, map: data };
   const loaded = loadUnified(s);
   assert.equal(loaded.source, 'canonical-migrated');
-  assert.equal(loaded.state.sections.intraday.schemaVersion, 4);
+  assert.equal(loaded.state.sections.intraday.schemaVersion, 5);
   assert.equal(loaded.state.sections.intraday.state.cards.GC.opportunity, null);
   assert.equal(loaded.state.sections.intraday.state.migrationAudit[0].reason, 'opportunity_taxonomy_upgrade');
   const migratedRaw = s.getItem(UNIFIED_KEY); const migrated = JSON.parse(migratedRaw);
@@ -45,7 +45,7 @@ test('C04b/C04d/C04e: legacy version 2 remains byte-exact until explicit ignore 
   const legacyChimeRaw = '{"version":2,"schedules":[{"uninspected":"bytes"}],"voice":true,"notify":false}';
   const s = store({ [UNIFIED_KEY]: raw, [CHIME_LEGACY_KEY]: legacyChimeRaw });
   const recovery = loadUnified(s);
-  assert.equal(recovery.source, 'chime-recovery'); assert.equal(recovery.state.sections.intraday.schemaVersion, 4);
+  assert.equal(recovery.source, 'chime-recovery'); assert.equal(recovery.state.sections.intraday.schemaVersion, 5);
   assert.equal(CHIME_LEGACY_RECOVERY_MESSAGE, '旧版报时设置无法识别，报时已停用；原始存档与旧键均未修改。请恢复有效统一备份，或明确选择“忽略旧报时设置并使用默认值继续”。');
   assert.equal(s.getItem(UNIFIED_KEY), raw); assert.equal(s.getItem(CHIME_LEGACY_KEY), legacyChimeRaw); assert.equal(s.getItem(PRE_UPGRADE_KEY), null);
   const result = continueLegacyChimeRecovery(s, { expectedRaw: raw, expectedLegacyRaw: legacyChimeRaw });

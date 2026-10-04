@@ -4,8 +4,8 @@ import { assertState, LEGACY_SCHEMA_VERSION, SCHEMA_VERSION } from '../src/model
 import { deserialize, makeEnvelope, migrateEnvelope, serialize } from '../src/persistence.js';
 import { fixtureTimes, goldenFixtures } from './fixtures/compatibility/golden-fixtures.js';
 
-test('migration: 当前 V4 状态往返，不重复迁移', () => {
-  const state = JSON.parse(serialize({ schemaVersion: 4, sequence: 0, revision: 0, lastSavedAt: null, cards: Object.fromEntries(['GC', 'CL', 'ES'].map(symbol => [symbol, { symbol, bias: 'neutral', structure3m: 'unjudged', needsStructureReview: false, direction: 'none', opportunity: null, idleSince: 1 }])), records: [], migrationAudit: [] }, 2)).state;
+test('migration: 当前 V5 状态往返，不重复迁移', () => {
+  const state = JSON.parse(serialize({ schemaVersion: 5, sequence: 0, revision: 0, lastSavedAt: null, cards: Object.fromEntries(['GC', 'CL', 'ES'].map(symbol => [symbol, { symbol, bias: 'neutral', structure3m: 'unjudged', needsStructureReview: false, direction: 'none', opportunity: null, idleSince: 1 }])), records: [], migrationAudit: [] }, 2)).state;
   const envelope = makeEnvelope(state, 2);
   const result = migrateEnvelope(envelope);
   assert.equal(result.migrated, false);

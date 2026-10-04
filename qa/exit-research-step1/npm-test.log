@@ -1,0 +1,1766 @@
+
+> intraday-task-cards-v1@1.0.0 test
+> node --test
+
+TAP version 13
+# Subtest: appearance: 与 Trading Risk Manager 共享键和三种模式
+ok 1 - appearance: 与 Trading Risk Manager 共享键和三种模式
+  ---
+  duration_ms: 0.392708
+  type: 'test'
+  ...
+# Subtest: appearance: system 移除覆盖，light/dark 设置 data-theme
+ok 2 - appearance: system 移除覆盖，light/dark 设置 data-theme
+  ---
+  duration_ms: 0.68525
+  type: 'test'
+  ...
+# Subtest: appearance: 控件写入共享偏好并立即更新页面主题
+ok 3 - appearance: 控件写入共享偏好并立即更新页面主题
+  ---
+  duration_ms: 0.366
+  type: 'test'
+  ...
+# Subtest: appearance: controller render 可由完整备份导入立即同步选择框和页面主题
+ok 4 - appearance: controller render 可由完整备份导入立即同步选择框和页面主题
+  ---
+  duration_ms: 0.537334
+  type: 'test'
+  ...
+# Subtest: appearance: head 在 CSS 前同步应用偏好，控件不进入交易备份
+ok 5 - appearance: head 在 CSS 前同步应用偏好，控件不进入交易备份
+  ---
+  duration_ms: 0.481459
+  type: 'test'
+  ...
+# Subtest: appearance bootstrap: canonical 优先、system 清除覆盖，缺失或损坏时回退旧键
+ok 6 - appearance bootstrap: canonical 优先、system 清除覆盖，缺失或损坏时回退旧键
+  ---
+  duration_ms: 1.22725
+  type: 'test'
+  ...
+# Subtest: banner: text-only banner 对空、null、undefined 和空白消息均彻底隐藏并清空文本
+ok 7 - banner: text-only banner 对空、null、undefined 和空白消息均彻底隐藏并清空文本
+  ---
+  duration_ms: 0.373375
+  type: 'test'
+  ...
+# Subtest: banner: 真实消息显示；清除后再次隐藏
+ok 8 - banner: 真实消息显示；清除后再次隐藏
+  ---
+  duration_ms: 0.05275
+  type: 'test'
+  ...
+# Subtest: banner: 两个独立容器只显示实际有消息的一条
+ok 9 - banner: 两个独立容器只显示实际有消息的一条
+  ---
+  duration_ms: 0.079833
+  type: 'test'
+  ...
+# Subtest: banner: 初始正常渲染后，首次状态变更保存不会因 structured banner 进入 safe stop
+ok 10 - banner: 初始正常渲染后，首次状态变更保存不会因 structured banner 进入 safe stop
+  ---
+  duration_ms: 0.118708
+  type: 'test'
+  ...
+# Subtest: banner CSS: hidden 属性强制为 display:none，不保留布局空间
+ok 11 - banner CSS: hidden 属性强制为 display:none，不保留布局空间
+  ---
+  duration_ms: 3.222541
+  type: 'test'
+  ...
+# Subtest: build: 顶层声明收集仅接受模块级符号
+ok 12 - build: 顶层声明收集仅接受模块级符号
+  ---
+  duration_ms: 0.832375
+  type: 'test'
+  ...
+# Subtest: build: 故意重复顶层符号会在写入 bundle 前失败
+ok 13 - build: 故意重复顶层符号会在写入 bundle 前失败
+  ---
+  duration_ms: 0.35975
+  type: 'test'
+  ...
+# Subtest: production bundle: index 使用 classic bundle，包含统一持久化与三路由且不依赖网络
+ok 14 - production bundle: index 使用 classic bundle，包含统一持久化与三路由且不依赖网络
+  ---
+  duration_ms: 2.083625
+  type: 'test'
+  ...
+# Subtest: Golden fixtures: manifest has deterministic SHA-256 metadata and only synthetic labels
+ok 15 - Golden fixtures: manifest has deterministic SHA-256 metadata and only synthetic labels
+  ---
+  duration_ms: 1.328459
+  type: 'test'
+  ...
+# Subtest: Golden fixtures: old standalone intraday samples are rejection-only cases
+ok 16 - Golden fixtures: old standalone intraday samples are rejection-only cases
+  ---
+  duration_ms: 0.566167
+  type: 'test'
+  ...
+# Subtest: C01/C03 旧风险键迁移到统一 key，并创建空白 GC/CL/ES
+ok 17 - C01/C03 旧风险键迁移到统一 key，并创建空白 GC/CL/ES
+  ---
+  duration_ms: 2.275917
+  type: 'test'
+  ...
+# Subtest: C02 旧独立状态卡备份被明确拒绝，当前状态保持不变
+ok 18 - C02 旧独立状态卡备份被明确拒绝，当前状态保持不变
+  ---
+  duration_ms: 0.647709
+  type: 'test'
+  ...
+# Subtest: C04 canonical 优先：不重新吸收旧键
+ok 19 - C04 canonical 优先：不重新吸收旧键
+  ---
+  duration_ms: 0.457583
+  type: 'test'
+  ...
+# Subtest: C05 当前统一存档正常恢复，不读取独立状态卡键
+ok 20 - C05 当前统一存档正常恢复，不读取独立状态卡键
+  ---
+  duration_ms: 0.193917
+  type: 'test'
+  ...
+# Subtest: C06/C07/C08 旧独立状态卡的任意历史 schema 均不迁移，统一格式仍可导入
+ok 21 - C06/C07/C08 旧独立状态卡的任意历史 schema 均不迁移，统一格式仍可导入
+  ---
+  duration_ms: 0.497041
+  type: 'test'
+  ...
+# Subtest: C09 风险 schema 1：迁移到 2、快照冻结且 hardLossAmount 为 null
+ok 22 - C09 风险 schema 1：迁移到 2、快照冻结且 hardLossAmount 为 null
+  ---
+  duration_ms: 0.23
+  type: 'test'
+  ...
+# Subtest: C10 风险 schema 2：账户、选择、时段、事件与快照往返相等
+ok 23 - C10 风险 schema 2：账户、选择、时段、事件与快照往返相等
+  ---
+  duration_ms: 0.256917
+  type: 'test'
+  ...
+# Subtest: C11 统一 schema 1：两域与 preferences 完整恢复
+ok 24 - C11 统一 schema 1：两域与 preferences 完整恢复
+  ---
+  duration_ms: 0.527458
+  type: 'test'
+  ...
+# Subtest: C13 旧风险分项导入：仅 riskManager 改变
+ok 25 - C13 旧风险分项导入：仅 riskManager 改变
+  ---
+  duration_ms: 0.535125
+  type: 'test'
+  ...
+# Subtest: C14 统一备份始终包含当前状态卡 section，不再生成独立状态卡备份
+ok 26 - C14 统一备份始终包含当前状态卡 section，不再生成独立状态卡备份
+  ---
+  duration_ms: 0.243958
+  type: 'test'
+  ...
+# Subtest: C15 风险分项导出：旧风险验证器可读取
+ok 27 - C15 风险分项导出：旧风险验证器可读取
+  ---
+  duration_ms: 0.361875
+  type: 'test'
+  ...
+# Subtest: C16 非法 JSON：拒绝且当前内存与存储零变化
+ok 28 - C16 非法 JSON：拒绝且当前内存与存储零变化
+  ---
+  duration_ms: 0.258167
+  type: 'test'
+  ...
+# Subtest: C17 未知顶层版本：拒绝，不猜测降级
+ok 29 - C17 未知顶层版本：拒绝，不猜测降级
+  ---
+  duration_ms: 0.117125
+  type: 'test'
+  ...
+# Subtest: C18 未知 section 版本：拒绝整个拟提交结果
+ok 30 - C18 未知 section 版本：拒绝整个拟提交结果
+  ---
+  duration_ms: 0.107083
+  type: 'test'
+  ...
+# Subtest: C19 零类格式匹配：拒绝并提示无法识别
+ok 31 - C19 零类格式匹配：拒绝并提示无法识别
+  ---
+  duration_ms: 0.035792
+  type: 'test'
+  ...
+# Subtest: C20 伪装为风险格式的旧独立状态卡：仍明确拒绝
+ok 32 - C20 伪装为风险格式的旧独立状态卡：仍明确拒绝
+  ---
+  duration_ms: 0.034125
+  type: 'test'
+  ...
+# Subtest: C21 重复账户、会话、事件 ID：拒绝并返回字段路径
+ok 33 - C21 重复账户、会话、事件 ID：拒绝并返回字段路径
+  ---
+  duration_ms: 0.135375
+  type: 'test'
+  ...
+# Subtest: C22 余额事件链断裂：拒绝且不静默修补
+ok 34 - C22 余额事件链断裂：拒绝且不静默修补
+  ---
+  duration_ms: 0.05725
+  type: 'test'
+  ...
+# Subtest: C23 事件 delta 错误：拒绝且不静默重算
+ok 35 - C23 事件 delta 错误：拒绝且不静默重算
+  ---
+  duration_ms: 0.047458
+  type: 'test'
+  ...
+# Subtest: C24 非法时间戳：拒绝并定位字段
+ok 36 - C24 非法时间戳：拒绝并定位字段
+  ---
+  duration_ms: 0.053541
+  type: 'test'
+  ...
+# Subtest: C25 当前统一存档的活动机会与记录身份不一致：assertState 拒绝
+ok 37 - C25 当前统一存档的活动机会与记录身份不一致：assertState 拒绝
+  ---
+  duration_ms: 0.396
+  type: 'test'
+  ...
+# Subtest: C26 超过 8 MB：JSON 解析前拒绝
+ok 38 - C26 超过 8 MB：JSON 解析前拒绝
+  ---
+  duration_ms: 1.788167
+  type: 'test'
+  ...
+# Subtest: C27 canonical 写入失败：旧值保留，调用方仍拥有内存候选
+ok 39 - C27 canonical 写入失败：旧值保留，调用方仍拥有内存候选
+  ---
+  duration_ms: 0.513
+  type: 'test'
+  ...
+# Subtest: C28 写后回读不一致：安全停止错误且不返回新 state
+ok 40 - C28 写后回读不一致：安全停止错误且不返回新 state
+  ---
+  duration_ms: 0.438916
+  type: 'test'
+  ...
+# Subtest: C29 pre-import 快照失败：正式导入不开始
+ok 41 - C29 pre-import 快照失败：正式导入不开始
+  ---
+  duration_ms: 0.597542
+  type: 'test'
+  ...
+# Subtest: C30 确认前另一标签页写入：revision guard 取消导入且不覆盖新值
+ok 42 - C30 确认前另一标签页写入：revision guard 取消导入且不覆盖新值
+  ---
+  duration_ms: 0.762916
+  type: 'test'
+  ...
+# Subtest: C31 同一 V3 统一备份重复导入：结果相同，不重复迁移或新增记录
+ok 43 - C31 同一 V3 统一备份重复导入：结果相同，不重复迁移或新增记录
+  ---
+  duration_ms: 4.144292
+  type: 'test'
+  ...
+# Subtest: C32 多账户和长余额历史：顺序、选择与风险结论一致
+ok 44 - C32 多账户和长余额历史：顺序、选择与风险结论一致
+  ---
+  duration_ms: 0.582042
+  type: 'test'
+  ...
+# Subtest: C33 小数金额与边界值：风险结论不漂移
+ok 45 - C33 小数金额与边界值：风险结论不漂移
+  ---
+  duration_ms: 0.277708
+  type: 'test'
+  ...
+# Subtest: C34 Safari file:// 降级：无 storage 仍有空白工作区，当前统一 JSON 可解析
+ok 46 - C34 Safari file:// 降级：无 storage 仍有空白工作区，当前统一 JSON 可解析
+  ---
+  duration_ms: 1.078
+  type: 'test'
+  ...
+# Subtest: C35 不同 localhost 端口：彼此不自动发现，JSON 仍可导入
+ok 47 - C35 不同 localhost 端口：彼此不自动发现，JSON 仍可导入
+  ---
+  duration_ms: 0.273
+  type: 'test'
+  ...
+# Subtest: C36 \#/risk 硬刷新目标：同一 index 和 route 规范化
+ok 48 - C36 \#/risk 硬刷新目标：同一 index 和 route 规范化
+  ---
+  duration_ms: 0.147042
+  type: 'test'
+  ...
+# Subtest: C37 浏览器返回/前进目标：路由切换不重复初始化
+ok 49 - C37 浏览器返回/前进目标：路由切换不重复初始化
+  ---
+  duration_ms: 0.283834
+  type: 'test'
+  ...
+# Subtest: Architecture 3 未知 hash：显示错误、保留 hash、提供返回入口并聚焦标题
+ok 50 - Architecture 3 未知 hash：显示错误、保留 hash、提供返回入口并聚焦标题
+  ---
+  duration_ms: 0.112667
+  type: 'test'
+  ...
+# Subtest: C38 导出界面只提供统一备份与风险管理器备份，线上验证待发布授权
+ok 51 - C38 导出界面只提供统一备份与风险管理器备份，线上验证待发布授权
+  ---
+  duration_ms: 0.062625
+  type: 'test'
+  ...
+# Subtest: 退出播报：平仓后保留当前交易方向
+ok 52 - 退出播报：平仓后保留当前交易方向
+  ---
+  duration_ms: 0.092292
+  type: 'test'
+  ...
+# Subtest: external conflict: persist guard never writes a stale workspace
+ok 53 - external conflict: persist guard never writes a stale workspace
+  ---
+  duration_ms: 1.344625
+  type: 'test'
+  ...
+# Subtest: external conflict: policy fails closed for edits and dangerous data actions while exports remain available
+ok 54 - external conflict: policy fails closed for edits and dangerous data actions while exports remain available
+  ---
+  duration_ms: 0.732708
+  type: 'test'
+  ...
+# Subtest: external conflict: app binds the lock to all mutation paths, including an already-open confirmation
+ok 55 - external conflict: app binds the lock to all mutation paths, including an already-open confirmation
+  ---
+  duration_ms: 1.093958
+  type: 'test'
+  ...
+# Subtest: test/fixtures/compatibility/golden-fixtures.js
+ok 7 - test/fixtures/compatibility/golden-fixtures.js
+  ---
+  duration_ms: 55.186542
+  type: 'test'
+  ...
+# Subtest: integrity: 当前 schema v4 存档可校验、恢复并稳定往返
+ok 57 - integrity: 当前 schema v4 存档可校验、恢复并稳定往返
+  ---
+  duration_ms: 10.858375
+  type: 'test'
+  ...
+# Subtest: integrity: 三种偏见下的三个方向均可作为合法空闲组合
+ok 58 - integrity: 三种偏见下的三个方向均可作为合法空闲组合
+  ---
+  duration_ms: 0.167125
+  type: 'test'
+  ...
+# Subtest: integrity: 不兼容 schema v2 存档保留原始 JSON 并进入恢复保护态
+ok 59 - integrity: 不兼容 schema v2 存档保留原始 JSON 并进入恢复保护态
+  ---
+  duration_ms: 0.154042
+  type: 'test'
+  ...
+# Subtest: integrity: 诊断对象保留启动、JSON 与状态校验阶段
+ok 60 - integrity: 诊断对象保留启动、JSON 与状态校验阶段
+  ---
+  duration_ms: 0.14775
+  type: 'test'
+  ...
+# Subtest: migration: 当前 V5 状态往返，不重复迁移
+ok 61 - migration: 当前 V5 状态往返，不重复迁移
+  ---
+  duration_ms: 2.44125
+  type: 'test'
+  ...
+# Subtest: migration: 独立 V1/V2/V3 存档 fail-closed，不能绕过统一存档入口
+ok 62 - migration: 独立 V1/V2/V3 存档 fail-closed，不能绕过统一存档入口
+  ---
+  duration_ms: 0.752917
+  type: 'test'
+  ...
+# Subtest: migration: 统一 V3 日内活动机会确定性结束，保留旧名称、关键位置和审计原因
+ok 63 - migration: 统一 V3 日内活动机会确定性结束，保留旧名称、关键位置和审计原因
+  ---
+  duration_ms: 3.965959
+  type: 'test'
+  ...
+# Subtest: migration: rules_upgrade 也可安全结束旧等待机会并保持非持仓约束
+ok 64 - migration: rules_upgrade 也可安全结束旧等待机会并保持非持仓约束
+  ---
+  duration_ms: 1.291458
+  type: 'test'
+  ...
+# Subtest: migration: 没有旧历史记录的活动机会不伪造普通历史，只写完整审计
+ok 65 - migration: 没有旧历史记录的活动机会不伪造普通历史，只写完整审计
+  ---
+  duration_ms: 0.690958
+  type: 'test'
+  ...
+# Subtest: migration: 损坏或未知 V3 结构拒绝且不猜测
+ok 66 - migration: 损坏或未知 V3 结构拒绝且不猜测
+  ---
+  duration_ms: 0.255416
+  type: 'test'
+  ...
+# Subtest: model: 三种偏见均独立允许做多、做空和暂无交易方向
+ok 67 - model: 三种偏见均独立允许做多、做空和暂无交易方向
+  ---
+  duration_ms: 2.28
+  type: 'test'
+  ...
+# Subtest: model: 选择市场结构后，做多和做空均可选择三个新机会
+ok 68 - model: 选择市场结构后，做多和做空均可选择三个新机会
+  ---
+  duration_ms: 2.232666
+  type: 'test'
+  ...
+# Subtest: model: 暂无交易方向或未判断结构时不能登记机会
+ok 69 - model: 暂无交易方向或未判断结构时不能登记机会
+  ---
+  duration_ms: 0.322375
+  type: 'test'
+  ...
+# Subtest: model: 选择机会立即登记快照，重复选择同一机会无副作用
+ok 70 - model: 选择机会立即登记快照，重复选择同一机会无副作用
+  ---
+  duration_ms: 1.141291
+  type: 'test'
+  ...
+# Subtest: model: 同一商品切换机会先取消旧记录，再登记新记录
+ok 71 - model: 同一商品切换机会先取消旧记录，再登记新记录
+  ---
+  duration_ms: 0.358792
+  type: 'test'
+  ...
+# Subtest: model: 新机会无需关键位置即可等待、找信号、入场和平仓
+ok 72 - model: 新机会无需关键位置即可等待、找信号、入场和平仓
+  ---
+  duration_ms: 0.35925
+  type: 'test'
+  ...
+# Subtest: model: 活动机会改变方向需要确认；偏见和结构变化不再自动结束机会
+ok 73 - model: 活动机会改变方向需要确认；偏见和结构变化不再自动结束机会
+  ---
+  duration_ms: 0.585417
+  type: 'test'
+  ...
+# Subtest: model: 结束非持仓机会保留方向；删除历史不会复活活动机会
+ok 74 - model: 结束非持仓机会保留方向；删除历史不会复活活动机会
+  ---
+  duration_ms: 0.196333
+  type: 'test'
+  ...
+# Subtest: model: GC、CL、ES 状态和历史彼此隔离
+ok 75 - model: GC、CL、ES 状态和历史彼此隔离
+  ---
+  duration_ms: 0.309209
+  type: 'test'
+  ...
+# Subtest: persistence: V5 当前状态往返，新历史记录导出关键位置为 —
+ok 76 - persistence: V5 当前状态往返，新历史记录导出关键位置为 —
+  ---
+  duration_ms: 10.447959
+  type: 'test'
+  ...
+# Subtest: model: 多次随机操作后仍满足 V5 状态不变量
+ok 77 - model: 多次随机操作后仍满足 V5 状态不变量
+  ---
+  duration_ms: 3.846333
+  type: 'test'
+  ...
+# Subtest: Preview keeps its temporary audio leadership until both beeps finish
+ok 78 - Preview keeps its temporary audio leadership until both beeps finish
+  ---
+  duration_ms: 0.484375
+  type: 'test'
+  ...
+# Subtest: Coordinator requires unlocked audio before changing shared run intent
+ok 79 - Coordinator requires unlocked audio before changing shared run intent
+  ---
+  duration_ms: 1.000167
+  type: 'test'
+  ...
+# Subtest: Running leader can preview without losing its verified audio ownership
+ok 80 - Running leader can preview without losing its verified audio ownership
+  ---
+  duration_ms: 3.435916
+  type: 'test'
+  ...
+# Subtest: Two same-origin tabs never both hold the Web Lock; hidden leader releases without pausing intent
+ok 81 - Two same-origin tabs never both hold the Web Lock; hidden leader releases without pausing intent
+  ---
+  duration_ms: 3.49375
+  type: 'test'
+  ...
+# Subtest: Fallback lease must be read-back verified and any lease change stops output
+ok 82 - Fallback lease must be read-back verified and any lease change stops output
+  ---
+  duration_ms: 1.303084
+  type: 'test'
+  ...
+# Subtest: Scheduler emits an early event at its future boundary and a main event once
+ok 83 - Scheduler emits an early event at its future boundary and a main event once
+  ---
+  duration_ms: 14.638125
+  type: 'test'
+  ...
+# Subtest: Started coordinator and scheduler deliver the next visible main boundary together
+ok 84 - Started coordinator and scheduler deliver the next visible main boundary together
+  ---
+  duration_ms: 1.733458
+  type: 'test'
+  ...
+# Subtest: Scheduler omits past early reminders, drops late main events, and isolates a changed slot
+ok 85 - Scheduler omits past early reminders, drops late main events, and isolates a changed slot
+  ---
+  duration_ms: 1.353208
+  type: 'test'
+  ...
+# Subtest: Five compact chime tags stay in one row and scroll inside their panel when space runs out
+ok 86 - Five compact chime tags stay in one row and scroll inside their panel when space runs out
+  ---
+  duration_ms: 0.549125
+  type: 'test'
+  ...
+# Subtest: Homepage keeps risk and chime summaries side by side at every responsive breakpoint
+ok 87 - Homepage keeps risk and chime summaries side by side at every responsive breakpoint
+  ---
+  duration_ms: 0.144625
+  type: 'test'
+  ...
+# Subtest: Chime pause/resume control remains a compact outlined circle with focus styling
+ok 88 - Chime pause/resume control remains a compact outlined circle with focus styling
+  ---
+  duration_ms: 0.083125
+  type: 'test'
+  ...
+# Subtest: Custom minutes row is visible/editable only for custom, and preset switches preserve its value
+ok 89 - Custom minutes row is visible/editable only for custom, and preset switches preserve its value
+  ---
+  duration_ms: 4.196208
+  type: 'test'
+  ...
+# Subtest: Homepage controls invoke the real callbacks; settings has no duplicate global controls or preferences
+ok 90 - Homepage controls invoke the real callbacks; settings has no duplicate global controls or preferences
+  ---
+  duration_ms: 1.444459
+  type: 'test'
+  ...
+# Subtest: Homepage preference changes are persisted through callbacks and failed saves restore controls with visible errors
+ok 91 - Homepage preference changes are persisted through callbacks and failed saves restore controls with visible errors
+  ---
+  duration_ms: 1.464083
+  type: 'test'
+  ...
+# Subtest: Home preference controls follow lock and unlock transitions when the chime state reference is unchanged
+ok 92 - Home preference controls follow lock and unlock transitions when the chime state reference is unchanged
+  ---
+  duration_ms: 1.154709
+  type: 'test'
+  ...
+# Subtest: All five home single-cycle buttons call persistence for their own slot and retain pause state
+ok 93 - All five home single-cycle buttons call persistence for their own slot and retain pause state
+  ---
+  duration_ms: 1.416125
+  type: 'test'
+  ...
+# Subtest: App shell owns exactly one coordinator/scheduler/view across hash-route changes
+ok 94 - App shell owns exactly one coordinator/scheduler/view across hash-route changes
+  ---
+  duration_ms: 0.378792
+  type: 'test'
+  ...
+# Subtest: One- and five-slot summaries render only full period labels with accessible circle controls
+ok 95 - One- and five-slot summaries render only full period labels with accessible circle controls
+  ---
+  duration_ms: 0.452833
+  type: 'test'
+  ...
+# Subtest: Homepage owns the live status and settings contains only cycle configuration
+ok 96 - Homepage owns the live status and settings contains only cycle configuration
+  ---
+  duration_ms: 0.21025
+  type: 'test'
+  ...
+# Subtest: Natural Chime defaults contain exactly five stable independent slots
+ok 97 - Natural Chime defaults contain exactly five stable independent slots
+  ---
+  duration_ms: 3.3015
+  type: 'test'
+  ...
+# Subtest: Verified legacy V1 maps only to slot 1 and applies documented UI defaults
+ok 98 - Verified legacy V1 maps only to slot 1 and applies documented UI defaults
+  ---
+  duration_ms: 0.869209
+  type: 'test'
+  ...
+# Subtest: Legacy version 2, unknown versions, fields, types and unrepresentable values fail closed
+ok 99 - Legacy version 2, unknown versions, fields, types and unrepresentable values fail closed
+  ---
+  duration_ms: 1.013167
+  type: 'test'
+  ...
+# Subtest: Slot updates are immutable, targeted, and reject invalid domains
+ok 100 - Slot updates are immutable, targeted, and reject invalid domains
+  ---
+  duration_ms: 0.486292
+  type: 'test'
+  ...
+# Subtest: Preset and custom periods map consistently
+ok 101 - Preset and custom periods map consistently
+  ---
+  duration_ms: 0.177125
+  type: 'test'
+  ...
+# Subtest: Asia/Shanghai boundary uses strictly future wall-clock targets and exact midnight anchoring
+ok 102 - Asia/Shanghai boundary uses strictly future wall-clock targets and exact midnight anchoring
+  ---
+  duration_ms: 16.68075
+  type: 'test'
+  ...
+# Subtest: Non-divisor periods re-anchor at Beijing midnight; 1440 minutes means next midnight
+ok 103 - Non-divisor periods re-anchor at Beijing midnight; 1440 minutes means next midnight
+  ---
+  duration_ms: 0.275833
+  type: 'test'
+  ...
+# Subtest: Early events omit past/equal targets; coincident main events suppress early and dedupe deterministically
+ok 104 - Early events omit past/equal targets; coincident main events suppress early and dedupe deterministically
+  ---
+  duration_ms: 0.377292
+  type: 'test'
+  ...
+# Subtest: Effective slot eligibility requires every global gate and preserves individual pause
+ok 105 - Effective slot eligibility requires every global gate and preserves individual pause
+  ---
+  duration_ms: 0.542834
+  type: 'test'
+  ...
+# Subtest: Production UI: idle and waiting have no stop input or BOF management controls
+ok 106 - Production UI: idle and waiting have no stop input or BOF management controls
+  ---
+  duration_ms: 25.52925
+  type: 'test'
+  ...
+# Subtest: Production UI: BOF conversions are immediate; undo appends, preserving original type
+ok 107 - Production UI: BOF conversions are immediate; undo appends, preserving original type
+  ---
+  duration_ms: 4.784542
+  type: 'test'
+  ...
+# Subtest: Production UI: original PB shows Initial Stop only and no BOF conversion
+ok 108 - Production UI: original PB shows Initial Stop only and no BOF conversion
+  ---
+  duration_ms: 1.442042
+  type: 'test'
+  ...
+# Subtest: Production UI: invalid prices retain input and data; successful record and correction append
+ok 109 - Production UI: invalid prices retain input and data; successful record and correction append
+  ---
+  duration_ms: 9.5765
+  type: 'test'
+  ...
+# Subtest: Production UI: collapse/hide preserve research capture; exit confirmation retains all events
+ok 110 - Production UI: collapse/hide preserve research capture; exit confirmation retains all events
+  ---
+  duration_ms: 6.909708
+  type: 'test'
+  ...
+# Subtest: Production UI: stop omission does not block confirmed exit
+ok 111 - Production UI: stop omission does not block confirmed exit
+  ---
+  duration_ms: 6.120042
+  type: 'test'
+  ...
+# Subtest: Production UI: external storage conflict blocks submit, conversion and undo, including stale exit dialog
+ok 112 - Production UI: external storage conflict blocks submit, conversion and undo, including stale exit dialog
+  ---
+  duration_ms: 4.169542
+  type: 'test'
+  ...
+# Subtest: V5: fresh state, opportunities and records contain empty capture; schema constants remain distinct
+ok 113 - V5: fresh state, opportunities and records contain empty capture; schema constants remain distinct
+  ---
+  duration_ms: 2.747916
+  type: 'test'
+  ...
+# Subtest: V4 -> V5: active and closed records only gain empty capture, all trading facts deeply unchanged
+ok 114 - V4 -> V5: active and closed records only gain empty capture, all trading facts deeply unchanged
+  ---
+  duration_ms: 2.17675
+  type: 'test'
+  ...
+# Subtest: V3 -> V4 -> V5: validators and stages are explicit; ended V3 history remains unchanged
+ok 115 - V3 -> V4 -> V5: validators and stages are explicit; ended V3 history remains unchanged
+  ---
+  duration_ms: 1.649875
+  type: 'test'
+  ...
+# Subtest: Unified V2 + V4: import stays V2 and preserves risk/chime/preferences/header fields
+ok 116 - Unified V2 + V4: import stays V2 and preserves risk/chime/preferences/header fields
+  ---
+  duration_ms: 3.376416
+  type: 'test'
+  ...
+# Subtest: Unified V2 + V4: startup snapshots raw, writes once, increments revision once and is idempotent
+ok 117 - Unified V2 + V4: startup snapshots raw, writes once, increments revision once and is idempotent
+  ---
+  duration_ms: 2.615666
+  type: 'test'
+  ...
+# Subtest: Unified V1 + V4: old envelope chain adds chime and V5 without changing history or risk
+ok 118 - Unified V1 + V4: old envelope chain adds chime and V5 without changing history or risk
+  ---
+  duration_ms: 1.737916
+  type: 'test'
+  ...
+# Subtest: Unified V2 + V3: compatibility chain preserves original taxonomy audit and ended history
+ok 119 - Unified V2 + V3: compatibility chain preserves original taxonomy audit and ended history
+  ---
+  duration_ms: 1.137375
+  type: 'test'
+  ...
+# Subtest: V4 corrupt/unknown migrations fail closed, preserving exact raw before any write
+ok 120 - V4 corrupt/unknown migrations fail closed, preserving exact raw before any write
+  ---
+  duration_ms: 1.939042
+  type: 'test'
+  ...
+# Subtest: V4 startup migration uses existing conflict and snapshot protections
+ok 121 - V4 startup migration uses existing conflict and snapshot protections
+  ---
+  duration_ms: 0.6665
+  type: 'test'
+  ...
+# Subtest: V4 startup failed canonical write restores raw and verifies rollback
+ok 122 - V4 startup failed canonical write restores raw and verifies rollback
+  ---
+  duration_ms: 0.617625
+  type: 'test'
+  ...
+# Subtest: Initial Stop: all mutations reject idle/wait/signal/closed without changing state
+ok 123 - Initial Stop: all mutations reject idle/wait/signal/closed without changing state
+  ---
+  duration_ms: 1.293375
+  type: 'test'
+  ...
+# Subtest: Initial Stop: first event records times, source, price, stable ID, revision and history
+ok 124 - Initial Stop: first event records times, source, price, stable ID, revision and history
+  ---
+  duration_ms: 0.579292
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number NaN for first and correction without mutation
+ok 125 - Initial Stop: reject invalid number NaN for first and correction without mutation
+  ---
+  duration_ms: 0.477041
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number Infinity for first and correction without mutation
+ok 126 - Initial Stop: reject invalid number Infinity for first and correction without mutation
+  ---
+  duration_ms: 0.267917
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number -Infinity for first and correction without mutation
+ok 127 - Initial Stop: reject invalid number -Infinity for first and correction without mutation
+  ---
+  duration_ms: 0.162375
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number 0 for first and correction without mutation
+ok 128 - Initial Stop: reject invalid number 0 for first and correction without mutation
+  ---
+  duration_ms: 0.1405
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number -1 for first and correction without mutation
+ok 129 - Initial Stop: reject invalid number -1 for first and correction without mutation
+  ---
+  duration_ms: 0.130125
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number 3974 for first and correction without mutation
+ok 130 - Initial Stop: reject invalid number 3974 for first and correction without mutation
+  ---
+  duration_ms: 0.123666
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number  for first and correction without mutation
+ok 131 - Initial Stop: reject invalid number  for first and correction without mutation
+  ---
+  duration_ms: 0.122208
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number null for first and correction without mutation
+ok 132 - Initial Stop: reject invalid number null for first and correction without mutation
+  ---
+  duration_ms: 0.126875
+  type: 'test'
+  ...
+# Subtest: Initial Stop: reject invalid number undefined for first and correction without mutation
+ok 133 - Initial Stop: reject invalid number undefined for first and correction without mutation
+  ---
+  duration_ms: 0.192708
+  type: 'test'
+  ...
+# Subtest: Initial Stop: corrections append without replacing old events; current stop derives from chain
+ok 134 - Initial Stop: corrections append without replacing old events; current stop derives from chain
+  ---
+  duration_ms: 0.339083
+  type: 'test'
+  ...
+# Subtest: Initial Stop: late event is explicit, earlier effectiveAt never silently inferred from entry
+ok 135 - Initial Stop: late event is explicit, earlier effectiveAt never silently inferred from entry
+  ---
+  duration_ms: 0.427667
+  type: 'test'
+  ...
+# Subtest: Initial Stop: invalid timestamps reject before state mutation and correction needs a first event
+ok 136 - Initial Stop: invalid timestamps reject before state mutation and correction needs a first event
+  ---
+  duration_ms: 0.921916
+  type: 'test'
+  ...
+# Subtest: Initial Stop: blank capture never blocks entry or exit
+ok 137 - Initial Stop: blank capture never blocks entry or exit
+  ---
+  duration_ms: 0.172167
+  type: 'test'
+  ...
+# Subtest: Research setup mapping preserves historical htf_pb key and rejects PB conversion
+ok 138 - Research setup mapping preserves historical htf_pb key and rejects PB conversion
+  ---
+  duration_ms: 0.274709
+  type: 'test'
+  ...
+# Subtest: BOF -> PB: htf_pb conversion/duplicate/undo only append, original setup never changes
+ok 139 - BOF -> PB: htf_pb conversion/duplicate/undo only append, original setup never changes
+  ---
+  duration_ms: 0.654834
+  type: 'test'
+  ...
+# Subtest: BOF -> PB: htf_bof conversion/duplicate/undo only append, original setup never changes
+ok 140 - BOF -> PB: htf_bof conversion/duplicate/undo only append, original setup never changes
+  ---
+  duration_ms: 0.586375
+  type: 'test'
+  ...
+# Subtest: Closed history preserves every interleaved stop, correction, conversion and undo event
+ok 141 - Closed history preserves every interleaved stop, correction, conversion and undo event
+  ---
+  duration_ms: 1.642416
+  type: 'test'
+  ...
+# Subtest: Research Capture respects GC/CL/ES isolation and deleted-record non-resurrection
+ok 142 - Research Capture respects GC/CL/ES isolation and deleted-record non-resurrection
+  ---
+  duration_ms: 0.526542
+  type: 'test'
+  ...
+# Subtest: Unified JSON export -> import -> export preserves complete manual audit data including closed records
+ok 143 - Unified JSON export -> import -> export preserves complete manual audit data including closed records
+  ---
+  duration_ms: 2.177583
+  type: 'test'
+  ...
+# Subtest: Markdown summaries show initial/corrected stop and only active BOF -> PB, never the full log
+ok 144 - Markdown summaries show initial/corrected stop and only active BOF -> PB, never the full log
+  ---
+  duration_ms: 1.88425
+  type: 'test'
+  ...
+# Subtest: V5 validator rejects corrupted IDs, sequence, timestamps, price, old value, source and impossible transitions
+ok 145 - V5 validator rejects corrupted IDs, sequence, timestamps, price, old value, source and impossible transitions
+  ---
+  duration_ms: 1.751167
+  type: 'test'
+  ...
+# Subtest: revision: 冻结文案和 opportunity key 使用新分类
+ok 146 - revision: 冻结文案和 opportunity key 使用新分类
+  ---
+  duration_ms: 1.235542
+  type: 'test'
+  ...
+# Subtest: revision: 偏见与交易方向完全解耦
+ok 147 - revision: 偏见与交易方向完全解耦
+  ---
+  duration_ms: 0.398208
+  type: 'test'
+  ...
+# Subtest: revision: 方向非暂无且市场结构已选时三个机会均允许
+ok 148 - revision: 方向非暂无且市场结构已选时三个机会均允许
+  ---
+  duration_ms: 0.101375
+  type: 'test'
+  ...
+# Subtest: revision: 偏见或结构变化不再按旧矩阵自动失效活动机会
+ok 149 - revision: 偏见或结构变化不再按旧矩阵自动失效活动机会
+  ---
+  duration_ms: 0.76175
+  type: 'test'
+  ...
+# Subtest: revision: 平仓保留方向，活动机会仍只能由方向改变或显式结束结束
+ok 150 - revision: 平仓保留方向，活动机会仍只能由方向改变或显式结束结束
+  ---
+  duration_ms: 0.375917
+  type: 'test'
+  ...
+# Subtest: revision: 交易方向快照和历史记录不因当前偏见变化而回写
+ok 151 - revision: 交易方向快照和历史记录不因当前偏见变化而回写
+  ---
+  duration_ms: 0.09575
+  type: 'test'
+  ...
+# Subtest: revision: 新机会阶段流转不需要关键位置字段
+ok 152 - revision: 新机会阶段流转不需要关键位置字段
+  ---
+  duration_ms: 0.132292
+  type: 'test'
+  ...
+# Subtest: revision: V4 序列化和 Markdown 使用新机会名
+ok 153 - revision: V4 序列化和 Markdown 使用新机会名
+  ---
+  duration_ms: 9.812042
+  type: 'test'
+  ...
+# Subtest: risk dashboard DOM: 点击表单确认会真实创建、更新、撤销、编辑，并保留无效表单
+ok 154 - risk dashboard DOM: 点击表单确认会真实创建、更新、撤销、编辑，并保留无效表单
+  ---
+  duration_ms: 18.781125
+  type: 'test'
+  ...
+# Subtest: risk manager DOM: 完整页不重复首页摘要，限制 Floor、V1 编辑和全局 rollover 重入
+ok 155 - risk manager DOM: 完整页不重复首页摘要，限制 Floor、V1 编辑和全局 rollover 重入
+  ---
+  duration_ms: 3.316709
+  type: 'test'
+  ...
+# Subtest: risk dashboard: 复用 V2 账户、余额更新、撤销与风险重算
+ok 156 - risk dashboard: 复用 V2 账户、余额更新、撤销与风险重算
+  ---
+  duration_ms: 3.773
+  type: 'test'
+  ...
+# Subtest: risk dashboard: 首页和完整视图共享控制器与指定操作入口
+ok 157 - risk dashboard: 首页和完整视图共享控制器与指定操作入口
+  ---
+  duration_ms: 0.368959
+  type: 'test'
+  ...
+# Subtest: risk dashboard: app 将两处风险视图绑定到同一 unified controller
+ok 158 - risk dashboard: app 将两处风险视图绑定到同一 unified controller
+  ---
+  duration_ms: 0.182959
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A1 — opening Mid Base R (full decision)
+ok 159 - legacy risk-engine: A1 — opening Mid Base R (full decision)
+  ---
+  duration_ms: 0.989791
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A2 — opening Low Base R (below threshold)
+ok 160 - legacy risk-engine: A2 — opening Low Base R (below threshold)
+  ---
+  duration_ms: 0.099334
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A3 — exact threshold qualifies Mid Base R
+ok 161 - legacy risk-engine: A3 — exact threshold qualifies Mid Base R
+  ---
+  duration_ms: 0.036875
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A4 — small realized profit (+100) does not unlock High R
+ok 162 - legacy risk-engine: A4 — small realized profit (+100) does not unlock High R
+  ---
+  duration_ms: 0.030958
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A5 — +250 below 2R lock trigger, AllowedR <= BaseR
+ok 163 - legacy risk-engine: A5 — +250 below 2R lock trigger, AllowedR <= BaseR
+  ---
+  duration_ms: 0.034208
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A6 — exact +300 activates Profit Lock
+ok 164 - legacy risk-engine: A6 — exact +300 activates Profit Lock
+  ---
+  duration_ms: 0.031166
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A7 — +400 unlocks High R
+ok 165 - legacy risk-engine: A7 — +400 unlocks High R
+  ---
+  duration_ms: 0.025459
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A8 — peak +600, current +400: pullback auto-downgrade
+ok 166 - legacy risk-engine: A8 — peak +600, current +400: pullback auto-downgrade
+  ---
+  duration_ms: 0.034042
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A9 — peak +600, current +300: at profit floor, BLOCKED
+ok 167 - legacy risk-engine: A9 — peak +600, current +300: at profit floor, BLOCKED
+  ---
+  duration_ms: 0.244209
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A10 — loss approaches 3R floor: Low R only
+ok 168 - legacy risk-engine: A10 — loss approaches 3R floor: Low R only
+  ---
+  duration_ms: 0.230292
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: A11 — full 3R budget consumed: BLOCKED
+ok 169 - legacy risk-engine: A11 — full 3R budget consumed: BLOCKED
+  ---
+  duration_ms: 0.074292
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: C1 — hard floor dominates internal floor
+ok 170 - legacy risk-engine: C1 — hard floor dominates internal floor
+  ---
+  duration_ms: 0.023916
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: C2 — hard floor leaves less than Low R: TAIL_RISK (Final Risk)
+ok 171 - legacy risk-engine: C2 — hard floor leaves less than Low R: TAIL_RISK (Final Risk)
+  ---
+  duration_ms: 0.02025
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: C3 — current at hard floor: HARD_LOSS_FLOOR_REACHED
+ok 172 - legacy risk-engine: C3 — current at hard floor: HARD_LOSS_FLOOR_REACHED
+  ---
+  duration_ms: 0.018875
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: C4 — below hard floor: BLOCKED with HARD_LOSS_FLOOR_REACHED
+ok 173 - legacy risk-engine: C4 — below hard floor: BLOCKED with HARD_LOSS_FLOOR_REACHED
+  ---
+  duration_ms: 0.016708
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: D1 — Available 199.99 => AllowedR 150
+ok 174 - legacy risk-engine: D1 — Available 199.99 => AllowedR 150
+  ---
+  duration_ms: 0.016792
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: D2 — Available 200.00 => AllowedR 200
+ok 175 - legacy risk-engine: D2 — Available 200.00 => AllowedR 200
+  ---
+  duration_ms: 0.016792
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: D3 — Available 149.99 => AllowedR 100
+ok 176 - legacy risk-engine: D3 — Available 149.99 => AllowedR 100
+  ---
+  duration_ms: 0.016333
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: D4 — Available 150.00 => AllowedR 150
+ok 177 - legacy risk-engine: D4 — Available 150.00 => AllowedR 150
+  ---
+  duration_ms: 0.017625
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: D5 — Available 99.99 => TAIL_RISK Final Risk 99.99 (NOT BLOCKED)
+ok 178 - legacy risk-engine: D5 — Available 99.99 => TAIL_RISK Final Risk 99.99 (NOT BLOCKED)
+  ---
+  duration_ms: 0.017959
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: D6 — Available 100.00 => AllowedR 100
+ok 179 - legacy risk-engine: D6 — Available 100.00 => AllowedR 100
+  ---
+  duration_ms: 0.017
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: INV — invariants hold across core states
+ok 180 - legacy risk-engine: INV — invariants hold across core states
+  ---
+  duration_ms: 0.017542
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: INV — availableRisk is NOT clamped: negative diagnostic preserved
+ok 181 - legacy risk-engine: INV — availableRisk is NOT clamped: negative diagnostic preserved
+  ---
+  duration_ms: 0.016208
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: INV — BLOCKED only at AvailableRisk <= 0
+ok 182 - legacy risk-engine: INV — BLOCKED only at AvailableRisk <= 0
+  ---
+  duration_ms: 0.016125
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: CONFIG — missing tier snapshot => CONFIG_ERROR
+ok 183 - legacy risk-engine: CONFIG — missing tier snapshot => CONFIG_ERROR
+  ---
+  duration_ms: 0.016334
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: CONFIG — invalid Base R (High R as base) => CONFIG_ERROR
+ok 184 - legacy risk-engine: CONFIG — invalid Base R (High R as base) => CONFIG_ERROR
+  ---
+  duration_ms: 0.015334
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: CONFIG — tier ordering violated => CONFIG_ERROR
+ok 185 - legacy risk-engine: CONFIG — tier ordering violated => CONFIG_ERROR
+  ---
+  duration_ms: 0.015833
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: CONFIG — non-NONE drawdown without hard floor => CONFIG_ERROR
+ok 186 - legacy risk-engine: CONFIG — non-NONE drawdown without hard floor => CONFIG_ERROR
+  ---
+  duration_ms: 0.016083
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: CONFIG — NONE drawdown ignores hard floor
+ok 187 - legacy risk-engine: CONFIG — NONE drawdown ignores hard floor
+  ---
+  duration_ms: 0.017542
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: CONFIG — invalid drawdownType => CONFIG_ERROR
+ok 188 - legacy risk-engine: CONFIG — invalid drawdownType => CONFIG_ERROR
+  ---
+  duration_ms: 0.017333
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: CONFIG — balanceHistory must be an array
+ok 189 - legacy risk-engine: CONFIG — balanceHistory must be an array
+  ---
+  duration_ms: 0.016791
+  type: 'test'
+  ...
+# Subtest: legacy risk-engine: RULE — opening Base R is never High R, even at huge balance
+ok 190 - legacy risk-engine: RULE — opening Base R is never High R, even at huge balance
+  ---
+  duration_ms: 0.0165
+  type: 'test'
+  ...
+# Subtest: legacy persistence: E1 — risk config changes are next-session only: snapshot untouched
+ok 191 - legacy persistence: E1 — risk config changes are next-session only: snapshot untouched
+  ---
+  duration_ms: 0.01525
+  type: 'test'
+  ...
+# Subtest: legacy persistence: E2 — lowering config never recomputes the active session
+ok 192 - legacy persistence: E2 — lowering config never recomputes the active session
+  ---
+  duration_ms: 0.016541
+  type: 'test'
+  ...
+# Subtest: legacy persistence: ACCT — create account builds initial session with V2 snapshot
+ok 193 - legacy persistence: ACCT — create account builds initial session with V2 snapshot
+  ---
+  duration_ms: 0.018292
+  type: 'test'
+  ...
+# Subtest: legacy persistence: ACCT — create account validates required fields
+ok 194 - legacy persistence: ACCT — create account validates required fields
+  ---
+  duration_ms: 0.019083
+  type: 'test'
+  ...
+# Subtest: legacy persistence: ACCT — updateAccountMeta: hardLossAmount may be cleared (next-session)
+ok 195 - legacy persistence: ACCT — updateAccountMeta: hardLossAmount may be cleared (next-session)
+  ---
+  duration_ms: 0.017458
+  type: 'test'
+  ...
+# Subtest: legacy persistence: ACCT — delete account and selection fallback
+ok 196 - legacy persistence: ACCT — delete account and selection fallback
+  ---
+  duration_ms: 1.105834
+  type: 'test'
+  ...
+# Subtest: legacy persistence: SESS — balance update appends event with correct previous/delta
+ok 197 - legacy persistence: SESS — balance update appends event with correct previous/delta
+  ---
+  duration_ms: 0.077208
+  type: 'test'
+  ...
+# Subtest: legacy persistence: SESS — balance update rejects invalid values
+ok 198 - legacy persistence: SESS — balance update rejects invalid values
+  ---
+  duration_ms: 0.048375
+  type: 'test'
+  ...
+# Subtest: legacy persistence: F — undo/replay rederives peak, profit lock and floors
+ok 199 - legacy persistence: F — undo/replay rederives peak, profit lock and floors
+  ---
+  duration_ms: 0.040833
+  type: 'test'
+  ...
+# Subtest: legacy persistence: F2 — undo can legitimately deactivate profit lock
+ok 200 - legacy persistence: F2 — undo can legitimately deactivate profit lock
+  ---
+  duration_ms: 0.0365
+  type: 'test'
+  ...
+# Subtest: legacy persistence: SESS — new session: previous EOD from current balance, fresh history
+ok 201 - legacy persistence: SESS — new session: previous EOD from current balance, fresh history
+  ---
+  duration_ms: 0.03525
+  type: 'test'
+  ...
+# Subtest: legacy persistence: SESS — startNewSession applies pending configured changes (next-session)
+ok 202 - legacy persistence: SESS — startNewSession applies pending configured changes (next-session)
+  ---
+  duration_ms: 0.04025
+  type: 'test'
+  ...
+# Subtest: legacy persistence: SESS — new session blocked without configured Hard Loss Amount
+ok 203 - legacy persistence: SESS — new session blocked without configured Hard Loss Amount
+  ---
+  duration_ms: 0.033917
+  type: 'test'
+  ...
+# Subtest: legacy persistence: DD — EOD_TRAILING floor is session-frozen
+ok 204 - legacy persistence: DD — EOD_TRAILING floor is session-frozen
+  ---
+  duration_ms: 0.019083
+  type: 'test'
+  ...
+# Subtest: legacy persistence: DD — INTRADAY_TRAILING floor updateable mid-session (immediate)
+ok 205 - legacy persistence: DD — INTRADAY_TRAILING floor updateable mid-session (immediate)
+  ---
+  duration_ms: 0.017542
+  type: 'test'
+  ...
+# Subtest: legacy persistence: DD — STATIC floor editable (immediate)
+ok 206 - legacy persistence: DD — STATIC floor editable (immediate)
+  ---
+  duration_ms: 0.016792
+  type: 'test'
+  ...
+# Subtest: legacy persistence: DD — NONE persists null floor
+ok 207 - legacy persistence: DD — NONE persists null floor
+  ---
+  duration_ms: 0.015541
+  type: 'test'
+  ...
+# Subtest: legacy persistence: MIG — account migration: riskReferenceBalance preserved, hardLossAmount null
+ok 208 - legacy persistence: MIG — account migration: riskReferenceBalance preserved, hardLossAmount null
+  ---
+  duration_ms: 0.016416
+  type: 'test'
+  ...
+# Subtest: legacy persistence: MIG — active V1 session: snapshot frozen legacy, everything else untouched
+ok 209 - legacy persistence: MIG — active V1 session: snapshot frozen legacy, everything else untouched
+  ---
+  duration_ms: 0.016792
+  type: 'test'
+  ...
+# Subtest: legacy persistence: MIG — migrateState passes v2 through untouched
+ok 210 - legacy persistence: MIG — migrateState passes v2 through untouched
+  ---
+  duration_ms: 0.016375
+  type: 'test'
+  ...
+# Subtest: legacy persistence: STORAGE — save/load round trip (schemaVersion 2)
+ok 211 - legacy persistence: STORAGE — save/load round trip (schemaVersion 2)
+  ---
+  duration_ms: 0.014625
+  type: 'test'
+  ...
+# Subtest: legacy persistence: STORAGE — corrupt JSON recovers to null (no invented state)
+ok 212 - legacy persistence: STORAGE — corrupt JSON recovers to null (no invented state)
+  ---
+  duration_ms: 0.015042
+  type: 'test'
+  ...
+# Subtest: legacy persistence: STORAGE — clear removes the key
+ok 213 - legacy persistence: STORAGE — clear removes the key
+  ---
+  duration_ms: 0.014958
+  type: 'test'
+  ...
+# Subtest: legacy persistence: BK — export/import round trip preserves state (v2)
+ok 214 - legacy persistence: BK — export/import round trip preserves state (v2)
+  ---
+  duration_ms: 0.015541
+  type: 'test'
+  ...
+# Subtest: legacy persistence: BK — V1 JSON import auto-migrates and preserves data
+ok 215 - legacy persistence: BK — V1 JSON import auto-migrates and preserves data
+  ---
+  duration_ms: 0.016208
+  type: 'test'
+  ...
+# Subtest: legacy persistence: BK — invalid JSON rejected, current state untouched
+ok 216 - legacy persistence: BK — invalid JSON rejected, current state untouched
+  ---
+  duration_ms: 0.016667
+  type: 'test'
+  ...
+# Subtest: legacy persistence: BK — unsupported schemaVersion rejected
+ok 217 - legacy persistence: BK — unsupported schemaVersion rejected
+  ---
+  duration_ms: 0.014625
+  type: 'test'
+  ...
+# Subtest: legacy persistence: BK — structurally invalid account rejected
+ok 218 - legacy persistence: BK — structurally invalid account rejected
+  ---
+  duration_ms: 0.015792
+  type: 'test'
+  ...
+# Subtest: legacy persistence: BK — export filename pattern
+ok 219 - legacy persistence: BK — export filename pattern
+  ---
+  duration_ms: 0.01775
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.1 — hardLoss 2000 => 100 / 150 / 200
+ok 220 - legacy v2-spec: 25.1 — hardLoss 2000 => 100 / 150 / 200
+  ---
+  duration_ms: 0.018042
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.1 — hardLoss 3000 => 150 / 225 / 300
+ok 221 - legacy v2-spec: 25.1 — hardLoss 3000 => 150 / 225 / 300
+  ---
+  duration_ms: 0.015958
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.1 — hardLoss 4500 => 225 / 337.50 / 450
+ok 222 - legacy v2-spec: 25.1 — hardLoss 4500 => 225 / 337.50 / 450
+  ---
+  duration_ms: 0.016833
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.1 — R does NOT scale with nominal account size
+ok 223 - legacy v2-spec: 25.1 — R does NOT scale with nominal account size
+  ---
+  duration_ms: 0.016458
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.2 — ref 50000 / hardLoss 2000 => threshold 51200 (cushion 1200)
+ok 224 - legacy v2-spec: 25.2 — ref 50000 / hardLoss 2000 => threshold 51200 (cushion 1200)
+  ---
+  duration_ms: 0.015833
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.2 — prevEod 51199.99 => Base R = Low (100)
+ok 225 - legacy v2-spec: 25.2 — prevEod 51199.99 => Base R = Low (100)
+  ---
+  duration_ms: 0.01575
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.2 — prevEod 51200 => Base R = Mid (150)
+ok 226 - legacy v2-spec: 25.2 — prevEod 51200 => Base R = Mid (150)
+  ---
+  duration_ms: 0.016167
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.3 — start 51200 / baseR 150 => dailyCapitalFloor 50750
+ok 227 - legacy v2-spec: 25.3 — start 51200 / baseR 150 => dailyCapitalFloor 50750
+  ---
+  duration_ms: 0.015334
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.3 — 3R is a hard budget: plan never exceeds it
+ok 228 - legacy v2-spec: 25.3 — 3R is a hard budget: plan never exceeds it
+  ---
+  duration_ms: 0.016291
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.4 — available 100 => standard Low R (ALLOWED)
+ok 229 - legacy v2-spec: 25.4 — available 100 => standard Low R (ALLOWED)
+  ---
+  duration_ms: 0.015292
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.4 — available 99.99 => Final Risk 99.99, NOT BLOCKED
+ok 230 - legacy v2-spec: 25.4 — available 99.99 => Final Risk 99.99, NOT BLOCKED
+  ---
+  duration_ms: 0.016625
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.4 — available 50 => Final Risk 50
+ok 231 - legacy v2-spec: 25.4 — available 50 => Final Risk 50
+  ---
+  duration_ms: 0.029834
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.4 — available 0.01 => Final Risk 0.01
+ok 232 - legacy v2-spec: 25.4 — available 0.01 => Final Risk 0.01
+  ---
+  duration_ms: 0.017042
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.4 — available 0 => BLOCKED
+ok 233 - legacy v2-spec: 25.4 — available 0 => BLOCKED
+  ---
+  duration_ms: 0.016083
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.4 — available -0.01 => BLOCKED
+ok 234 - legacy v2-spec: 25.4 — available -0.01 => BLOCKED
+  ---
+  duration_ms: 0.0165
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.4 — Final Risk is NOT a fixed tier
+ok 235 - legacy v2-spec: 25.4 — Final Risk is NOT a fixed tier
+  ---
+  duration_ms: 0.015292
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.5 — baseR 150 => profitLockTrigger 300
+ok 236 - legacy v2-spec: 25.5 — baseR 150 => profitLockTrigger 300
+  ---
+  duration_ms: 0.016458
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.5 — peak profit 600 => protection line increment 300 (50%)
+ok 237 - legacy v2-spec: 25.5 — peak profit 600 => protection line increment 300 (50%)
+  ---
+  duration_ms: 0.017041
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.5 — High R only becomes a candidate after the lock, subject to available risk
+ok 238 - legacy v2-spec: 25.5 — High R only becomes a candidate after the lock, subject to available risk
+  ---
+  duration_ms: 0.016042
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.6 — effective = max(daily, profit protection, hard floor)
+ok 239 - legacy v2-spec: 25.6 — effective = max(daily, profit protection, hard floor)
+  ---
+  duration_ms: 0.017792
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.6 — peak drawdown never lowers the profit protection line
+ok 240 - legacy v2-spec: 25.6 — peak drawdown never lowers the profit protection line
+  ---
+  duration_ms: 0.01625
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.7 — migrated active session keeps all frozen values; Final Risk applies
+ok 241 - legacy v2-spec: 25.7 — migrated active session keeps all frozen values; Final Risk applies
+  ---
+  duration_ms: 0.016375
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.8 — configuredRiskBaseCapital 50000 -> riskReferenceBalance 50000, hardLossAmount null
+ok 242 - legacy v2-spec: 25.8 — configuredRiskBaseCapital 50000 -> riskReferenceBalance 50000, hardLossAmount null
+  ---
+  duration_ms: 0.017709
+  type: 'test'
+  ...
+# Subtest: legacy v2-spec: 25.9 — V1 JSON import migrates and preserves existing data
+ok 243 - legacy v2-spec: 25.9 — V1 JSON import migrates and preserves existing data
+  ---
+  duration_ms: 0.016542
+  type: 'test'
+  ...
+# Subtest: legacy rollover: A — both accounts roll to Previous EOD = current realized balance
+ok 244 - legacy rollover: A — both accounts roll to Previous EOD = current realized balance
+  ---
+  duration_ms: 0.018459
+  type: 'test'
+  ...
+# Subtest: legacy rollover: B — A(2000) and B(3000) get independent snapshots
+ok 245 - legacy rollover: B — A(2000) and B(3000) get independent snapshots
+  ---
+  duration_ms: 0.016042
+  type: 'test'
+  ...
+# Subtest: legacy rollover: C — B without hard loss amount: FAIL, no account changes
+ok 246 - legacy rollover: C — B without hard loss amount: FAIL, no account changes
+  ---
+  duration_ms: 0.017125
+  type: 'test'
+  ...
+# Subtest: legacy rollover: C — preflight reports the blocking account with reason
+ok 247 - legacy rollover: C — preflight reports the blocking account with reason
+  ---
+  duration_ms: 0.024792
+  type: 'test'
+  ...
+# Subtest: legacy rollover: D — one account cannot build a snapshot: ALL unchanged
+ok 248 - legacy rollover: D — one account cannot build a snapshot: ALL unchanged
+  ---
+  duration_ms: 0.017208
+  type: 'test'
+  ...
+# Subtest: legacy rollover: E — cancellation performs zero business-state changes
+ok 249 - legacy rollover: E — cancellation performs zero business-state changes
+  ---
+  duration_ms: 0.016625
+  type: 'test'
+  ...
+# Subtest: legacy rollover: F — re-entry guard blocks a second concurrent commit
+ok 250 - legacy rollover: F — re-entry guard blocks a second concurrent commit
+  ---
+  duration_ms: 0.01625
+  type: 'test'
+  ...
+# Subtest: legacy rollover: F — two sequential rollovers create exactly two distinct sessions
+ok 251 - legacy rollover: F — two sequential rollovers create exactly two distinct sessions
+  ---
+  duration_ms: 0.015834
+  type: 'test'
+  ...
+# Subtest: legacy rollover: G — selected account is preserved after global rollover
+ok 252 - legacy rollover: G — selected account is preserved after global rollover
+  ---
+  duration_ms: 0.016542
+  type: 'test'
+  ...
+# Subtest: legacy rollover: H — history/peak archived per existing semantics; new session starts clean
+ok 253 - legacy rollover: H — history/peak archived per existing semantics; new session starts clean
+  ---
+  duration_ms: 0.015625
+  type: 'test'
+  ...
+# Subtest: legacy rollover: I — rolled-over state survives a reload (serialize round-trip)
+ok 254 - legacy rollover: I — rolled-over state survives a reload (serialize round-trip)
+  ---
+  duration_ms: 0.0165
+  type: 'test'
+  ...
+# Subtest: legacy rollover: K — hard loss 2000 still yields 100/150/200
+ok 255 - legacy rollover: K — hard loss 2000 still yields 100/150/200
+  ---
+  duration_ms: 0.016
+  type: 'test'
+  ...
+# Subtest: legacy rollover: K — 99.99 available risk is FINAL_RISK (TAIL_RISK)
+ok 256 - legacy rollover: K — 99.99 available risk is FINAL_RISK (TAIL_RISK)
+  ---
+  duration_ms: 0.01625
+  type: 'test'
+  ...
+# Subtest: legacy rollover: K — 0 available risk is BLOCKED
+ok 257 - legacy rollover: K — 0 available risk is BLOCKED
+  ---
+  duration_ms: 0.015833
+  type: 'test'
+  ...
+# Subtest: legacy navigation: header has internal return-home link
+ok 258 - legacy navigation: header has internal return-home link
+  ---
+  duration_ms: 0.018459
+  type: 'test'
+  ...
+# Subtest: legacy navigation: risk route has a visible return-home link
+ok 259 - legacy navigation: risk route has a visible return-home link
+  ---
+  duration_ms: 0.014625
+  type: 'test'
+  ...
+# Subtest: legacy navigation: appearance label and select remain accessible
+ok 260 - legacy navigation: appearance label and select remain accessible
+  ---
+  duration_ms: 0.016916
+  type: 'test'
+  ...
+# Subtest: legacy navigation: compact risk controls keep a shared minimum height
+ok 261 - legacy navigation: compact risk controls keep a shared minimum height
+  ---
+  duration_ms: 0.015708
+  type: 'test'
+  ...
+# Subtest: legacy navigation: wide account rail scrolls and narrow layout exposes account summary
+ok 262 - legacy navigation: wide account rail scrolls and narrow layout exposes account summary
+  ---
+  duration_ms: 0.028125
+  type: 'test'
+  ...
+# Subtest: legacy navigation: narrow layout keeps risk actions usable
+ok 263 - legacy navigation: narrow layout keeps risk actions usable
+  ---
+  duration_ms: 0.015708
+  type: 'test'
+  ...
+# Subtest: legacy navigation: narrow header retains an accessible appearance control
+ok 264 - legacy navigation: narrow header retains an accessible appearance control
+  ---
+  duration_ms: 0.015916
+  type: 'test'
+  ...
+# Subtest: test/risk-manager-legacy/harness.js
+ok 21 - test/risk-manager-legacy/harness.js
+  ---
+  duration_ms: 32.786917
+  type: 'test'
+  ...
+# Subtest: test/risk-manager-legacy/navigation.test.js
+ok 22 - test/risk-manager-legacy/navigation.test.js
+  ---
+  duration_ms: 34.805041
+  type: 'test'
+  ...
+# Subtest: test/risk-manager-legacy/persistence.test.js
+ok 23 - test/risk-manager-legacy/persistence.test.js
+  ---
+  duration_ms: 36.827084
+  type: 'test'
+  ...
+# Subtest: test/risk-manager-legacy/risk-engine.test.js
+ok 24 - test/risk-manager-legacy/risk-engine.test.js
+  ---
+  duration_ms: 36.474667
+  type: 'test'
+  ...
+# Subtest: test/risk-manager-legacy/rollover.test.js
+ok 25 - test/risk-manager-legacy/rollover.test.js
+  ---
+  duration_ms: 38.685042
+  type: 'test'
+  ...
+# Subtest: test/risk-manager-legacy/v2-spec.test.js
+ok 26 - test/risk-manager-legacy/v2-spec.test.js
+  ---
+  duration_ms: 37.994542
+  type: 'test'
+  ...
+# Subtest: startup: getItem 抛异常时仍返回可操作的 GC/CL/ES 内存工作区
+ok 271 - startup: getItem 抛异常时仍返回可操作的 GC/CL/ES 内存工作区
+  ---
+  duration_ms: 0.8865
+  type: 'test'
+  ...
+# Subtest: startup: storage 不存在时不阻塞 UI，JSON/Markdown 所需的状态保持可用
+ok 272 - startup: storage 不存在时不阻塞 UI，JSON/Markdown 所需的状态保持可用
+  ---
+  duration_ms: 9.0265
+  type: 'test'
+  ...
+# Subtest: startup: JSON parse 或 schema 不兼容不覆盖原始存档，转入明确恢复态并仍创建三卡
+ok 273 - startup: JSON parse 或 schema 不兼容不覆盖原始存档，转入明确恢复态并仍创建三卡
+  ---
+  duration_ms: 0.219166
+  type: 'test'
+  ...
+# Subtest: startup: setItem 抛异常不丢失当前内存状态，保存结果明确失败且后续状态机仍可用
+ok 274 - startup: setItem 抛异常不丢失当前内存状态，保存结果明确失败且后续状态机仍可用
+  ---
+  duration_ms: 0.355916
+  type: 'test'
+  ...
+# Subtest: startup: 可用存档正常恢复；正常保存可回读
+ok 275 - startup: 可用存档正常恢复；正常保存可回读
+  ---
+  duration_ms: 0.127709
+  type: 'test'
+  ...
+# Subtest: UI preference: 每卡折叠独立，且不进入交易状态序列化
+ok 276 - UI preference: 每卡折叠独立，且不进入交易状态序列化
+  ---
+  duration_ms: 10.289
+  type: 'test'
+  ...
+# Subtest: UI preference: 隐藏商品仅写独立偏好，交易状态与记录序列化保持不变
+ok 277 - UI preference: 隐藏商品仅写独立偏好，交易状态与记录序列化保持不变
+  ---
+  duration_ms: 0.288291
+  type: 'test'
+  ...
+# Subtest: UI preference: 隐藏列表和管理区展开状态可刷新恢复，非法值不进入偏好
+ok 278 - UI preference: 隐藏列表和管理区展开状态可刷新恢复，非法值不进入偏好
+  ---
+  duration_ms: 0.148708
+  type: 'test'
+  ...
+# Subtest: UI preference: 重绘后立即并在下一帧恢复原滚动位置
+ok 279 - UI preference: 重绘后立即并在下一帧恢复原滚动位置
+  ---
+  duration_ms: 0.082708
+  type: 'test'
+  ...
+# Subtest: UI preference: 重绘抛错或无 requestAnimationFrame 时仍恢复滚动位置
+ok 280 - UI preference: 重绘抛错或无 requestAnimationFrame 时仍恢复滚动位置
+  ---
+  duration_ms: 0.221042
+  type: 'test'
+  ...
+# Subtest: UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态且具备可访问语义
+ok 281 - UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态且具备可访问语义
+  ---
+  duration_ms: 2.150875
+  type: 'test'
+  ...
+# Subtest: production bundle: 折叠与隐藏点击路径可执行，且不会写入交易状态
+ok 282 - production bundle: 折叠与隐藏点击路径可执行，且不会写入交易状态
+  ---
+  duration_ms: 6.509333
+  type: 'test'
+  ...
+# Subtest: C03/C04: legacy risk migrates into a blank intraday section and canonical wins
+ok 283 - C03/C04: legacy risk migrates into a blank intraday section and canonical wins
+  ---
+  duration_ms: 1.596958
+  type: 'test'
+  ...
+# Subtest: C04a: 本地 unified V1 启动时快照并一次性迁移到 schema 2，只吸收 legacy V1
+ok 284 - C04a: 本地 unified V1 启动时快照并一次性迁移到 schema 2，只吸收 legacy V1
+  ---
+  duration_ms: 2.220625
+  type: 'test'
+  ...
+# Subtest: C04b/C04d/C04e: legacy version 2 remains byte-exact until explicit ignore migration
+ok 285 - C04b/C04d/C04e: legacy version 2 remains byte-exact until explicit ignore migration
+  ---
+  duration_ms: 1.020458
+  type: 'test'
+  ...
+# Subtest: C04f: no-canonical bootstrap never reads the old chime key
+ok 286 - C04f: no-canonical bootstrap never reads the old chime key
+  ---
+  duration_ms: 0.1515
+  type: 'test'
+  ...
+# Subtest: C04d/C20: failed pre-upgrade snapshot leaves canonical V1 byte-exact
+ok 287 - C04d/C20: failed pre-upgrade snapshot leaves canonical V1 byte-exact
+  ---
+  duration_ms: 0.325459
+  type: 'test'
+  ...
+# Subtest: Unified import: a write that mutates then throws rolls canonical back to its exact prior bytes
+ok 288 - Unified import: a write that mutates then throws rolls canonical back to its exact prior bytes
+  ---
+  duration_ms: 0.328833
+  type: 'test'
+  ...
+# Subtest: Legacy chime explicit-ignore raw guard rejects changed canonical or legacy bytes before snapshot
+ok 289 - Legacy chime explicit-ignore raw guard rejects changed canonical or legacy bytes before snapshot
+  ---
+  duration_ms: 0.364542
+  type: 'test'
+  ...
+# Subtest: C02/C13: old standalone intraday is rejected without changing the current state; risk import remains partial
+ok 290 - C02/C13: old standalone intraday is rejected without changing the current state; risk import remains partial
+  ---
+  duration_ms: 0.297208
+  type: 'test'
+  ...
+# Subtest: C19/C20/C21/C22/C23/C24: classifier and strict risk validation fail closed
+ok 291 - C19/C20/C21/C22/C23/C24: classifier and strict risk validation fail closed
+  ---
+  duration_ms: 0.251375
+  type: 'test'
+  ...
+# Subtest: C28/C29: import commit preserves a pre-import snapshot and reads back
+ok 292 - C28/C29: import commit preserves a pre-import snapshot and reads back
+  ---
+  duration_ms: 0.390333
+  type: 'test'
+  ...
+1..292
+# tests 292
+# suites 0
+# pass 292
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 264.931375

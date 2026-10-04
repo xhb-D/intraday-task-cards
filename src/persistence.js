@@ -1,4 +1,4 @@
-import { assertLegacyState, assertState, copy, DIRECTIONS, LEGACY_SCHEMA_VERSION, SCHEMA_VERSION, migrateWorkspace, setupLabel, recordProgress } from './model.js';
+import { assertLegacyState, assertV4State, assertState, copy, DIRECTIONS, LEGACY_SCHEMA_VERSION, V4_SCHEMA_VERSION, SCHEMA_VERSION, migrateWorkspace, setupLabel, recordProgress, effectiveInitialStop, effectiveBofToPbEvent, formatStopPrice } from './model.js';
 
 export const APP_ID = 'intraday-task-cards';
 export const STORE_KEY = 'intraday-task-cards:v1:state';
@@ -14,7 +14,7 @@ export function makeEnvelope(state, savedAt = Date.now()) {
 }
 
 export function validateEnvelope(envelope) {
-  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== SCHEMA_VERSION || !validSavedAt(envelope.savedAt) || typeof envelope.timezone !== 'string') throw persistenceError('不是受支持的 V4 状态卡备份，或版本不兼容', 'envelope');
+  if (!envelope || envelope.app !== APP_ID || envelope.schemaVersion !== SCHEMA_VERSION || !validSavedAt(envelope.savedAt) || typeof envelope.timezone !== 'string') throw persistenceError('不是受支持的 V5 状态卡备份，或版本不兼容', 'envelope');
   assertState(envelope.state); return true;
 }
 
@@ -25,7 +25,10 @@ function validateLegacyEnvelope(envelope) {
 
 export function migrateEnvelope(envelope) {
   if (envelope?.schemaVersion === SCHEMA_VERSION) { validateEnvelope(envelope); return { envelope, migrated: false, audits: [] }; }
-  validateLegacyEnvelope(envelope);
+  if (envelope?.schemaVersion === V4_SCHEMA_VERSION) {
+    if (envelope.app !== APP_ID || !validSavedAt(envelope.savedAt) || typeof envelope.timezone !== 'string') throw persistenceError('V4 状态卡迁移输入无效', 'envelope');
+    assertV4State(envelope.state);
+  } else validateLegacyEnvelope(envelope);
   const result = migrateWorkspace(envelope.state, envelope.savedAt);
   const migrated = { ...copy(envelope), schemaVersion: SCHEMA_VERSION, state: result.state };
   validateEnvelope(migrated);
@@ -43,11 +46,11 @@ export function deserialize(raw) {
 export function exportMarkdown(state, scope = 'today', now = Date.now()) {
   assertState(state); const day = dateKey(now);
   const rows = state.records.filter(record => scope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || (record.endedAt !== null && dateKey(record.endedAt) === day)).sort((a,b) => b.registeredAt - a.registeredAt);
-  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。新机会选择即登记，入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 市场结构 | 进展／结果 |', '| --- | --- | --- | --- | --- | --- | --- |'];
+  const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。新机会选择即登记，入场确认即已执行，全部平仓才结束。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 市场结构 | 进展／结果 | Research Capture |', '| --- | --- | --- | --- | --- | --- | --- | --- |'];
   for (const record of rows) {
     const direction = DIRECTIONS[record.direction] || (record.direction === 'long' ? '做多' : '做空');
     const structure = ({ unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' })[record.structure3mAtRegistration] || record.structure3mAtRegistration;
-    lines.push(`| ${fullTime(record.registeredAt)} | ${record.symbol} | ${direction} | ${setupLabel(record.type)} | ${cell(record.zone ?? '—')} | 偏见：${({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' })[record.biasAtRegistration]}<br>市场结构：${structure} | ${recordProgress(record)} |`);
+    lines.push(`| ${fullTime(record.registeredAt)} | ${record.symbol} | ${direction} | ${setupLabel(record.type)} | ${cell(record.zone ?? '—')} | 偏见：${({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' })[record.biasAtRegistration]}<br>市场结构：${structure} | ${recordProgress(record)} | ${researchSummary(record)} |`);
   }
   if (!rows.length) lines.push('', '本范围内尚无已登记且仍保留的记录。');
   return lines.concat(['', '---', '阶段起止时间和当前任务快照保存在完整 JSON 备份中。']).join('\n');
@@ -56,3 +59,12 @@ export const dateKey = time => { const d = new Date(time); return `${d.getFullYe
 export const timeText = time => { const d = new Date(time); return [d.getHours(), d.getMinutes(), d.getSeconds()].map(value => String(value).padStart(2,'0')).join(':'); };
 export const fullTime = time => `${dateKey(time)} ${timeText(time)}`;
 const cell = value => String(value).replace(/\|/g, '&#124;').replace(/[\r\n]+/g, '<br>');
+
+function researchSummary(record) {
+  const stop = effectiveInitialStop(record); const conversion = effectiveBofToPbEvent(record);
+  const corrected = record.researchCapture.manualEvents.some(event => event.type === 'INITIAL_STOP_CORRECTED');
+  return [
+    stop === null ? '' : `Initial Stop：${formatStopPrice(stop)}${corrected ? '（已修正）' : ''}`,
+    conversion ? `管理变化：BOF → PB（${timeText(conversion.effectiveAt).slice(0, 5)}）` : ''
+  ].filter(Boolean).join('<br>') || '—';
+}

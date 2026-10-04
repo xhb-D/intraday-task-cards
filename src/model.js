@@ -1,5 +1,6 @@
 export const ORDER = Object.freeze(['GC', 'CL', 'ES']);
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
+export const V4_SCHEMA_VERSION = 4;
 export const LEGACY_SCHEMA_VERSION = 3;
 export const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' });
 export const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
@@ -92,7 +93,8 @@ export function chooseSetup(state, symbol, type, time = Date.now()) {
     biasAtRegistration: card.bias, structure3mAtRegistration: card.structure3m,
     invalidReason: null, migrationReason: null,
     enteredAt: null, endedAt: null, reason: null, attention: 'wait', stageSince: time,
-    stages: [{ state: 'wait', start: time, end: null }]
+    stages: [{ state: 'wait', start: time, end: null }],
+    researchCapture: emptyResearchCapture()
   };
   card.opportunity = opportunity; state.records.push(recordSnapshot(opportunity));
   touch(state); assertState(state); return { changed: true, opportunity: card.opportunity };
@@ -138,8 +140,11 @@ export function instruction(card) {
   return ['只管理当前持仓', '本卡不找新入场'];
 }
 
-export function assertState(state) {
-  if (!state || state.schemaVersion !== SCHEMA_VERSION || !Array.isArray(state.records) || !Array.isArray(state.migrationAudit) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw stateError('状态结构无效', 'state');
+export function assertState(state) { return assertWorkspaceState(state, SCHEMA_VERSION); }
+export function assertV4State(state) { return assertWorkspaceState(state, V4_SCHEMA_VERSION); }
+
+function assertWorkspaceState(state, version) {
+  if (!state || state.schemaVersion !== version || !Array.isArray(state.records) || !Array.isArray(state.migrationAudit) || !Number.isSafeInteger(state.sequence) || !Number.isSafeInteger(state.revision)) throw stateError('状态结构无效', 'state');
   const active = new Map(); const ids = new Set();
   for (const symbol of ORDER) {
     const card = state.cards?.[symbol];
@@ -151,6 +156,7 @@ export function assertState(state) {
     if ((opportunity.enteredAt !== null && !safeTime(opportunity.enteredAt)) || !Array.isArray(opportunity.stages) || !opportunity.stages.length) throw stateError('活动机会时间字段无效', `cards.${symbol}.opportunity`);
     const last = assertTimeline(opportunity, `cards.${symbol}.opportunity`, true);
     if (last.start !== opportunity.stageSince || last.state !== stateOf(card) || (opportunity.enteredAt !== null) !== holding) throw stateError('阶段状态无效', `cards.${symbol}.opportunity.stages`);
+    if (version === SCHEMA_VERSION) assertResearchCapture(opportunity, `cards.${symbol}.opportunity.researchCapture`);
     active.set(opportunity.id, opportunity);
   }
   for (const [index, record] of state.records.entries()) {
@@ -160,6 +166,7 @@ export function assertState(state) {
     if (!['wait', 'signal'].includes(record.attention) || (record.enteredAt !== null && !safeTime(record.enteredAt)) || (record.endedAt !== null && !safeTime(record.endedAt))) throw stateError('记录时间或阶段无效', path);
     if (record.invalidReason !== null && !['structure_change', 'bias_change'].includes(record.invalidReason)) throw stateError('失效原因无效', `${path}.invalidReason`);
     if (record.migrationReason !== null && record.migrationReason !== 'opportunity_taxonomy_upgrade') throw stateError('迁移原因无效', `${path}.migrationReason`);
+    if (version === SCHEMA_VERSION) assertResearchCapture(record, `${path}.researchCapture`);
     ids.add(record.id);
     const last = assertTimeline(record, path, record.endedAt === null);
     if (last.start !== record.stageSince || last.state !== (record.enteredAt === null ? record.attention : 'position')) throw stateError('记录阶段状态无效', `${path}.stages`);
@@ -168,7 +175,7 @@ export function assertState(state) {
   }
   for (const [index, audit] of state.migrationAudit.entries()) {
     const path = `migrationAudit.${index}`;
-    if (!audit || audit.fromSchemaVersion !== LEGACY_SCHEMA_VERSION || audit.toSchemaVersion !== SCHEMA_VERSION || audit.reason !== 'opportunity_taxonomy_upgrade' || !ORDER.includes(audit.symbol) || typeof audit.opportunityId !== 'string' || !legacySetup(audit.legacyType) || typeof audit.legacyTypeLabel !== 'string' || typeof audit.zone !== 'string' || typeof audit.originalStage !== 'string' || typeof audit.hadRecord !== 'boolean' || (audit.recordId !== null && typeof audit.recordId !== 'string') || !safeTime(audit.migratedAt) || !safeTime(audit.endedAt)) throw stateError('迁移审计无效', path);
+    if (!audit || audit.fromSchemaVersion !== LEGACY_SCHEMA_VERSION || audit.toSchemaVersion !== V4_SCHEMA_VERSION || audit.reason !== 'opportunity_taxonomy_upgrade' || !ORDER.includes(audit.symbol) || typeof audit.opportunityId !== 'string' || !legacySetup(audit.legacyType) || typeof audit.legacyTypeLabel !== 'string' || typeof audit.zone !== 'string' || typeof audit.originalStage !== 'string' || typeof audit.hadRecord !== 'boolean' || (audit.recordId !== null && typeof audit.recordId !== 'string') || !safeTime(audit.migratedAt) || !safeTime(audit.endedAt)) throw stateError('迁移审计无效', path);
   }
   return true;
 }
@@ -254,7 +261,7 @@ function collectLegacyTimes(state) {
   return times;
 }
 
-export function migrateWorkspace(legacyState, migrationTime) {
+export function migrateV3Workspace(legacyState, migrationTime) {
   assertLegacyState(legacyState);
   const next = copy(legacyState); const times = collectLegacyTimes(next); const requested = safeTime(migrationTime) ? migrationTime : 0;
   const migratedAt = Math.max(requested, ...times, 0); const audits = [];
@@ -263,7 +270,7 @@ export function migrateWorkspace(legacyState, migrationTime) {
     if (!opportunity) { card.needsStructureReview = false; continue; }
     const record = next.records.find(candidate => candidate.id === opportunity.id && candidate.endedAt === null);
     const audit = {
-      fromSchemaVersion: LEGACY_SCHEMA_VERSION, toSchemaVersion: SCHEMA_VERSION, reason: 'opportunity_taxonomy_upgrade', migratedAt: migratedAt,
+      fromSchemaVersion: LEGACY_SCHEMA_VERSION, toSchemaVersion: V4_SCHEMA_VERSION, reason: 'opportunity_taxonomy_upgrade', migratedAt: migratedAt,
       endedAt: migratedAt, symbol, opportunityId: opportunity.id, legacyType: opportunity.type, legacyTypeLabel: setupLabel(opportunity.type),
       zone: record?.zone || opportunity.zone || '', originalStage: stateOf(card), hadRecord: Boolean(record), recordId: record?.id || null
     };
@@ -273,6 +280,124 @@ export function migrateWorkspace(legacyState, migrationTime) {
     card.opportunity = null; card.idleSince = migratedAt; card.needsStructureReview = false; audits.push(audit);
   }
   for (const record of next.records) if (!Object.hasOwn(record, 'migrationReason')) record.migrationReason = null;
-  next.schemaVersion = SCHEMA_VERSION; next.migrationAudit = [...(Array.isArray(next.migrationAudit) ? next.migrationAudit : []), ...audits];
-  assertState(next); return { state: next, migratedAt, audits };
+  next.schemaVersion = V4_SCHEMA_VERSION; next.migrationAudit = [...(Array.isArray(next.migrationAudit) ? next.migrationAudit : []), ...audits];
+  assertV4State(next); return { state: next, migratedAt, audits };
+}
+
+
+// V4 -> V5 only supplements the capture; trading facts and V3 -> V4 audits stay intact.
+export function migrateV4Workspace(state) {
+  assertV4State(state);
+  const next = copy(state);
+  for (const card of Object.values(next.cards)) if (card.opportunity) {
+    if (own(card.opportunity, 'researchCapture')) throw stateError('V4 不应包含 Research Capture', 'researchCapture');
+    card.opportunity.researchCapture = emptyResearchCapture();
+  }
+  for (const record of next.records) {
+    if (own(record, 'researchCapture')) throw stateError('V4 不应包含 Research Capture', 'researchCapture');
+    record.researchCapture = emptyResearchCapture();
+  }
+  next.schemaVersion = SCHEMA_VERSION;
+  assertState(next); return next;
+}
+
+export function migrateWorkspace(state, migrationTime) {
+  if (state?.schemaVersion === SCHEMA_VERSION) { assertState(state); return { state: copy(state), audits: [] }; }
+  const result = state?.schemaVersion === LEGACY_SCHEMA_VERSION
+    ? migrateV3Workspace(state, migrationTime)
+    : { state, audits: [] };
+  return { ...result, state: migrateV4Workspace(result.state) };
+}
+
+const emptyResearchCapture = () => ({ eventSequence: 0, manualEvents: [] });
+const validStopPrice = value => typeof value === 'number' && Number.isFinite(value) && value > 0;
+export const researchSetupClass = type => type === 'mtf_pb' ? 'PB' : ['htf_pb', 'htf_bof'].includes(type) ? 'BOF' : null;
+
+export function effectiveInitialStop(item) {
+  let price = null;
+  for (const event of item?.researchCapture?.manualEvents || []) {
+    if (['INITIAL_STOP_RECORDED', 'INITIAL_STOP_LATE_RECORDED'].includes(event.type)) price = event.payload.stopPrice;
+    if (event.type === 'INITIAL_STOP_CORRECTED') price = event.payload.newValue;
+  }
+  return price;
+}
+
+export function effectiveBofToPbEvent(item) {
+  let active = null;
+  for (const event of item?.researchCapture?.manualEvents || []) {
+    if (event.type === 'BOF_TO_PB_RECORDED') active = event;
+    if (event.type === 'BOF_TO_PB_REVERTED') active = null;
+  }
+  return active;
+}
+export const derivedManagementState = item => effectiveBofToPbEvent(item) ? 'PB' : researchSetupClass(item?.type);
+export const formatStopPrice = price => Number.isInteger(price) ? price.toFixed(1) : String(price);
+
+function researchPosition(state, symbol) {
+  assertState(state);
+  const card = cardFor(state, symbol);
+  if (stateOf(card) !== 'position') throw new Error('仅持仓中可记录 Research Capture');
+  return card.opportunity;
+}
+function appendManualEvent(state, opportunity, type, payload, time, effectiveAt = time) {
+  const events = opportunity.researchCapture.manualEvents;
+  if (!safeTime(time) || !safeTime(effectiveAt) || effectiveAt < opportunity.enteredAt || effectiveAt > time || time < opportunity.enteredAt || (events.length && time < events.at(-1).recordedAt)) throw new Error('人工事件时间无效');
+  const sequence = opportunity.researchCapture.eventSequence + 1;
+  const event = { id: `${opportunity.id}:manual-${sequence}`, type, recordedAt: time, effectiveAt, source: 'manual_intraday', payload };
+  // Validate the candidate before mutating the caller, including its historical snapshot.
+  const candidate = recordSnapshot(opportunity);
+  candidate.researchCapture.eventSequence = sequence; candidate.researchCapture.manualEvents.push(event);
+  assertResearchCapture(candidate, 'researchCapture');
+  opportunity.researchCapture.eventSequence = sequence; events.push(event);
+  syncRecord(state, opportunity); touch(state); assertState(state); return { changed: true, event: copy(event) };
+}
+export function recordInitialStop(state, symbol, stopPrice, time = Date.now(), effectiveAt = time) {
+  const opportunity = researchPosition(state, symbol);
+  if (!validStopPrice(stopPrice)) throw new Error('Initial Stop 必须是大于 0 的有限数字');
+  if (effectiveInitialStop(opportunity) !== null) throw new Error('Initial Stop 已记录，请使用修正');
+  return appendManualEvent(state, opportunity, effectiveAt < time ? 'INITIAL_STOP_LATE_RECORDED' : 'INITIAL_STOP_RECORDED', { stopPrice }, time, effectiveAt);
+}
+export function correctInitialStop(state, symbol, newValue, time = Date.now()) {
+  const opportunity = researchPosition(state, symbol); const oldValue = effectiveInitialStop(opportunity);
+  if (!validStopPrice(newValue)) throw new Error('Initial Stop 必须是大于 0 的有限数字');
+  if (oldValue === null) throw new Error('尚未记录 Initial Stop');
+  if (oldValue === newValue) return { changed: false };
+  return appendManualEvent(state, opportunity, 'INITIAL_STOP_CORRECTED', { oldValue, newValue }, time);
+}
+export function recordBofToPb(state, symbol, time = Date.now()) {
+  const opportunity = researchPosition(state, symbol);
+  if (researchSetupClass(opportunity.type) !== 'BOF') throw new Error('仅 BOF 原始机会可转换');
+  if (effectiveBofToPbEvent(opportunity)) return { changed: false };
+  return appendManualEvent(state, opportunity, 'BOF_TO_PB_RECORDED', { from: 'BOF', to: 'PB' }, time);
+}
+export function revertBofToPb(state, symbol, time = Date.now()) {
+  const opportunity = researchPosition(state, symbol); const active = effectiveBofToPbEvent(opportunity);
+  if (!active) return { changed: false };
+  return appendManualEvent(state, opportunity, 'BOF_TO_PB_REVERTED', { from: 'PB', to: 'BOF', revertedEventId: active.id }, time);
+}
+
+function assertResearchCapture(item, path) {
+  const capture = item.researchCapture;
+  const exact = (value, keys) => value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === keys.length && keys.every(key => own(value, key));
+  const reject = () => { throw stateError('Research Capture 事件链无效', path); };
+  if (!exact(capture, ['eventSequence', 'manualEvents']) || !Number.isSafeInteger(capture.eventSequence) || capture.eventSequence < 0 || !Array.isArray(capture.manualEvents) || capture.eventSequence !== capture.manualEvents.length) reject();
+  let stop = null; let conversion = null; let previousTime = item.enteredAt;
+  for (const [index, event] of capture.manualEvents.entries()) {
+    if (!exact(event, ['id', 'type', 'recordedAt', 'effectiveAt', 'source', 'payload']) || event.id !== `${item.id}:manual-${index + 1}` || event.source !== 'manual_intraday' || item.enteredAt === null || !safeTime(event.recordedAt) || !safeTime(event.effectiveAt) || event.recordedAt < previousTime || event.effectiveAt < item.enteredAt || event.effectiveAt > event.recordedAt || (item.endedAt !== null && event.recordedAt > item.endedAt)) reject();
+    previousTime = event.recordedAt;
+    const payload = event.payload;
+    if (['INITIAL_STOP_RECORDED', 'INITIAL_STOP_LATE_RECORDED'].includes(event.type)) {
+      if (stop !== null || !exact(payload, ['stopPrice']) || !validStopPrice(payload.stopPrice) || (event.type === 'INITIAL_STOP_RECORDED' ? event.effectiveAt !== event.recordedAt : event.effectiveAt >= event.recordedAt)) reject();
+      stop = payload.stopPrice;
+    } else if (event.type === 'INITIAL_STOP_CORRECTED') {
+      if (stop === null || !exact(payload, ['oldValue', 'newValue']) || payload.oldValue !== stop || !validStopPrice(payload.newValue) || payload.newValue === stop || event.effectiveAt !== event.recordedAt) reject();
+      stop = payload.newValue;
+    } else if (event.type === 'BOF_TO_PB_RECORDED') {
+      if (researchSetupClass(item.type) !== 'BOF' || conversion || !exact(payload, ['from', 'to']) || payload.from !== 'BOF' || payload.to !== 'PB' || event.effectiveAt !== event.recordedAt) reject();
+      conversion = event;
+    } else if (event.type === 'BOF_TO_PB_REVERTED') {
+      if (!conversion || !exact(payload, ['from', 'to', 'revertedEventId']) || payload.from !== 'PB' || payload.to !== 'BOF' || payload.revertedEventId !== conversion.id || event.effectiveAt !== event.recordedAt) reject();
+      conversion = null;
+    } else reject();
+  }
 }

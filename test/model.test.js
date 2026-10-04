@@ -143,20 +143,20 @@ test('model: GC、CL、ES 状态和历史彼此隔离', () => {
   assertState(state);
 });
 
-test('persistence: V4 当前状态往返，新历史记录导出关键位置为 —', () => {
+test('persistence: V5 当前状态往返，新历史记录导出关键位置为 —', () => {
   const state = fresh();
   prepare(state, 'GC', { type: 'htf_bof' });
   const raw = serialize(state, later(30));
   const restored = deserialize(raw);
-  assert.equal(restored.schemaVersion, 4);
+  assert.equal(restored.schemaVersion, 5);
   assert.deepEqual(restored.state, state);
   assert.match(exportMarkdown(state, 'all', later(30)), /HTF BOF/);
   assert.match(exportMarkdown(state, 'all', later(30)), /—/);
   assertState(restored.state);
-  assert.throws(() => validateEnvelope({ ...restored, schemaVersion: 3 }), /V4/);
+  assert.throws(() => validateEnvelope({ ...restored, schemaVersion: 3 }), /V5/);
 });
 
-test('model: 多次随机操作后仍满足 V4 状态不变量', () => {
+test('model: 多次随机操作后仍满足 V5 状态不变量', () => {
   let state = fresh();
   let seed = 17;
   const rand = () => { seed = (seed * 1103515245 + 12345) % 2147483647; return seed / 2147483647; };

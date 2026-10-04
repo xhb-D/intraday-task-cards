@@ -118,7 +118,17 @@ export function validateUnified(value) {
 }
 
 export function migrateUnified(value) {
-  if (value?.schemaVersion === 2) { validateUnified(value); return { state: copy(value), migrated: false, migration: null, audits: [] }; }
+  if (value?.schemaVersion === 2) {
+    // Validate every domain before the existing guarded migration transaction can write.
+    validateEnvelopeHeader(value, 2);
+    exactKeys(value.sections, ['intraday', 'riskManager', 'chime'], 'sections');
+    exactKeys(value.sections.intraday, ['app', 'schemaVersion', 'savedAt', 'state', 'timezone'], 'sections.intraday');
+    validateRisk(value.sections.riskManager); validateChime(value.sections.chime); validatePreferences(value.preferences);
+    const migration = migrateEnvelope(value.sections.intraday);
+    const next = copy(value); next.sections.intraday = copy(migration.envelope);
+    validateUnified(next);
+    return { state: next, migrated: migration.migrated, migration, audits: migration.audits };
+  }
   if (value?.schemaVersion !== 1) throw Object.assign(new Error('不是受支持的统一备份'), { path: 'envelope' });
   const migration = validateUnifiedV1(value);
   const next = makeUnifiedV1Upgrade(value, migration, defaultChime({ status: 'unified-v1-import-default', sourceVersion: null }));
@@ -221,7 +231,7 @@ export function importSummary(kind, state, migration = { migrated: false }) {
   const cards = Object.keys(state.sections.intraday.state.cards || {}).length;
   const records = state.sections.intraday.state.records?.length || 0;
   const accounts = state.sections.riskManager.accounts?.length || 0;
-  const migrated = kind === 'unified' && migration.migrated ? '；日内 V3 将先确定性迁移为 V4' : '';
+  const migrated = kind === 'unified' && migration.migrated ? '；将执行所需版本迁移，日内记录补入 Research Capture' : '';
   return kind === 'unified' ? `将替换状态卡（${cards} 张、${records} 条记录）、风险管理器（${accounts} 个账户）及外观偏好${migrated}。` : `将只替换风险管理器（${accounts} 个账户）；状态卡和外观保持不变。`;
 }
 
@@ -231,7 +241,12 @@ export function loadUnified(storage) {
   if (raw !== null) {
     try {
       const parsed = JSON.parse(raw);
-      if (parsed?.schemaVersion === 2) { validateUnified(parsed); return { state: copy(parsed), source: 'canonical', raw }; }
+      if (parsed?.schemaVersion === 2) {
+        const result = migrateUnified(parsed);
+        if (!result.migrated) return { state: result.state, source: 'canonical', raw };
+        const state = commitLocalV1Upgrade(storage, raw, result.state);
+        return { state, source: 'canonical-migrated', migration: result.migration, raw: JSON.stringify(state) };
+      }
       if (parsed?.schemaVersion === 1) {
         validateUnifiedV1(parsed);
         let legacyRaw;
