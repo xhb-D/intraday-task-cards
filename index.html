@@ -13,11 +13,12 @@
   <link rel="stylesheet" href="risk-dashboard.css?v=exit-research-v0-step1-20261004">
   <link rel="stylesheet" href="appearance.css?v=exit-research-v0-step1-20261004">
   <link rel="stylesheet" href="natural-chime.css?v=exit-research-v0-step1-20261004">
+  <link rel="stylesheet" href="exit-research.css?v=exit-research-v0-step1-20261004">
 </head>
 <body>
   <main class="shell">
     <header class="page-head">
-      <div><h1>统一交易控制中心</h1><p class="subtitle">GC / CL / ES 手动状态与风险约束</p><nav class="app-nav" aria-label="主导航"><a href="#/home" data-route-link="home">日内交易状态卡</a><a href="#/risk" data-route-link="risk">Trading Risk Manager</a><a href="#/chime" data-route-link="chime">自然周期报时</a></nav><p id="restore-note" class="restore-note" hidden></p></div>
+      <div><h1>统一交易控制中心</h1><p class="subtitle">GC / CL / ES 手动状态与风险约束</p><nav class="app-nav" aria-label="主导航"><a href="#/home" data-route-link="home">日内交易状态卡</a><a href="#/risk" data-route-link="risk">Trading Risk Manager</a><a href="#/exit-research" data-route-link="exit-research">Exit Research</a><a href="#/chime" data-route-link="chime">自然周期报时</a></nav><p id="restore-note" class="restore-note" hidden></p></div>
       <div class="stamp">
         <div class="stamp-controls"><strong>本地记录 V5</strong><label class="appearance-label" for="appearance-select">外观</label><select id="appearance-select" class="appearance-select" aria-label="外观"><option value="system">跟随系统</option><option value="light">浅色</option><option value="dark">深色</option></select></div>
         <p id="save-status" role="status">正在检查本地保存…</p><button class="link" id="data-tools" type="button">导出 / 备份</button>
@@ -36,6 +37,7 @@
         <table id="history-table" hidden><thead><tr><th>登记时间</th><th>品种</th><th>方向</th><th>机会</th><th>已确认关键位置</th><th>进展 / 结果</th><th>操作</th></tr></thead><tbody id="history-body"></tbody></table>
       </div>
     </details></section>
+    <section data-route-view="exit-research" hidden><div id="exit-research-host"></div></section>
     <section data-route-view="chime" hidden><div id="chime-settings-host"></div></section>
     <section data-route-view="risk" hidden><div id="risk-full-host"><header class="risk-full-head"><a href="#/home">← 返回日内交易状态卡</a><h2>Trading Risk Manager</h2></header><div id="risk-manager-host"></div></div></section>
     <section data-route-view="error" class="route-error" hidden aria-labelledby="route-error-title"><h2 id="route-error-title" data-route-error-heading tabindex="-1">找不到页面</h2><p data-route-error></p><a href="#/home" class="link route-error-home">返回日内交易状态卡</a></section>

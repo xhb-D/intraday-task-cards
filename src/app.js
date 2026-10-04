@@ -1,3 +1,4 @@
+import { initExitResearchWorkbench } from './exit-research/ui/controller.js';
 import { ORDER, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, SETUP_LABELS, STAGES, ATTENTION, RESULTS, createWorkspace, stateOf, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, instruction, changeBias, changeStructure, chooseSetup, changeDirection, setStage, markEntered, markExited, endOpportunity, deleteRecord, recordProgress, assertState, copy, researchSetupClass, effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, formatStopPrice, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb } from './model.js';
 import { renderHoldingReference } from './holding-reference.js';
 import { makeEnvelope, exportMarkdown, dateKey, timeText, fullTime } from './persistence.js';
@@ -40,6 +41,7 @@ let collapsedCards = new Set();
 let storage = null;
 let commodityPreferences = null;
 let unified = null;
+let researchWorkbench = null;
 let dashboardView = null;
 let fullRiskView = null;
 let appearanceView = null;
@@ -249,7 +251,7 @@ function persistChime(next, changedSlotId = null) {
     chimeCoordinator?.settingsChanged(); chimeScheduler?.update(changedSlotId); storageStatus(); renderChime(); return true;
   } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); renderChime(); return false; }
 }
-function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = visibleSymbols.map(renderCard).join(''); renderHistory(); storageStatus(); renderChime(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
+function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = visibleSymbols.map(renderCard).join(''); renderHistory(); storageStatus(); renderChime(); if (globalThis.location?.hash === '#/exit-research') researchWorkbench?.refresh(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
 function openConfirmation(action, title, message, confirm, warning = '') {
   if (pending) return;
   pending = { ...action, revision: state.revision, storageRaw: lastRaw }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm; document.querySelector('#dialog-confirm').disabled = writeLocked() && action.kind !== 'ignore-legacy-chime';
@@ -416,7 +418,9 @@ appearanceView = initAppearance(document.querySelector('#appearance-select'), { 
   const candidate = copy(unified); candidate.preferences.appearance = nextAppearance;
   try { unified = saveUnified(candidate, {}, 'appearance_update'); lastRaw = JSON.stringify(unified); state.lastSavedAt = unified.savedAt; dashboardView?.render(); fullRiskView?.render(); storageStatus(); return true; } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); return false; }
 });
-function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else applyRoute(document, normalized); }
+try { researchWorkbench = initExitResearchWorkbench(document.querySelector('#exit-research-host'), { getIntraday: () => state, storage }); }
+catch (error) { const host = document.querySelector('#exit-research-host'); if (host) host.textContent = 'Exit Research 暂不可用；首页状态卡仍可正常使用。'; reportDiagnostic(error, { phase: 'exit_research_init' }); }
+function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else { const result = applyRoute(document, normalized); if (result.route === 'exit-research') researchWorkbench?.refresh(); else researchWorkbench?.hide(); } }
 window.addEventListener('hashchange', route); route();
 try { dashboardView = initRiskDashboard(document.querySelector('#risk-dashboard-host'), {
   getState: () => unified?.sections.riskManager,

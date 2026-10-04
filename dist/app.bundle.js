@@ -2257,10 +2257,10 @@ function preserveScrollPosition(render, viewport = globalThis) {
 }
 
 
-const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk', chime: '#/chime' });
+const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk', chime: '#/chime', research: '#/exit-research' });
 
 function parseRoute(hash) {
-  return hash === ROUTES.risk ? 'risk' : hash === ROUTES.chime ? 'chime' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
+  return hash === ROUTES.research ? 'exit-research' : hash === ROUTES.risk ? 'risk' : hash === ROUTES.chime ? 'chime' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
 }
 
 function normalizeRoute(hash) {
@@ -2281,7 +2281,7 @@ function applyRoute(root, hash = globalThis.location?.hash || '') {
     const heading = root?.querySelector?.('[data-route-error-heading]');
     heading?.focus?.();
   }
-  if (globalThis.document) document.title = active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'chime' ? '自然周期报时 · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
+  if (globalThis.document) document.title = active === 'exit-research' ? 'Exit Research · 统一交易控制中心' : active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'chime' ? '自然周期报时 · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
   return { route: active, unknown: route === 'unknown' };
 }
 
@@ -3083,6 +3083,1801 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
 }
 
 
+const __exitResearchModules = (() => {
+const erModuleRegistry = {'src/model.js': {ORDER, SCHEMA_VERSION, V4_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, LEGACY_SETUPS, SETUP_LABELS, STAGES, RESULTS, ATTENTION, copy, stateOf, hasRecord, setupLabel, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, recordSnapshot, createWorkspace, changeBias, changeDirection, changeStructure, chooseSetup, setStage, markEntered, endOpportunity, markExited, deleteRecord, recordProgress, instruction, assertState, assertV4State, assertLegacyState, migrateV3Workspace, migrateV4Workspace, migrateWorkspace, researchSetupClass, effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, formatStopPrice, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb}};
+erModuleRegistry["src/exit-research/csv.js"] = (() => {
+// Strict comma-separated text parser. No IO, coercion, recovery or partial results.
+function validationError(code, sourceRowNumber, field) {
+  return Object.assign(new Error(`${code}: row ${sourceRowNumber}, field ${field}`), { code, sourceRowNumber, field });
+}
+function parseCsv(text) {
+  if (typeof text !== 'string') throw validationError('INVALID_CSV_INPUT', 0, 'csv');
+  const bom = text.startsWith('\uFEFF');
+  const source = bom ? text.slice(1) : text;
+  if (!source.length) throw validationError('EMPTY_CSV', 1, 'header');
+  const records = [];
+  let row = [], value = '', quoted = false, closed = false, line = 1, rowStart = 1;
+  const endField = () => { row.push(value); value = ''; closed = false; };
+  const endRow = () => { endField(); records.push({ values: row, sourceRowNumber: rowStart }); row = []; };
+  for (let i = 0; i < source.length; i++) {
+    const char = source[i];
+    if (quoted) {
+      if (char === '"') {
+        if (source[i + 1] === '"') { value += '"'; i++; }
+        else { quoted = false; closed = true; }
+      } else {
+        if (char === '\r' && source[i + 1] !== '\n') throw validationError('INVALID_LINE_ENDING', line, 'csv');
+        value += char;
+        if (char === '\n') line++;
+      }
+      continue;
+    }
+    if (closed && ![',', '\r', '\n'].includes(char)) throw validationError('INVALID_QUOTE', line, 'csv');
+    if (char === '"') {
+      if (value.length || closed) throw validationError('INVALID_QUOTE', line, 'csv');
+      quoted = true;
+    } else if (char === ',') endField();
+    else if (char === '\n' || char === '\r') {
+      if (char === '\r') {
+        if (source[i + 1] !== '\n') throw validationError('INVALID_LINE_ENDING', line, 'csv');
+        i++;
+      }
+      endRow(); line++; rowStart = line;
+    } else value += char;
+  }
+  if (quoted) throw validationError('UNCLOSED_QUOTE', rowStart, 'csv');
+  if (row.length || value.length || closed || source.endsWith(',')) endRow();
+  const headers = records.shift()?.values;
+  if (!headers?.length || headers.some(header => !header.trim()) || new Set(headers).size !== headers.length) throw validationError('INVALID_HEADER', 1, 'header');
+  for (const row of records) if (row.values.length !== headers.length) throw validationError('COLUMN_COUNT_MISMATCH', row.sourceRowNumber, 'csv');
+  const crlf = (source.match(/\r\n/g) || []).length;
+  const lf = (source.match(/\n/g) || []).length - crlf;
+  return { headers, rows: records, metadata: { bom, newline: crlf && lf ? 'mixed' : crlf ? 'CRLF' : lf ? 'LF' : 'none', rowCount: records.length } };
+}
+
+return {validationError, parseCsv};
+})();
+erModuleRegistry["src/exit-research/time.js"] = (() => {
+const { validationError } = erModuleRegistry["src/exit-research/csv.js"];
+const pad = (value, length = 2) => String(value).padStart(length, '0');
+
+// Naive local times use calendar strings, never a fabricated epoch or timezone.
+function parseTradovateTime(raw, sourceRowNumber, field) {
+  if (typeof raw !== 'string') throw validationError('INVALID_TIME', sourceRowNumber, field);
+  const text = raw.trim();
+  const iso = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?(Z|[+-]\d{2}:\d{2})$/.exec(text);
+  const local = /^(\d{2})\/(\d{2})\/(\d{4}) (\d{2}):(\d{2}):(\d{2})$/.exec(text);
+  if (!iso && !local) throw validationError('INVALID_TIME', sourceRowNumber, field);
+  const parts = iso ? iso.slice(1, 7) : [local[3], local[1], local[2], local[4], local[5], local[6]];
+  const [year, month, day, hour, minute, second] = parts.map(Number);
+  const millis = iso ? Number((iso[7] || '').padEnd(3, '0')) : 0;
+  const leap = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
+  const days = [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+  if (year < 1000 || year > 9999 || month < 1 || month > 12 || day < 1 || day > days[month - 1] || hour > 23 || minute > 59 || second > 59) throw validationError('INVALID_TIME', sourceRowNumber, field);
+  const normalized = `${pad(year, 4)}-${pad(month)}-${pad(day)}T${pad(hour)}:${pad(minute)}:${pad(second)}.${pad(millis, 3)}`;
+  if (local) return { raw, normalized, sortKey: normalized, timezone: 'unknown', offsetMinutes: null };
+  const offset = iso[8];
+  const offsetHour = offset === 'Z' ? 0 : Number(offset.slice(1, 3));
+  const offsetMinute = offset === 'Z' ? 0 : Number(offset.slice(4, 6));
+  if (offsetHour > 23 || offsetMinute > 59) throw validationError('INVALID_TIME', sourceRowNumber, field);
+  const offsetMinutes = (offset === 'Z' || offset[0] === '+' ? 1 : -1) * (offsetHour * 60 + offsetMinute);
+  const sortKey = new Date(Date.UTC(year, month - 1, day, hour, minute, second, millis) - offsetMinutes * 60000).toISOString();
+  return { raw, normalized: normalized + offset, sortKey, timezone: offset === 'Z' ? 'UTC' : 'explicit-offset', offsetMinutes };
+}
+
+return {parseTradovateTime};
+})();
+erModuleRegistry["src/exit-research/tradovate-csv.js"] = (() => {
+const { parseCsv, validationError } = erModuleRegistry["src/exit-research/csv.js"];
+const { parseTradovateTime } = erModuleRegistry["src/exit-research/time.js"];
+const requiredHeaders = {
+  fills: ['Fill ID', 'Order ID', 'Contract', 'Product', 'B/S', 'Quantity', 'Price', 'Timestamp'],
+  orders: ['Order ID', 'Contract', 'Product', 'B/S', 'Quantity', 'Type', 'Status', 'Timestamp'],
+  positions: ['Position ID', 'Contract', 'Product', 'Net Pos', 'Bought', 'Sold', 'Paired Qty', 'P/L', 'Timestamp']
+};
+const decimal = /^[+-]?(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d+)?$/;
+function context(raw, sourceRowNumber) {
+  const numericRepresentationDifferences = [];
+  const fail = (code, field) => { throw validationError(code, sourceRowNumber, field); };
+  const id = (field, optional = false) => {
+    const value = raw[field]?.trim();
+    if (!value) { if (optional) return null; fail('INVALID_ID', field); }
+    return value;
+  };
+  const number = (field, { optional = false, positive = false, integer = false, nonnegative = false } = {}) => {
+    const value = raw[field]?.trim();
+    if (!value) { if (optional) return null; fail('INVALID_NUMBER', field); }
+    if (!decimal.test(value)) fail('INVALID_NUMBER', field);
+    const parsed = Number(value.replaceAll(',', ''));
+    if (!Number.isFinite(parsed) || (positive && parsed <= 0) || (nonnegative && parsed < 0) || (integer && !Number.isSafeInteger(parsed))) fail('INVALID_NUMBER', field);
+    return parsed;
+  };
+  const time = (field, optional = false) => {
+    if (!raw[field]?.trim() && optional) return null;
+    return parseTradovateTime(raw[field], sourceRowNumber, field);
+  };
+  const side = () => {
+    const value = raw['B/S']?.trim();
+    if (!['Buy', 'Sell'].includes(value)) fail('INVALID_SIDE', 'B/S');
+    return value.toLowerCase();
+  };
+  const has = field => Object.hasOwn(raw, field);
+  const account = () => ({ accountId: has('_accountId') ? id('_accountId') : has('Account') ? id('Account') : null, accountLabel: has('Account') ? id('Account') : null });
+  const aliasId = (field, expected) => { if (has(field) && id(field) !== expected) fail('INCONSISTENT_ALIAS', field); };
+  const aliasNumber = (field, expected, options = {}, comparedWith = null) => {
+    if (!has(field)) return;
+    const actual = number(field, options);
+    if (actual === expected) return;
+    // A display column is not an exact binary-float serialization. Keep both values.
+    if (!comparedWith || actual === null || expected === null || Math.abs(actual - expected) > 8 * Number.EPSILON * Math.max(Math.abs(actual), Math.abs(expected))) fail('INCONSISTENT_ALIAS', field);
+    numericRepresentationDifferences.push({ field, comparedWith });
+  };
+  return { fail, id, number, time, side, has, account, aliasId, aliasNumber, numericRepresentationDifferences };
+}
+function parse(text, kind, normalize) {
+  const parsed = parseCsv(text);
+  for (const header of requiredHeaders[kind]) if (!parsed.headers.includes(header)) throw validationError('MISSING_HEADER', 1, header);
+  const rows = parsed.rows.map(row => {
+    const raw = Object.fromEntries(parsed.headers.map((header, index) => [header, row.values[index]]));
+    return normalize(raw, row.sourceRowNumber);
+  });
+  return { headers: [...parsed.headers], rows, metadata: { ...parsed.metadata, kind, formatVersion: 1,
+    accountField: parsed.headers.includes('_accountId') ? '_accountId' : parsed.headers.includes('Account') ? 'Account' : null,
+    primaryTimeField: kind === 'fills' && parsed.headers.includes('_timestamp') ? '_timestamp' : 'Timestamp',
+    localTimezone: 'unknown', externalTimezoneConfigPending: true,
+    numericRepresentationDifferenceCount: rows.reduce((count, row) => count + row.numericRepresentationDifferences.length, 0) } };
+}
+function normalizeFill(raw, sourceRowNumber) {
+  const c = context(raw, sourceRowNumber);
+  const fillId = c.id('Fill ID'), orderId = c.id('Order ID');
+  const quantity = c.number('Quantity', { positive: true, integer: true });
+  const displayedPrice = c.number('Price', { positive: true });
+  const price = c.has('_price') ? c.number('_price', { positive: true }) : displayedPrice;
+  c.aliasId('_id', fillId); c.aliasId('_orderId', orderId);
+  c.aliasNumber('_qty', quantity, { positive: true, integer: true }); c.aliasNumber('_price', displayedPrice, { positive: true }, 'Price');
+  const displayedTime = c.time('Timestamp');
+  const time = c.has('_timestamp') ? c.time('_timestamp') : displayedTime;
+  let active = null;
+  if (c.has('_active')) {
+    if (!['true', 'false'].includes(raw._active.trim())) c.fail('INVALID_BOOLEAN', '_active');
+    active = raw._active.trim() === 'true';
+  }
+  return { fillId, orderId, ...c.account(), product: c.id('Product'), contract: c.id('Contract'), contractId: c.id('_contractId', true),
+    side: c.side(), quantity, price, displayedPrice, priceSourceField: c.has('_price') ? '_price' : 'Price', fillTimeRaw: time.raw, normalizedLocalTime: displayedTime.normalized,
+    displayedTimeRaw: displayedTime.raw, time, displayedTime, active,
+    commission: c.number('commission', { optional: true }), tradeDateRaw: raw._tradeDate ?? raw.Date ?? null,
+    sourceRowNumber, numericRepresentationDifferences: c.numericRepresentationDifferences, rawFields: { ...raw } };
+}
+function parseTradovateFillsCsv(text) {
+  const result = parse(text, 'fills', normalizeFill);
+  const seen = new Set();
+  for (const row of result.rows) {
+    if (seen.has(row.fillId)) throw validationError('DUPLICATE_FILL_ID', row.sourceRowNumber, 'Fill ID');
+    seen.add(row.fillId);
+  }
+  return result;
+}
+function parseTradovateOrdersCsv(text) {
+  return parse(text, 'orders', (raw, sourceRowNumber) => {
+    const c = context(raw, sourceRowNumber);
+    const orderId = c.id('Order ID'); c.aliasId('orderId', orderId);
+    const filledQuantity = c.number('Filled Qty', { optional: true, nonnegative: true, integer: true });
+    const averageFillPrice = c.number('Avg Fill Price', { optional: true, positive: true });
+    const reportedLimitPrice = c.number('Limit Price', { optional: true, positive: true });
+    const reportedStopPrice = c.number('Stop Price', { optional: true, positive: true });
+    c.aliasNumber('filledQty', filledQuantity, { optional: true, nonnegative: true, integer: true });
+    c.aliasNumber('avgPrice', averageFillPrice, { optional: true, positive: true }, 'Avg Fill Price');
+    c.aliasNumber('decimalFillAvg', averageFillPrice, { optional: true, positive: true }, 'Avg Fill Price');
+    c.aliasNumber('decimalLimit', reportedLimitPrice, { optional: true, positive: true }, 'Limit Price');
+    c.aliasNumber('decimalStop', reportedStopPrice, { optional: true, positive: true }, 'Stop Price');
+    return { orderId, versionId: c.id('Version ID', true), lastCommandId: c.id('lastCommandId', true), ...c.account(),
+      contract: c.id('Contract'), product: c.id('Product'), side: c.side(), quantity: c.number('Quantity', { positive: true, integer: true }),
+      orderType: c.id('Type'), status: c.id('Status'), filledQuantity,
+      averageFillPrice: c.has('decimalFillAvg') ? c.number('decimalFillAvg', { optional: true, positive: true }) : c.has('avgPrice') ? c.number('avgPrice', { optional: true, positive: true }) : averageFillPrice,
+      reportedLimitPrice: c.has('decimalLimit') ? c.number('decimalLimit', { optional: true, positive: true }) : reportedLimitPrice,
+      reportedStopPrice: c.has('decimalStop') ? c.number('decimalStop', { optional: true, positive: true }) : reportedStopPrice,
+      orderTime: c.time('Timestamp'), fillTime: c.time('Fill Time', true), dateRaw: raw.Date ?? null,
+      notionalValue: c.number('Notional Value', { optional: true }), currency: c.id('Currency', true), sourceRowNumber, numericRepresentationDifferences: c.numericRepresentationDifferences, rawFields: { ...raw } };
+  });
+}
+function parseTradovatePositionHistoryCsv(text) {
+  return parse(text, 'positions', (raw, sourceRowNumber) => {
+    const c = context(raw, sourceRowNumber);
+    return { positionId: c.id('Position ID'), pairId: c.id('Pair ID', true), buyFillId: c.id('Buy Fill ID', true), sellFillId: c.id('Sell Fill ID', true),
+      ...c.account(), contract: c.id('Contract'), product: c.id('Product'),
+      netQuantity: c.number('Net Pos', { integer: true }), netPrice: c.number('Net Price', { optional: true }),
+      boughtQuantity: c.number('Bought', { nonnegative: true, integer: true }), soldQuantity: c.number('Sold', { nonnegative: true, integer: true }),
+      pairedQuantity: c.number('Paired Qty', { positive: true, integer: true }),
+      averageBuyPrice: c.number('Avg. Buy', { optional: true, positive: true }), averageSellPrice: c.number('Avg. Sell', { optional: true, positive: true }),
+      buyPrice: c.number('Buy Price', { optional: true, positive: true }), sellPrice: c.number('Sell Price', { optional: true, positive: true }),
+      pnl: c.number('P/L'), currency: c.id('Currency', true), time: c.time('Timestamp'), boughtTime: c.time('Bought Timestamp', true),
+      soldTime: c.time('Sold Timestamp', true), tradeDateRaw: raw['Trade Date'] ?? null, sourceRowNumber, numericRepresentationDifferences: c.numericRepresentationDifferences, rawFields: { ...raw } };
+  });
+}
+
+// Reconstruction also validates direct callers; parser success is not an implicit trust boundary.
+function assertNormalizedFill(fill) {
+  const row = Number.isSafeInteger(fill?.sourceRowNumber) && fill.sourceRowNumber >= 2 ? fill.sourceRowNumber : 0;
+  const fail = (code, field) => { throw validationError(code, row, field); };
+  if (!row) fail('INVALID_NORMALIZED_FILL', 'sourceRowNumber');
+  for (const field of ['fillId', 'orderId', 'contract', 'product']) if (typeof fill[field] !== 'string' || !fill[field].trim() || fill[field] !== fill[field].trim()) fail('INVALID_NORMALIZED_FILL', field);
+  if (fill.accountId !== null && (typeof fill.accountId !== 'string' || !fill.accountId.trim() || fill.accountId !== fill.accountId.trim())) fail('INVALID_NORMALIZED_FILL', 'accountId');
+  if (!['buy', 'sell'].includes(fill.side)) fail('INVALID_SIDE', 'side');
+  if (!Number.isSafeInteger(fill.quantity) || fill.quantity <= 0) fail('INVALID_NUMBER', 'quantity');
+  if (typeof fill.price !== 'number' || !Number.isFinite(fill.price) || fill.price <= 0) fail('INVALID_NUMBER', 'price');
+  if (fill.active !== null && typeof fill.active !== 'boolean') fail('INVALID_NORMALIZED_FILL', 'active');
+  if (fill.active === false) fail('INACTIVE_FILL_UNSUPPORTED', 'active');
+  const time = parseTradovateTime(fill.fillTimeRaw, row, 'fillTimeRaw');
+  if (!fill.time || ['raw', 'normalized', 'sortKey', 'timezone', 'offsetMinutes'].some(key => fill.time[key] !== time[key])) fail('INVALID_NORMALIZED_FILL', 'time');
+  return true;
+}
+
+return {parseTradovateFillsCsv, parseTradovateOrdersCsv, parseTradovatePositionHistoryCsv, assertNormalizedFill};
+})();
+erModuleRegistry["src/exit-research/market-config.js"] = (() => {
+const DEFAULT_CONTEXT_MARKET_V1 = Object.freeze({ GC: 'GC1!', ES: 'ES1!', CL: 'CL1!' });
+const PRICE_SOURCE_MODES = Object.freeze(['EXACT_EXECUTION_CONTRACT', 'SAME_EXPIRY_LARGE_CONTRACT_PROXY', 'CONTINUOUS_CONTRACT_PROXY']);
+const MARKET_TIMEFRAMES = Object.freeze({ PRIMARY: 300000, DETAIL: 60000, CONTEXT: 1800000 });
+const DETAIL_MODE = 'ON_DEMAND';
+function resolveContextMarket(trade, defaults = DEFAULT_CONTEXT_MARKET_V1) {
+  const explicit = typeof trade.contextSymbol === 'string' && trade.contextSymbol.trim() ? trade.contextSymbol : null;
+  return { resolvedContextSymbol: explicit ?? defaults[trade.researchFamily] ?? null,
+    contextSymbolSource: explicit ? 'TASK_CARD_EXPLICIT' : defaults[trade.researchFamily] ? 'DEFAULT_RESEARCH_CONFIG' : 'UNRESOLVED' };
+}
+
+return {DEFAULT_CONTEXT_MARKET_V1, PRICE_SOURCE_MODES, MARKET_TIMEFRAMES, DETAIL_MODE, resolveContextMarket};
+})();
+erModuleRegistry["src/exit-research/research-common.js"] = (() => {
+const { parseTradovateTime } = erModuleRegistry["src/exit-research/time.js"];
+const { validationError } = erModuleRegistry["src/exit-research/csv.js"];
+const { assertState, createWorkspace } = erModuleRegistry["src/model.js"];
+const clone = value => structuredClone(value);
+const compareText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+const uniqueSorted = values => [...new Set(values)].sort(compareText);
+const flag = (code, severity = 'review-required') => ({ code, severity });
+const samePrice = (a, b) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= 8 * Number.EPSILON * Math.max(Math.abs(a), Math.abs(b));
+const fail = (code, field = 'input') => { throw validationError(code, 0, field); };
+function epochMillis(time) {
+  if (!time) fail('EXECUTION_TIME_MISSING', 'time');
+  const parsed = parseTradovateTime(time.raw, 0, 'time');
+  if (parsed.offsetMinutes === null) fail('EXECUTION_TIMEZONE_UNCONFIRMED', 'time');
+  for (const key of ['normalized', 'sortKey', 'timezone', 'offsetMinutes']) if (time[key] !== parsed[key]) fail('EXECUTION_TIME_INCONSISTENT', 'time');
+  const [, year, month, day, hour, minute, second, ms] = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})\.(\d{3})/.exec(parsed.normalized);
+  return Date.UTC(+year, +month - 1, +day, +hour, +minute, +second, +ms) - parsed.offsetMinutes * 60000;
+}
+function assertOpportunityRecord(record) {
+  // Reuse the frozen V5 validator, including complete Manual Event semantics.
+  const state = createWorkspace(0);
+  state.records = [clone(record)];
+  if (record?.endedAt === null && state.cards[record.symbol]) {
+    state.cards[record.symbol].direction = record.direction;
+    state.cards[record.symbol].opportunity = clone(record);
+  }
+  try { assertState(state); } catch { fail('INVALID_OPPORTUNITY_RECORD', 'record'); }
+}
+function indexById(values, key) {
+  const map = new Map();
+  if (!Array.isArray(values)) fail('INVALID_BATCH', key);
+  for (const value of values) {
+    if (typeof value?.[key] !== 'string' || !value[key].trim()) fail('INVALID_ID', key);
+    if (map.has(value[key])) fail('DUPLICATE_ID', key);
+    map.set(value[key], value);
+  }
+  return map;
+}
+function executionFlagSeverities(trade, qa) {
+  return uniqueSorted(trade.qualityFlags || []).map(code => flag(code,
+    ['UNSUPPORTED_SCALE_PATTERN', 'RE_ADD_AFTER_EXIT_STARTED', 'OPEN_POSITION_AT_FILE_END'].includes(code) ? 'blocking' :
+      ['MULTI_ENTRY_ORDER', 'MULTI_EXIT_ORDER'].includes(code) && qa?.orders.status === 'PASS' && qa?.positionHistory.status === 'PASS' ? 'informational' : 'review-required'));
+}
+
+return {clone, compareText, uniqueSorted, flag, samePrice, fail, epochMillis, assertOpportunityRecord, indexById, executionFlagSeverities};
+})();
+erModuleRegistry["src/exit-research/market-data.js"] = (() => {
+const { PRICE_SOURCE_MODES } = erModuleRegistry["src/exit-research/market-config.js"];
+const { uniqueSorted } = erModuleRegistry["src/exit-research/research-common.js"];
+const time = value => Number.isSafeInteger(value) && value >= 0;
+const positive = value => Number.isFinite(value) && value > 0;
+const text = value => typeof value === 'string' && value.trim().length > 0;
+const exactKeys = (value, required, optional = []) => value && typeof value === 'object' && !Array.isArray(value) &&
+  required.every(key => Object.hasOwn(value, key)) && Object.keys(value).every(key => required.includes(key) || optional.includes(key));
+const SERIES_KEYS = ['seriesId', 'role', 'provider', 'providerSymbol', 'researchFamily', 'product', 'contract', 'priceSourceMode', 'timeframeMs', 'timestampSemantics', 'timezone', 'coverageStart', 'coverageEnd', 'bars'];
+function validateMarketDataBundle(bundle) {
+  const issues = [], series = [];
+  const issue = (code, path) => issues.push({ code, path });
+  if (!exactKeys(bundle, ['schemaVersion', 'source', 'sourceVersion', 'createdAt', 'series']) || bundle.schemaVersion !== 1 ||
+    !text(bundle.source) || !text(bundle.sourceVersion) || !time(bundle.createdAt) || !Array.isArray(bundle.series)) {
+    return { valid: false, qualityStatus: 'BLOCKED', qualityReasons: ['MARKET_BUNDLE_SCHEMA_INVALID'], issues: [{ code: 'MARKET_BUNDLE_SCHEMA_INVALID', path: 'bundle' }], series: [] };
+  }
+  const ids = new Set();
+  bundle.series.forEach((s, i) => {
+    const path = `series.${i}`, startIssues = issues.length;
+    if (!exactKeys(s, SERIES_KEYS, ['proxyForContract', 'tickSize']) || !text(s.seriesId) || !['EXECUTION_PRIMARY', 'EXECUTION_DETAIL', 'CONTEXT'].includes(s.role) ||
+      !text(s.provider) || !text(s.providerSymbol) || !['GC', 'ES', 'CL'].includes(s.researchFamily) || !text(s.product) || !text(s.contract) ||
+      !(s.role === 'CONTEXT' ? s.priceSourceMode === 'CONTEXT_MARKET' : PRICE_SOURCE_MODES.includes(s.priceSourceMode)) ||
+      !Number.isSafeInteger(s.timeframeMs) || s.timeframeMs <= 0 || s.timestampSemantics !== 'BAR_OPEN_TIME' || !['UTC', 'EXPLICIT_ABSOLUTE_TIME'].includes(s.timezone) ||
+      !time(s.coverageStart) || !time(s.coverageEnd) || s.coverageStart >= s.coverageEnd || !Array.isArray(s.bars) ||
+      (Object.hasOwn(s, 'tickSize') && s.tickSize !== null && !positive(s.tickSize)) ||
+      (Object.hasOwn(s, 'proxyForContract') && s.proxyForContract !== null && !text(s.proxyForContract))) {
+      issue('MARKET_SERIES_SCHEMA_INVALID', path); series.push({ seriesId: s?.seriesId ?? null, valid: false, gaps: [], qualityFlags: [] }); return;
+    }
+    if (ids.has(s.seriesId)) issue('DUPLICATE_MARKET_SERIES_ID', path); ids.add(s.seriesId);
+    const gaps = [];
+    s.bars.forEach((bar, j) => {
+      const bp = `${path}.bars.${j}`;
+      if (!exactKeys(bar, ['openTime', 'open', 'high', 'low', 'close', 'volume']) || !time(bar.openTime) || !time(bar.openTime + s.timeframeMs)) { issue('MARKET_BAR_SCHEMA_INVALID', bp); return; }
+      if (![bar.open, bar.high, bar.low, bar.close].every(positive) || bar.high < Math.max(bar.open, bar.low, bar.close) || bar.low > Math.min(bar.open, bar.high, bar.close)) issue('MARKET_BAR_OHLC_INVALID', bp);
+      if (bar.volume !== null && (!Number.isFinite(bar.volume) || bar.volume < 0)) issue('MARKET_BAR_VOLUME_INVALID', bp);
+      if (j > 0) {
+        const previous = s.bars[j - 1];
+        if (!time(previous?.openTime)) return;
+        const delta = bar.openTime - previous.openTime;
+        if (delta === 0) issue('DUPLICATE_BAR_OPEN_TIME', bp);
+        else if (delta < 0) issue('UNSORTED_MARKET_BARS', bp);
+        else if (delta < s.timeframeMs) issue('OVERLAPPING_MARKET_BARS', bp);
+        else if (delta > s.timeframeMs) gaps.push({ startAt: previous.openTime + s.timeframeMs, endAt: bar.openTime });
+      }
+    });
+    const actualStart = s.bars[0]?.openTime ?? null, actualEnd = s.bars.length ? s.bars.at(-1).openTime + s.timeframeMs : null;
+    if (s.bars.length && (actualStart !== s.coverageStart || actualEnd !== s.coverageEnd)) issue('MARKET_COVERAGE_METADATA_CONFLICT', path);
+    series.push({ seriesId: s.seriesId, valid: issues.length === startIssues, actualCoverageStart: actualStart, actualCoverageEnd: actualEnd, gaps,
+      qualityFlags: [...(gaps.length ? ['MARKET_DATA_GAP'] : []), ...(!s.bars.length ? ['MARKET_SERIES_EMPTY'] : [])] });
+  });
+  return { valid: !issues.length, qualityStatus: issues.length ? 'BLOCKED' : 'VALIDATED', qualityReasons: uniqueSorted(issues.map(x => x.code)), issues, series };
+}
+function canonicalSeries(s) {
+  return JSON.stringify({ provider: s.provider, providerSymbol: s.providerSymbol, researchFamily: s.researchFamily, product: s.product, contract: s.contract,
+    priceSourceMode: s.priceSourceMode, proxyForContract: s.proxyForContract ?? null, tickSize: s.tickSize ?? null, timeframeMs: s.timeframeMs,
+    timestampSemantics: s.timestampSemantics, timezone: s.timezone, coverageStart: s.coverageStart, coverageEnd: s.coverageEnd,
+    bars: s.bars.map(b => [b.openTime, b.open, b.high, b.low, b.close, b.volume]) });
+}
+// Collision-free canonical content identity, not a compact digest or authenticity claim.
+const marketSeriesFingerprint = s => 'market-series-v1:' + canonicalSeries(s);
+const marketBundleFingerprint = bundle => 'market-bundle-v1:' + JSON.stringify(bundle.series.map(canonicalSeries).sort());
+
+return {validateMarketDataBundle, marketSeriesFingerprint, marketBundleFingerprint};
+})();
+erModuleRegistry["src/exit-research/manual-matches.js"] = (() => {
+const { clone, epochMillis, indexById, fail, compareText } = erModuleRegistry["src/exit-research/research-common.js"];
+const createResearchStore = () => ({ schemaVersion: 1, sequence: 0, manualDecisions: [] });
+function executionFingerprint(trade) {
+  // Canonical facts, not CSV display text, row order, source row number or import time.
+  return JSON.stringify({
+    logicalTradeId: trade.logicalTradeId, accountId: trade.accountId, product: trade.product, contract: trade.contract,
+    direction: trade.direction, status: trade.status, quantity: trade.quantity, exitQuantity: trade.exitQuantity,
+    remainingQuantity: trade.remainingQuantity, entryVwap: trade.entryVwap, exitVwap: trade.exitVwap,
+    times: [trade.entryStartedAt, trade.entryCompletedAt, trade.exitStartedAt, trade.exitCompletedAt].map(time => time ? epochMillis(time) : null),
+    entryFillIds: [...trade.entryFillIds], exitFillIds: [...trade.exitFillIds],
+    entryOrderIds: [...trade.entryOrderIds].sort(compareText), exitOrderIds: [...trade.exitOrderIds].sort(compareText),
+    flags: [...trade.qualityFlags].sort(compareText),
+    fills: trade.fills.map(fill => ({ fillId: fill.fillId, orderId: fill.orderId, accountId: fill.accountId,
+      contractId: fill.contractId, contract: fill.contract, product: fill.product, side: fill.side, quantity: fill.quantity,
+      price: fill.price, active: fill.active, time: epochMillis(fill.time) })).sort((a, b) => compareText(a.fillId, b.fillId))
+  });
+}
+function assertResearchStore(store) {
+  if (store?.schemaVersion !== 1 || !Number.isSafeInteger(store.sequence) || store.sequence < 0 || !Array.isArray(store.manualDecisions) || store.sequence !== store.manualDecisions.length) fail('INVALID_RESEARCH_STORE');
+  indexById(store.manualDecisions, 'id');
+  for (const [i, decision] of store.manualDecisions.entries()) {
+    if (decision.id !== `manual-match:${i + 1}` || decision.sequence !== i + 1 ||
+      !['MANUAL_CONFIRMED', 'MANUAL_REJECTED'].includes(decision.action) ||
+      typeof decision.opportunityId !== 'string' || !decision.opportunityId.trim() ||
+      typeof decision.logicalTradeId !== 'string' || !decision.logicalTradeId.trim() ||
+      typeof decision.executionFingerprint !== 'string' || !decision.executionFingerprint ||
+      !Number.isSafeInteger(decision.recordedAt) || decision.recordedAt < 0) fail('INVALID_MANUAL_DECISION');
+  }
+  return true;
+}
+function append(store, opportunityId, trade, recordedAt, action) {
+  assertResearchStore(store);
+  if (typeof opportunityId !== 'string' || !opportunityId.trim() || !Number.isSafeInteger(recordedAt) || recordedAt < 0) fail('INVALID_MANUAL_DECISION');
+  const next = clone(store), sequence = next.sequence + 1;
+  next.manualDecisions.push({ id: `manual-match:${sequence}`, sequence, action, opportunityId,
+    logicalTradeId: trade.logicalTradeId, executionFingerprint: executionFingerprint(trade), recordedAt });
+  next.sequence = sequence; assertResearchStore(next); return next;
+}
+const applyManualMatch = (store, opportunityId, trade, recordedAt) => append(store, opportunityId, trade, recordedAt, 'MANUAL_CONFIRMED');
+const applyManualReject = (store, opportunityId, trade, recordedAt) => append(store, opportunityId, trade, recordedAt, 'MANUAL_REJECTED');
+function latestManualDecisions(store) {
+  assertResearchStore(store);
+  const pairs = new Map();
+  for (const decision of store.manualDecisions) pairs.set(JSON.stringify([decision.opportunityId, decision.logicalTradeId]), decision);
+  return [...pairs.values()];
+}
+
+return {createResearchStore, executionFingerprint, assertResearchStore, applyManualMatch, applyManualReject, latestManualDecisions};
+})();
+erModuleRegistry["src/exit-research/ui/store.js"] = (() => {
+const { createResearchStore, assertResearchStore } = erModuleRegistry["src/exit-research/manual-matches.js"];
+const RESEARCH_UI_KEY = 'exit-research:v1';
+const workbenchStoreKeys = (o, keys) => o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length === keys.length && keys.every(k => Object.hasOwn(o, k));
+function createWorkbenchStore() {
+  return { app: 'exit-research', ...createResearchStore(), preferences: { setup: 'ALL', family: 'ALL', quality: 'ALL', selectedOpportunityId: null }, settings: { tradeOverrides: {} } };
+}
+function validateWorkbenchStore(store) {
+  const bad = () => { throw new Error('INVALID_RESEARCH_UI_STORE'); };
+  if (!workbenchStoreKeys(store, ['app','schemaVersion','sequence','manualDecisions','preferences','settings']) || store.app !== 'exit-research') bad();
+  assertResearchStore(store);
+  // Keep frozen decision validation while denying extra persisted payloads.
+  for (const d of store.manualDecisions) if (!workbenchStoreKeys(d, ['id','sequence','action','opportunityId','logicalTradeId','executionFingerprint','recordedAt'])) bad();
+  const p = store.preferences;
+  if (!workbenchStoreKeys(p, ['setup','family','quality','selectedOpportunityId']) || !['ALL','PB','BOF','BOF_TO_PB'].includes(p.setup) || !['ALL','GC','CL','ES'].includes(p.family) || !['ALL','READY','REVIEW_REQUIRED','BLOCKED'].includes(p.quality) || !(p.selectedOpportunityId === null || typeof p.selectedOpportunityId === 'string' && p.selectedOpportunityId.trim())) bad();
+  if (!workbenchStoreKeys(store.settings, ['tradeOverrides']) || !store.settings.tradeOverrides || typeof store.settings.tradeOverrides !== 'object' || Array.isArray(store.settings.tradeOverrides)) bad();
+  for (const [id, v] of Object.entries(store.settings.tradeOverrides)) {
+    if (!id.trim() || ['__proto__','constructor','prototype'].includes(id) || !workbenchStoreKeys(v, ['replayHardEndAt','executionTickSize']) || !(v.replayHardEndAt === null || Number.isSafeInteger(v.replayHardEndAt) && v.replayHardEndAt >= 0 && v.replayHardEndAt < Date.UTC(10000,0,1)) || !(v.executionTickSize === null || Number.isFinite(v.executionTickSize) && v.executionTickSize > 0)) bad();
+  }
+  return true;
+}
+function parseWorkbenchStore(raw) {
+  if (typeof raw !== 'string' || raw.length > 8 * 1024 * 1024) throw new Error('RESEARCH_STORE_SIZE_INVALID');
+  const store = JSON.parse(raw); validateWorkbenchStore(store); return structuredClone(store);
+}
+function serializeWorkbenchStore(store) { validateWorkbenchStore(store); return JSON.stringify(store, null, 2); }
+
+return {RESEARCH_UI_KEY, createWorkbenchStore, validateWorkbenchStore, parseWorkbenchStore, serializeWorkbenchStore};
+})();
+erModuleRegistry["src/exit-research/logical-trade.js"] = (() => {
+const { validationError } = erModuleRegistry["src/exit-research/csv.js"];
+const { assertNormalizedFill } = erModuleRegistry["src/exit-research/tradovate-csv.js"];
+const clone = value => structuredClone(value);
+const unique = values => [...new Set(values)];
+const compareText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
+function sum(values, row) {
+  let total = 0, compensation = 0;
+  for (const value of values) {
+    const adjusted = value - compensation;
+    const next = total + adjusted;
+    compensation = (next - total) - adjusted;
+    total = next;
+    if (!Number.isFinite(total)) throw validationError('NUMERIC_OVERFLOW', row, 'vwap');
+  }
+  return total;
+}
+function vwap(fills) {
+  if (!fills.length) return null;
+  const quantity = fills.reduce((total, fill) => total + fill.quantity, 0);
+  return sum(fills.map(fill => fill.price * fill.quantity), fills.at(-1).sourceRowNumber) / quantity;
+}
+function outputTrade(facts, net) {
+  const entry = facts.entry, exit = facts.exit;
+  const entryOrderIds = unique(entry.map(fill => fill.orderId)), exitOrderIds = unique(exit.map(fill => fill.orderId));
+  const first = entry[0], lastExit = exit.at(-1);
+  const qualityFlags = [];
+  if (entryOrderIds.length > 1) qualityFlags.push('MULTI_ENTRY_ORDER');
+  if (exitOrderIds.length > 1) qualityFlags.push('MULTI_EXIT_ORDER');
+  if (facts.reAdd) qualityFlags.push('RE_ADD_AFTER_EXIT_STARTED');
+  if (qualityFlags.length) qualityFlags.push('UNSUPPORTED_SCALE_PATTERN');
+  if (net !== 0) qualityFlags.push('OPEN_POSITION_AT_FILE_END');
+  const quantity = entry.reduce((total, fill) => total + fill.quantity, 0);
+  const exitQuantity = exit.reduce((total, fill) => total + fill.quantity, 0);
+  if (!Number.isSafeInteger(quantity) || !Number.isSafeInteger(exitQuantity)) throw validationError('NUMERIC_OVERFLOW', first.sourceRowNumber, 'quantity');
+  return {
+    logicalTradeId: 'lt:' + encodeURIComponent(JSON.stringify([first.accountId, first.contract, first.fillId, net === 0 ? lastExit.fillId : null])),
+    status: net === 0 ? 'closed' : 'open', accountId: first.accountId, product: first.product, contract: first.contract, direction: facts.direction,
+    quantity, exitQuantity, remainingQuantity: Math.abs(net),
+    entryStartedAt: clone(first.time), entryCompletedAt: clone(entry.at(-1).time), entryVwap: vwap(entry),
+    exitStartedAt: lastExit ? clone(exit[0].time) : null, exitCompletedAt: net === 0 ? clone(lastExit.time) : null, exitVwap: vwap(exit),
+    entryFillIds: entry.map(fill => fill.fillId), exitFillIds: exit.map(fill => fill.fillId), entryOrderIds, exitOrderIds,
+    allFillIds: facts.all.map(fill => fill.fillId), sourceRows: facts.all.map(fill => fill.sourceRowNumber), fills: clone(facts.all), qualityFlags
+  };
+}
+function reconstructLogicalTrades(fills, options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['initialPositionMode', 'assumeFlatAtStart'].includes(key))) throw validationError('INVALID_INITIAL_BOUNDARY_OPTIONS', 0, 'options');
+  const initialPositionMode = Object.hasOwn(options, 'initialPositionMode') ? options.initialPositionMode : 'REQUIRE_FLAT';
+  if (!['REQUIRE_FLAT', 'KNOWN_INITIAL_POSITION'].includes(initialPositionMode)) throw validationError('INVALID_INITIAL_BOUNDARY_OPTIONS', 0, 'initialPositionMode');
+  if (Object.hasOwn(options, 'assumeFlatAtStart') && typeof options.assumeFlatAtStart !== 'boolean') throw validationError('INVALID_INITIAL_BOUNDARY_OPTIONS', 0, 'assumeFlatAtStart');
+  const assumeFlatAtStart = Object.hasOwn(options, 'assumeFlatAtStart') && options.assumeFlatAtStart === true;
+  if (initialPositionMode === 'KNOWN_INITIAL_POSITION' && assumeFlatAtStart) throw validationError('INVALID_INITIAL_BOUNDARY_OPTIONS', 0, 'assumeFlatAtStart');
+  if (!Array.isArray(fills)) throw validationError('INVALID_FILLS_INPUT', 0, 'fills');
+  const seen = new Set(), groups = new Map();
+  for (const fill of fills) {
+    assertNormalizedFill(fill);
+    if (seen.has(fill.fillId)) throw validationError('DUPLICATE_FILL_ID', fill.sourceRowNumber, 'fillId');
+    seen.add(fill.fillId);
+    const key = JSON.stringify([fill.accountId, fill.contract]);
+    if (!groups.has(key)) groups.set(key, []);
+    const group = groups.get(key);
+    if (group.length && group[0].product !== fill.product) throw validationError('INCONSISTENT_CONTRACT_PRODUCT', fill.sourceRowNumber, 'product');
+    if (group.length && (group[0].time.offsetMinutes === null) !== (fill.time.offsetMinutes === null)) throw validationError('MIXED_TIME_BASIS', fill.sourceRowNumber, 'time');
+    if (group.some(previous => previous.sourceRowNumber === fill.sourceRowNumber)) throw validationError('DUPLICATE_SOURCE_ROW', fill.sourceRowNumber, 'sourceRowNumber');
+    group.push(fill);
+  }
+  // Validate source facts, but do not infer any positions without a caller-confirmed boundary.
+  if (initialPositionMode === 'KNOWN_INITIAL_POSITION' || !assumeFlatAtStart) return {
+    status: initialPositionMode === 'KNOWN_INITIAL_POSITION' ? 'KNOWN_INITIAL_POSITION_UNSUPPORTED' : 'WINDOW_START_FLAT_UNCONFIRMED',
+    initialPositionMode, closedTrades: [], openPositions: [], fills: clone(fills),
+    metadata: { fillCount: fills.length, groupCount: groups.size, closedTradeCount: null, openPositionCount: null, flagCounts: {} }
+  };
+  const closedTrades = [], openPositions = [];
+  for (const key of [...groups.keys()].sort(compareText)) {
+    const sorted = [...groups.get(key)].sort((a, b) => compareText(a.time.sortKey, b.time.sortKey) || a.sourceRowNumber - b.sourceRowNumber);
+    let net = 0, facts = null;
+    for (const fill of sorted) {
+      const signed = fill.side === 'buy' ? fill.quantity : -fill.quantity;
+      if (net === 0) facts = { direction: signed > 0 ? 'LONG' : 'SHORT', entry: [], exit: [], all: [], reAdd: false };
+      const sameDirection = (facts.direction === 'LONG') === (signed > 0);
+      if (!sameDirection && fill.quantity > Math.abs(net)) throw validationError('RECONSTRUCTION_REVERSAL_CROSS_ZERO', fill.sourceRowNumber, 'quantity');
+      if (sameDirection) { if (facts.exit.length) facts.reAdd = true; facts.entry.push(fill); }
+      else facts.exit.push(fill);
+      facts.all.push(fill); net += signed;
+      if (!Number.isSafeInteger(net)) throw validationError('NUMERIC_OVERFLOW', fill.sourceRowNumber, 'quantity');
+      if (net === 0) { closedTrades.push(outputTrade(facts, net)); facts = null; }
+    }
+    if (facts) openPositions.push(outputTrade(facts, net));
+  }
+  const flagCounts = {};
+  for (const trade of [...closedTrades, ...openPositions]) for (const flag of trade.qualityFlags) flagCounts[flag] = (flagCounts[flag] || 0) + 1;
+  return { closedTrades, openPositions, fills: clone(fills), metadata: { fillCount: fills.length, groupCount: groups.size, closedTradeCount: closedTrades.length, openPositionCount: openPositions.length, flagCounts } };
+}
+
+return {reconstructLogicalTrades};
+})();
+erModuleRegistry["src/exit-research/symbol-map.js"] = (() => {
+// Research family and execution contract remain distinct identities.
+const EXECUTION_PRODUCTS = Object.freeze({ GC: 'MGC', ES: 'MES', CL: 'MCL' });
+const researchFamilyForProduct = product => Object.keys(EXECUTION_PRODUCTS).find(family => EXECUTION_PRODUCTS[family] === product) ?? null;
+const executionProductForFamily = family => EXECUTION_PRODUCTS[family] ?? null;
+
+return {EXECUTION_PRODUCTS, researchFamilyForProduct, executionProductForFamily};
+})();
+erModuleRegistry["src/exit-research/execution-qa.js"] = (() => {
+const { assertNormalizedFill } = erModuleRegistry["src/exit-research/tradovate-csv.js"];
+const { clone, flag, samePrice, uniqueSorted, indexById, fail } = erModuleRegistry["src/exit-research/research-common.js"];
+const statusOf = flags => flags.some(f => f.severity === 'blocking') ? 'CONFLICT' :
+  flags.some(f => f.code.endsWith('_MISSING') || f.code.endsWith('_INCOMPLETE')) ? 'INSUFFICIENT_DATA' :
+    flags.some(f => f.severity === 'review-required') ? 'WARNING' : 'PASS';
+const compatible = (row, fill) => row.contract === fill.contract && row.product === fill.product &&
+  (!row.accountLabel || !fill.accountLabel || row.accountLabel === fill.accountLabel);
+const summarize = (flags, extra) => ({ status: statusOf(flags), ...extra, flags });
+
+function assessExecutionQa(trades, orders = [], positionHistory = [], { fills = null } = {}) {
+  const tradeMap = indexById(trades, 'logicalTradeId');
+  // Global order totals must include open positions when the caller has them.
+  const sourceFills = fills ?? trades.flatMap(trade => trade.fills);
+  const fillMap = indexById(sourceFills, 'fillId');
+  sourceFills.forEach(assertNormalizedFill);
+  const ordersById = new Map(), pairsById = new Map(), unkeyedPairs = [];
+  for (const order of orders) {
+    if (!order.orderId) fail('INVALID_ORDER_ID');
+    if (!ordersById.has(order.orderId)) ordersById.set(order.orderId, []);
+    ordersById.get(order.orderId).push(order);
+  }
+  for (const pair of positionHistory) {
+    if (!pair.pairId) { unkeyedPairs.push(pair); continue; }
+    if (!pairsById.has(pair.pairId)) pairsById.set(pair.pairId, []);
+    pairsById.get(pair.pairId).push(pair);
+  }
+  const result = {};
+  for (const [id, trade] of [...tradeMap].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) {
+    const orderFlags = [], matchedOrderIds = [], orderTypes = [];
+    for (const orderId of uniqueSorted([...trade.entryOrderIds, ...trade.exitOrderIds])) {
+      const rows = ordersById.get(orderId) || [];
+      if (!rows.length) { orderFlags.push(flag('ORDER_RECORD_MISSING')); continue; }
+      matchedOrderIds.push(orderId);
+      orderTypes.push({ orderId, types: uniqueSorted(rows.map(row => row.orderType)) });
+      const group = sourceFills.filter(fill => fill.orderId === orderId);
+      if (!group.length || rows.some(row => group.some(fill => !compatible(row, fill) || row.side !== fill.side))) {
+        orderFlags.push(flag('ORDER_IDENTITY_CONFLICT', 'blocking')); continue;
+      }
+      const quantity = group.reduce((n, fill) => n + fill.quantity, 0);
+      const price = group.reduce((n, fill) => n + fill.quantity * fill.price, 0) / quantity;
+      if (!rows.some(row => row.filledQuantity === quantity && samePrice(row.averageFillPrice, price))) {
+        orderFlags.push(flag(rows.every(row => row.filledQuantity === null || row.averageFillPrice === null) ? 'ORDER_TOTALS_INCOMPLETE' : 'ORDER_TOTALS_CONFLICT',
+          rows.every(row => row.filledQuantity === null || row.averageFillPrice === null) ? 'review-required' : 'blocking'));
+      }
+    }
+    if (trade.entryOrderIds.length > 1) orderFlags.push(flag('MULTI_ENTRY_ORDER_LINKED', 'informational'));
+    if (trade.exitOrderIds.length > 1) orderFlags.push(flag('MULTI_EXIT_ORDER_LINKED', 'informational'));
+    const historyFlags = [], matchedPairIds = [], positionIds = [], allocation = new Map();
+    const tradeIds = new Set(trade.allFillIds);
+    for (const [pairId, rows] of [...pairsById, ...unkeyedPairs.map(row => [null, [row]])]) {
+      if (!rows.some(row => tradeIds.has(row.buyFillId) || tradeIds.has(row.sellFillId))) continue;
+      if (pairId === null) { historyFlags.push(flag('PAIR_ID_MISSING')); continue; }
+      matchedPairIds.push(pairId);
+      if (rows.length !== 1) { historyFlags.push(flag('PAIR_ID_DUPLICATED', 'blocking')); continue; }
+      const pair = rows[0], buy = fillMap.get(pair.buyFillId), sell = fillMap.get(pair.sellFillId);
+      positionIds.push(pair.positionId);
+      if (!buy || !sell) { historyFlags.push(flag('PAIR_FILL_MISSING')); continue; }
+      if (!tradeIds.has(buy.fillId) || !tradeIds.has(sell.fillId)) { historyFlags.push(flag('PAIR_CROSSES_LOGICAL_TRADES', 'blocking')); continue; }
+      if (buy.side !== 'buy' || sell.side !== 'sell' || !compatible(pair, buy) || !compatible(pair, sell) || buy.accountId !== sell.accountId) historyFlags.push(flag('PAIR_IDENTITY_CONFLICT', 'blocking'));
+      if (!Number.isSafeInteger(pair.pairedQuantity) || pair.pairedQuantity <= 0) { historyFlags.push(flag('PAIR_QUANTITY_CONFLICT', 'blocking')); continue; }
+      for (const fill of [buy, sell]) allocation.set(fill.fillId, (allocation.get(fill.fillId) || 0) + pair.pairedQuantity);
+      if (pair.buyPrice === null || pair.sellPrice === null) historyFlags.push(flag('PAIR_PRICE_INCOMPLETE'));
+      else if (!samePrice(pair.buyPrice, buy.price) || !samePrice(pair.sellPrice, sell.price)) historyFlags.push(flag('PAIR_PRICE_CONFLICT', 'blocking'));
+      // P/L amount needs contract point value and fee semantics, absent from this API.
+      // Check direction relationship only; fees can change the sign of a small profit.
+      const movement = sell.price - buy.price;
+      if (pair.pnl === null) historyFlags.push(flag('PAIR_PNL_INCOMPLETE'));
+      else if (movement === 0 ? pair.pnl > 0 : Math.sign(movement) !== Math.sign(pair.pnl)) historyFlags.push(flag('PAIR_PNL_SIGN_REVIEW'));
+    }
+    if (!matchedPairIds.length) historyFlags.push(flag('POSITION_HISTORY_MISSING'));
+    for (const fillId of trade.allFillIds) {
+      const fill = fillMap.get(fillId), allocated = allocation.get(fillId) || 0;
+      if (!fill) { historyFlags.push(flag('EXECUTION_FILL_MISSING', 'blocking')); continue; }
+      if (allocated > fill.quantity) historyFlags.push(flag('PAIR_ALLOCATION_CONFLICT', 'blocking'));
+      else if (allocated < fill.quantity) historyFlags.push(flag('PAIR_ALLOCATION_INCOMPLETE'));
+    }
+    historyFlags.push(flag('PNL_AMOUNT_UNVERIFIED', 'informational'));
+    result[id] = {
+      orders: summarize(orderFlags, { matchedOrderIds, entryOrderIds: clone(trade.entryOrderIds), exitOrderIds: clone(trade.exitOrderIds), orderTypes }),
+      positionHistory: summarize(historyFlags, { matchedPairIds: uniqueSorted(matchedPairIds), positionIds: uniqueSorted(positionIds), pnlAmountVerified: false })
+    };
+  }
+  return result;
+}
+
+return {assessExecutionQa};
+})();
+erModuleRegistry["src/exit-research/reconciliation.js"] = (() => {
+const { researchFamilyForProduct } = erModuleRegistry["src/exit-research/symbol-map.js"];
+const { assessExecutionQa } = erModuleRegistry["src/exit-research/execution-qa.js"];
+const { createResearchStore, latestManualDecisions, executionFingerprint } = erModuleRegistry["src/exit-research/manual-matches.js"];
+const { clone, epochMillis, assertOpportunityRecord, indexById, executionFlagSeverities, uniqueSorted, compareText, fail } = erModuleRegistry["src/exit-research/research-common.js"];
+const DEFAULT_MATCHING_CONFIG = Object.freeze({ strongEntryWindowMs: 120000, reviewEntryWindowMs: 600000,
+  strongExitWindowMs: 120000, reviewExitWindowMs: 600000, maxComponentSize: 8, maxAssignmentSteps: 200000 });
+function configFor(overrides) {
+  if (!overrides || typeof overrides !== 'object' || Array.isArray(overrides) || Object.keys(overrides).some(key => !Object.hasOwn(DEFAULT_MATCHING_CONFIG, key))) fail('INVALID_MATCHING_CONFIG');
+  const config = { ...DEFAULT_MATCHING_CONFIG, ...overrides };
+  if (Object.values(config).some(value => !Number.isSafeInteger(value) || value < 0) ||
+    config.strongEntryWindowMs > config.reviewEntryWindowMs || config.strongExitWindowMs > config.reviewExitWindowMs ||
+    !config.maxComponentSize || !config.maxAssignmentSteps) fail('INVALID_MATCHING_CONFIG');
+  return config;
+}
+function describe(record, trade, qa, config) {
+  if (researchFamilyForProduct(trade.product) !== record.symbol || trade.direction !== record.direction.toUpperCase() || trade.status !== 'closed') return null;
+  let times;
+  try { times = [trade.entryStartedAt, trade.entryCompletedAt, trade.exitStartedAt, trade.exitCompletedAt].map(epochMillis); }
+  catch (error) { return { logicalTradeId: trade.logicalTradeId, conflict: error.code }; }
+  if (times.some(time => !Number.isSafeInteger(time)) || times[0] > times[1] || times[1] > times[2] || times[2] > times[3]) return { logicalTradeId: trade.logicalTradeId, conflict: 'EXECUTION_TIMELINE_CONFLICT' };
+  const entryDeltaMs = Math.abs(record.enteredAt - times[0]);
+  const exitDeltaMs = record.endedAt === null ? null : Math.abs(record.endedAt - times[3]);
+  if (!Number.isSafeInteger(entryDeltaMs) || (exitDeltaMs !== null && !Number.isSafeInteger(exitDeltaMs))) return { logicalTradeId: trade.logicalTradeId, conflict: 'TIME_DELTA_OUT_OF_RANGE' };
+  const flags = executionFlagSeverities(trade, qa);
+  return { logicalTradeId: trade.logicalTradeId, entryDeltaMs, exitDeltaMs,
+    entryStrong: entryDeltaMs <= config.strongEntryWindowMs, entryOutsideReview: entryDeltaMs > config.reviewEntryWindowMs,
+    exitStrong: exitDeltaMs !== null && exitDeltaMs <= config.strongExitWindowMs,
+    flags, conflict: flags.some(f => f.severity === 'blocking') ? 'BLOCKING_EXECUTION_FLAG' :
+      [qa.orders.status, qa.positionHistory.status].includes('CONFLICT') ? 'EXECUTION_QA_CONFLICT' :
+        exitDeltaMs !== null && exitDeltaMs > config.reviewExitWindowMs ? 'EXIT_TIME_CONFLICT' : null };
+}
+function resultFor(record, candidate, qa, manual = false) {
+  const reasons = ['FAMILY_DIRECTION_MATCH', candidate.entryStrong ? 'ENTRY_STRONG' : candidate.entryOutsideReview ? 'MANUAL_ENTRY_OUTSIDE_WINDOW' : 'ENTRY_REVIEW_WINDOW',
+    candidate.exitDeltaMs === null ? 'TASK_EXIT_MISSING' : candidate.exitStrong ? 'EXIT_STRONG' : 'EXIT_REVIEW_WINDOW',
+    manual ? 'MANUAL_CONFIRMED' : 'UNIQUE_ONE_TO_ONE'];
+  if (candidate.flags.some(f => f.severity === 'review-required')) reasons.push('EXECUTION_QUALITY_FLAG');
+  if ([qa.orders.status, qa.positionHistory.status].some(status => status !== 'PASS')) reasons.push('EXECUTION_QA_REVIEW');
+  const strong = candidate.entryStrong && candidate.exitStrong && !reasons.includes('EXECUTION_QUALITY_FLAG') && !reasons.includes('EXECUTION_QA_REVIEW');
+  return { opportunityId: record.id, logicalTradeId: candidate.logicalTradeId, matchingStatus: strong ? 'MATCHED' : 'REVIEW_REQUIRED',
+    matchingReasons: reasons, entryDeltaMs: candidate.entryDeltaMs, exitDeltaMs: candidate.exitDeltaMs };
+}
+const emptyResult = (id, status, reasons, candidates = []) => ({ opportunityId: id, logicalTradeId: null,
+  matchingStatus: status, matchingReasons: uniqueSorted(reasons), entryDeltaMs: null, exitDeltaMs: null, candidateLogicalTradeIds: uniqueSorted(candidates) });
+
+// Enumerate a whole connected bipartite component. Preserve all equally optimal
+// assignments, including unassigned slots; lexical IDs NEVER resolve ambiguity.
+function assignComponent(opIds, edges, config) {
+  const tradeIds = uniqueSorted(opIds.flatMap(id => edges.get(id).map(edge => edge.logicalTradeId)));
+  if (Math.max(opIds.length, tradeIds.length) > config.maxComponentSize) return null;
+  let steps = 0, exhausted = false, best = null, choices = new Map();
+  const cmp = (a, b) => { for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) return a[i] > b[i] ? 1 : -1; return 0; };
+  function visit(i, used, selected, score) {
+    if (++steps > config.maxAssignmentSteps) { exhausted = true; return; }
+    if (i === opIds.length) {
+      const relation = best === null ? 1 : cmp(score, best);
+      if (relation < 0) return;
+      if (relation > 0) { best = score; choices = new Map(opIds.map(id => [id, new Set()])); }
+      opIds.forEach((id, index) => choices.get(id).add(selected[index]?.logicalTradeId ?? null));
+      return;
+    }
+    visit(i + 1, used, [...selected, null], score);
+    for (const edge of edges.get(opIds[i])) {
+      if (exhausted) return;
+      if (used.has(edge.logicalTradeId)) continue;
+      const next = new Set(used); next.add(edge.logicalTradeId);
+      visit(i + 1, next, [...selected, edge], [score[0] + 1, score[1] + Number(edge.entryStrong && edge.exitStrong),
+        score[2] + Number(edge.exitStrong), score[3] + Number(edge.entryStrong),
+        score[4] - BigInt(edge.entryDeltaMs), score[5] - BigInt(edge.exitDeltaMs ?? config.reviewExitWindowMs)]);
+    }
+  }
+  visit(0, new Set(), [], [0, 0, 0, 0, 0n, 0n]);
+  return exhausted ? null : choices;
+}
+function reconcileOpportunities(records, trades, { orders = [], positionHistory = [], allExecutionFills = null,
+  manualStore = createResearchStore(), config: overrides = {} } = {}) {
+  const config = configFor(overrides), recordMap = indexById(records, 'id'), tradeMap = indexById(trades, 'logicalTradeId');
+  const executionQa = assessExecutionQa(trades, orders, positionHistory, { fills: allExecutionFills });
+  const results = new Map(), descriptions = new Map(), edges = new Map();
+  for (const [id, record] of recordMap) {
+    try { assertOpportunityRecord(record); }
+    catch (error) { results.set(id, emptyResult(id, 'DATA_CONFLICT', [error.code])); continue; }
+    if (record.enteredAt === null) { results.set(id, emptyResult(id, 'NO_MATCH', ['TASK_ENTRY_MISSING'])); continue; }
+    const described = [...tradeMap.values()].map(trade => describe(record, trade, executionQa[trade.logicalTradeId], config)).filter(Boolean);
+    descriptions.set(id, described);
+    edges.set(id, described.filter(edge => !edge.conflict && edge.entryDeltaMs <= config.reviewEntryWindowMs).sort((a, b) => compareText(a.logicalTradeId, b.logicalTradeId)));
+  }
+  const latestPairs = latestManualDecisions(manualStore), activeConfirmations = new Map(), lastConfirmed = new Map();
+  for (const d of manualStore.manualDecisions) if (d.action === 'MANUAL_CONFIRMED') lastConfirmed.set(d.opportunityId, d);
+  // Rejecting the newest mapping must not resurrect a superseded confirmation.
+  for (const d of latestPairs) if (d.action === 'MANUAL_CONFIRMED' && lastConfirmed.get(d.opportunityId) === d) activeConfirmations.set(d.opportunityId, d);
+  // A new explicit confirmation for an opportunity supersedes its previous mapping;
+  // pair rejections remain useful, while the full append-only history is retained.
+  const decisions = latestPairs.filter(d => d.action === 'MANUAL_REJECTED' || activeConfirmations.get(d.opportunityId) === d);
+  const locked = new Map(), claimed = new Map();
+  for (const decision of decisions) {
+    const id = decision.opportunityId;
+    if (!recordMap.has(id) || results.has(id)) continue;
+    const trade = tradeMap.get(decision.logicalTradeId);
+    let unchanged = false;
+    try { unchanged = Boolean(trade) && executionFingerprint(trade) === decision.executionFingerprint; } catch { /* Fail closed below. */ }
+    if (!unchanged) {
+      if (decision.action === 'MANUAL_REJECTED' && (activeConfirmations.get(id)?.sequence ?? 0) > decision.sequence) continue;
+      results.set(id, emptyResult(id, 'REVIEW_REQUIRED', ['MANUAL_MATCH_SOURCE_CHANGED'], [decision.logicalTradeId])); continue;
+    }
+    if (decision.action === 'MANUAL_REJECTED') {
+      edges.set(id, edges.get(id).filter(edge => edge.logicalTradeId !== decision.logicalTradeId));
+      descriptions.set(id, descriptions.get(id).filter(edge => edge.logicalTradeId !== decision.logicalTradeId)); continue;
+    }
+    const edge = descriptions.get(id).find(edge => edge.logicalTradeId === decision.logicalTradeId);
+    if (!edge || edge.conflict) { results.set(id, emptyResult(id, 'DATA_CONFLICT', ['MANUAL_HARD_FILTER_CONFLICT', edge?.conflict ?? 'FAMILY_DIRECTION_STATUS_CONFLICT'])); continue; }
+    if (locked.has(id) && locked.get(id).logicalTradeId !== edge.logicalTradeId) results.set(id, emptyResult(id, 'DATA_CONFLICT', ['MANUAL_ASSIGNMENT_CONFLICT']));
+    locked.set(id, edge);
+    if (!claimed.has(edge.logicalTradeId)) claimed.set(edge.logicalTradeId, []);
+    claimed.get(edge.logicalTradeId).push(id);
+  }
+  for (const ids of claimed.values()) if (ids.length > 1) ids.forEach(id => results.set(id, emptyResult(id, 'DATA_CONFLICT', ['MANUAL_ASSIGNMENT_CONFLICT'])));
+  for (const [id, edge] of locked) if (!results.has(id)) results.set(id, resultFor(recordMap.get(id), edge, executionQa[edge.logicalTradeId], true));
+  const reserved = new Set([...locked.values()].map(edge => edge.logicalTradeId));
+  for (const [id, values] of edges) edges.set(id, values.filter(edge => !reserved.has(edge.logicalTradeId)));
+  const pending = uniqueSorted([...edges.keys()].filter(id => !results.has(id)));
+  const seen = new Set();
+  for (const start of pending) {
+    if (seen.has(start)) continue;
+    const component = [start], tradeIds = new Set(); seen.add(start);
+    for (let i = 0; i < component.length; i++) {
+      edges.get(component[i]).forEach(edge => tradeIds.add(edge.logicalTradeId));
+      for (const id of pending) if (!seen.has(id) && edges.get(id).some(edge => tradeIds.has(edge.logicalTradeId))) { seen.add(id); component.push(id); }
+    }
+    component.sort(compareText);
+    const assigned = assignComponent(component, edges, config);
+    for (const id of component) {
+      const ids = assigned?.get(id);
+      if (!assigned || ids.size > 1) results.set(id, emptyResult(id, 'MATCH_AMBIGUOUS', [assigned ? 'EQUAL_GLOBAL_ASSIGNMENTS' : 'ASSIGNMENT_LIMIT_REVIEW_REQUIRED'], edges.get(id).map(edge => edge.logicalTradeId)));
+      else if (!ids.has(null)) {
+        const edge = edges.get(id).find(edge => edge.logicalTradeId === [...ids][0]);
+        results.set(id, resultFor(recordMap.get(id), edge, executionQa[edge.logicalTradeId]));
+      } else {
+        const conflicts = descriptions.get(id).filter(edge => edge.conflict && (edge.entryDeltaMs === undefined || edge.entryDeltaMs <= config.reviewEntryWindowMs));
+        const rejected = decisions.some(d => d.opportunityId === id && d.action === 'MANUAL_REJECTED');
+        results.set(id, emptyResult(id, conflicts.length ? 'DATA_CONFLICT' : 'NO_MATCH', conflicts.length ? conflicts.flatMap(edge => [edge.conflict, ...(edge.flags || []).filter(f => f.severity === 'blocking').map(f => f.code)]) :
+          [edges.get(id).length ? 'ONE_TO_ONE_UNASSIGNED' : rejected ? 'MANUAL_REJECTED' : 'NO_ELIGIBLE_CANDIDATE'], conflicts.map(edge => edge.logicalTradeId)));
+      }
+    }
+  }
+  return { config: clone(config), matches: uniqueSorted([...recordMap.keys()]).map(id => results.get(id)), executionQa };
+}
+
+return {DEFAULT_MATCHING_CONFIG, reconcileOpportunities};
+})();
+erModuleRegistry["src/exit-research/research-trade.js"] = (() => {
+const { effectiveInitialStop, researchSetupClass } = erModuleRegistry["src/model.js"];
+const { executionProductForFamily } = erModuleRegistry["src/exit-research/symbol-map.js"];
+const { reconcileOpportunities } = erModuleRegistry["src/exit-research/reconciliation.js"];
+const { clone, epochMillis, executionFlagSeverities, uniqueSorted } = erModuleRegistry["src/exit-research/research-common.js"];
+function assessResearchQuality({ match, initialStop, direction, actualEntryPrice, executionQa, executionFlags = [] }) {
+  const blocked = [], review = [];
+  if (['MATCH_AMBIGUOUS', 'NO_MATCH', 'DATA_CONFLICT'].includes(match.matchingStatus)) blocked.push(match.matchingStatus, ...match.matchingReasons);
+  if (match.matchingReasons.includes('MANUAL_MATCH_SOURCE_CHANGED')) blocked.push('MANUAL_MATCH_SOURCE_CHANGED');
+  if (initialStop === null) blocked.push('INITIAL_STOP_MISSING');
+  else if (!Number.isFinite(initialStop) || initialStop <= 0 || (actualEntryPrice !== null &&
+    (direction === 'LONG' ? initialStop >= actualEntryPrice : initialStop <= actualEntryPrice))) blocked.push('INITIAL_STOP_INVALID');
+  if (match.matchingStatus === 'REVIEW_REQUIRED') review.push(...match.matchingReasons);
+  for (const section of Object.values(executionQa || {})) {
+    if (section.status === 'CONFLICT') blocked.push('EXECUTION_QA_CONFLICT', ...section.flags.filter(f => f.severity === 'blocking').map(f => f.code));
+    else if (section.status !== 'PASS') review.push('EXECUTION_QA_REVIEW', ...section.flags.filter(f => f.severity === 'review-required').map(f => f.code));
+  }
+  for (const f of executionFlags) (f.severity === 'blocking' ? blocked : f.severity === 'review-required' ? review : []).push(f.code);
+  return { status: blocked.length ? 'BLOCKED' : review.length ? 'REVIEW_REQUIRED' : 'READY', reasons: uniqueSorted([...blocked, ...review]) };
+}
+function buildResearchTrades(records, trades, options = {}) {
+  const reconciliation = reconcileOpportunities(records, trades, options);
+  const recordMap = new Map(records.map(record => [record.id, record])), tradeMap = new Map(trades.map(trade => [trade.logicalTradeId, trade]));
+  const researchTrades = reconciliation.matches.map(match => {
+    const record = recordMap.get(match.opportunityId), trade = tradeMap.get(match.logicalTradeId) ?? null;
+    const manualEvents = clone(record.researchCapture?.manualEvents || []), initialStop = effectiveInitialStop(record);
+    const executionQa = trade ? clone(reconciliation.executionQa[trade.logicalTradeId]) : null;
+    const executionFlags = trade ? executionFlagSeverities(trade, executionQa) : [];
+    const direction = record.direction?.toUpperCase() ?? null, actualEntryPrice = trade?.entryVwap ?? null;
+    const quality = assessResearchQuality({ match, initialStop, direction, actualEntryPrice, executionQa, executionFlags });
+    return { researchTradeId: 'rt:' + encodeURIComponent(JSON.stringify([record.id, match.logicalTradeId])),
+      opportunityId: record.id, logicalTradeId: match.logicalTradeId, researchFamily: record.symbol,
+      contextSymbol: record.contextSymbol ?? null, executionProduct: trade?.product ?? executionProductForFamily(record.symbol), executionContract: trade?.contract ?? null,
+      direction, originalSetup: record.type, researchSetupClass: researchSetupClass(record.type), manualEvents,
+      manualSetupTransitions: manualEvents.filter(event => ['BOF_TO_PB_RECORDED', 'BOF_TO_PB_REVERTED'].includes(event.type)),
+      registeredAt: record.registeredAt, taskEntryConfirmedAt: record.enteredAt, taskExitConfirmedAt: record.endedAt,
+      actualEntryTime: trade ? epochMillis(trade.entryStartedAt) : null, actualEntryCompletedTime: trade ? epochMillis(trade.entryCompletedAt) : null,
+      actualEntryPrice, initialStop, actualExitStartedTime: trade ? epochMillis(trade.exitStartedAt) : null,
+      actualExitTime: trade ? epochMillis(trade.exitCompletedAt) : null, actualExitPrice: trade?.exitVwap ?? null, quantity: trade?.quantity ?? null,
+      matchingStatus: match.matchingStatus, matchingReasons: clone(match.matchingReasons), entryDeltaMs: match.entryDeltaMs, exitDeltaMs: match.exitDeltaMs,
+      executionQa, executionFlags, qualityStatus: quality.status, qualityReasons: quality.reasons };
+  });
+  return { ...reconciliation, researchTrades };
+}
+
+return {assessResearchQuality, buildResearchTrades};
+})();
+erModuleRegistry["src/exit-research/r-math.js"] = (() => {
+function initialRisk(trade, { tickSize = null } = {}) {
+  const entry = trade.actualEntryPrice, stop = trade.initialStop;
+  const initialRiskPoints = Math.abs(entry - stop);
+  const valid = ['LONG', 'SHORT'].includes(trade.direction) && Number.isFinite(entry) && entry > 0 && Number.isFinite(stop) && stop > 0 &&
+    Number.isFinite(initialRiskPoints) && initialRiskPoints > 0 && (trade.direction === 'LONG' ? stop < entry : stop > entry);
+  if (!valid) return { valid: false, initialRiskPoints: null, initialRiskTicks: null, qualityReasons: [stop === null || stop === undefined ? 'INITIAL_STOP_MISSING' : 'INITIAL_STOP_INVALID'] };
+  if (tickSize !== null && (!Number.isFinite(tickSize) || tickSize <= 0)) return { valid: false, initialRiskPoints: null, initialRiskTicks: null, qualityReasons: ['EXECUTION_TICK_SIZE_INVALID'] };
+  const ticks = tickSize === null ? null : initialRiskPoints / tickSize;
+  if (ticks !== null && !Number.isFinite(ticks)) return { valid: false, initialRiskPoints: null, initialRiskTicks: null, qualityReasons: ['R_NUMERIC_OVERFLOW'] };
+  return { valid: true, initialRiskPoints, initialRiskTicks: ticks, qualityReasons: [] };
+}
+function rAtPrice(trade, price) {
+  const risk = initialRisk(trade);
+  if (!risk.valid || !Number.isFinite(price) || price <= 0) return null;
+  const result = (trade.direction === 'LONG' ? price - trade.actualEntryPrice : trade.actualEntryPrice - price) / risk.initialRiskPoints;
+  return Number.isFinite(result) ? result : null;
+}
+function thresholdPrice(trade, multiple) {
+  const risk = initialRisk(trade);
+  if (!risk.valid || !Number.isFinite(multiple) || multiple < 0) return null;
+  const result = trade.actualEntryPrice + (trade.direction === 'LONG' ? 1 : -1) * multiple * risk.initialRiskPoints;
+  return Number.isFinite(result) ? result : null;
+}
+
+return {initialRisk, rAtPrice, thresholdPrice};
+})();
+erModuleRegistry["src/exit-research/path-metrics.js"] = (() => {
+const { clone, samePrice, uniqueSorted } = erModuleRegistry["src/exit-research/research-common.js"];
+const { rAtPrice } = erModuleRegistry["src/exit-research/r-math.js"];
+const sameMarket = (a, b) => ['provider', 'providerSymbol', 'researchFamily', 'product', 'contract', 'priceSourceMode'].every(key => a[key] === b[key]) && (a.proxyForContract ?? null) === (b.proxyForContract ?? null);
+function analyzeHoldingPath(trade, primary, detail = null) {
+  const startAt = trade.actualEntryTime, endAt = trade.actualExitTime, flags = [], segments = [], coverageGaps = [];
+  if (detail && (!sameMarket(primary, detail) || detail.role !== 'EXECUTION_DETAIL')) return { valid: false, qualityReasons: ['DETAIL_MARKET_MISMATCH'] };
+  if (detail && (detail.timeframeMs >= primary.timeframeMs || primary.timeframeMs % detail.timeframeMs !== 0)) return { valid: false, qualityReasons: ['DETAIL_TIMEFRAME_INVALID'] };
+  const relevant = primary.bars.filter(bar => bar.openTime < endAt && bar.openTime + primary.timeframeMs > startAt);
+  let cursor = startAt, detailUsed = false;
+  for (const bar of relevant) {
+    const closeAt = bar.openTime + primary.timeframeMs;
+    if (bar.openTime > cursor) coverageGaps.push({ startAt: cursor, endAt: Math.min(bar.openTime, endAt) });
+    cursor = Math.max(cursor, Math.min(closeAt, endAt));
+    const boundary = bar.openTime < startAt || closeAt > endAt;
+    const fine = detail?.bars.filter(b => b.openTime >= bar.openTime && b.openTime + detail.timeframeMs <= closeAt) ?? [];
+    const completeDetail = detail && fine.length === primary.timeframeMs / detail.timeframeMs && fine.every((b, i) => b.openTime === bar.openTime + i * detail.timeframeMs);
+    if (completeDetail && (!samePrice(fine[0].open, bar.open) || !samePrice(fine.at(-1).close, bar.close) ||
+      !samePrice(fine.reduce((value, b) => Math.max(value, b.high), -Infinity), bar.high) || !samePrice(fine.reduce((value, b) => Math.min(value, b.low), Infinity), bar.low))) return { valid: false, qualityReasons: ['DETAIL_AGGREGATION_CONFLICT'] };
+    const selected = completeDetail ? fine.map(b => ({ bar: b, timeframeMs: detail.timeframeMs, seriesId: detail.seriesId })) : [{ bar, timeframeMs: primary.timeframeMs, seriesId: primary.seriesId }];
+    if (completeDetail) detailUsed = true;
+    else if (boundary && detail) flags.push('DETAIL_COVERAGE_INCOMPLETE');
+    for (const item of selected) {
+      const b = item.bar, end = b.openTime + item.timeframeMs;
+      if (b.openTime >= endAt || end <= startAt) continue;
+      const fullyContained = b.openTime >= startAt && end <= endAt;
+      if (!fullyContained) flags.push('INTRABAR_BOUNDARY_AMBIGUOUS');
+      segments.push({ ...clone(b), timeframeMs: item.timeframeMs, seriesId: item.seriesId, closeTime: end, fullyContained,
+        entryOverlap: b.openTime < startAt, exitOverlap: end > endAt });
+    }
+  }
+  if (cursor < endAt) coverageGaps.push({ startAt: cursor, endAt });
+  // A zero-duration position needs a bar covering its instant, never a fabricated interval.
+  if (startAt === endAt && !primary.bars.some(b => b.openTime <= startAt && b.openTime + primary.timeframeMs > startAt)) coverageGaps.push({ startAt, endAt });
+  const complete = !coverageGaps.length && (relevant.length > 0 || startAt === endAt);
+  if (!complete) flags.push('MARKET_DATA_INCOMPLETE');
+  if (primary.bars.some((b, i) => i > 0 && b.openTime > primary.bars[i - 1].openTime + primary.timeframeMs && primary.bars[i - 1].openTime + primary.timeframeMs < endAt && b.openTime > startAt)) flags.push('MARKET_DATA_GAP');
+  return { valid: true, holdingWindow: { startAt, endAt, intervalSemantics: 'CLOSED' }, segments,
+    coverageStatus: complete ? 'COMPLETE' : 'INCOMPLETE', coverageGaps, detailModeUsed: detailUsed ? 'ON_DEMAND' : 'NONE', qualityReasons: uniqueSorted(flags) };
+}
+function holdingExcursions(trade, path) {
+  const confirmed = [trade.actualEntryPrice, trade.actualExitPrice], possible = [...confirmed];
+  for (const bar of path.segments) {
+    possible.push(bar.high, bar.low);
+    // Boundary OHLC has no timestamp for its first/last print. Only wholly
+    // held bars and the independently known execution endpoints are confirmed.
+    if (bar.fullyContained) confirmed.push(bar.high, bar.low);
+  }
+  if (possible.some(price => rAtPrice(trade, price) === null)) return { valid: false, qualityReasons: ['R_NUMERIC_OVERFLOW'] };
+  const extreme = (values, favorable) => values.reduce((best, price) => {
+    const r = rAtPrice(trade, price), chosen = rAtPrice(trade, best);
+    return (favorable ? r > chosen : r < chosen) ? price : best;
+  });
+  function output(favorable) {
+    const confirmedPrice = extreme(confirmed, favorable), possibleExtremePrice = extreme(possible, favorable);
+    const confirmedSignedR = rAtPrice(trade, confirmedPrice), possibleSignedR = rAtPrice(trade, possibleExtremePrice);
+    const magnitude = r => Math.max(0, favorable ? r : -r);
+    const exact = path.coverageStatus === 'COMPLETE' && confirmedPrice === possibleExtremePrice;
+    return { exact, partial: path.coverageStatus !== 'COMPLETE', confirmedR: magnitude(confirmedSignedR),
+      possibleMaxR: path.coverageStatus === 'COMPLETE' ? magnitude(possibleSignedR) : null,
+      confirmedPrice, possibleExtremePrice: path.coverageStatus === 'COMPLETE' ? possibleExtremePrice : null,
+      ...(favorable ? {} : { worstR: confirmedSignedR }), qualityFlags: [...path.qualityReasons] };
+  }
+  return { mfe: output(true), mae: output(false) };
+}
+
+return {analyzeHoldingPath, holdingExcursions};
+})();
+erModuleRegistry["src/exit-research/milestones.js"] = (() => {
+const { thresholdPrice } = erModuleRegistry["src/exit-research/r-math.js"];
+const MILESTONE_LEVELS = Object.freeze([2, 4, 6, 8, 10]);
+function holdingMilestones(trade, path) {
+  const reached = (price, threshold) => trade.direction === 'LONG' ? price >= threshold : price <= threshold;
+  const result = {};
+  for (const multiple of MILESTONE_LEVELS) {
+    const threshold = thresholdPrice(trade, multiple), confirmed = [], possible = [];
+    if (threshold === null) {
+      result[`${multiple}R`] = { thresholdPrice: null, status: 'DATA_INCOMPLETE', firstReachedBarOpen: null, firstReachedBarClose: null, firstReachConfirmed: false, qualityFlags: ['R_NUMERIC_OVERFLOW'] }; continue;
+    }
+    for (const b of path.segments) {
+      const extreme = trade.direction === 'LONG' ? b.high : b.low;
+      if (!reached(extreme, threshold)) continue;
+      const hit = { openTime: b.openTime, closeTime: b.closeTime, seriesId: b.seriesId };
+      possible.push(hit);
+      if (b.fullyContained) confirmed.push(hit);
+    }
+    const exitConfirmed = reached(trade.actualExitPrice, threshold), firstPossible = possible[0] ?? null, firstConfirmed = confirmed[0] ?? null;
+    const status = firstConfirmed || exitConfirmed ? 'CONFIRMED_REACHED' : path.coverageStatus !== 'COMPLETE' ? 'DATA_INCOMPLETE' : firstPossible ? 'POSSIBLE_BOUNDARY_REACHED' : 'NOT_REACHED';
+    const firstReachConfirmed = Boolean(firstConfirmed && firstPossible?.openTime === firstConfirmed.openTime && path.coverageStatus === 'COMPLETE');
+    result[`${multiple}R`] = { thresholdPrice: threshold, status,
+      firstReachedBarOpen: firstPossible?.openTime ?? null, firstReachedBarClose: firstPossible?.closeTime ?? null,
+      firstReachConfirmed, firstConfirmedBarOpen: firstConfirmed?.openTime ?? null, firstConfirmedBarClose: firstConfirmed?.closeTime ?? null,
+      confirmedObservationAt: exitConfirmed ? trade.actualExitTime : null, firstReachedSeriesId: firstPossible?.seriesId ?? null,
+      qualityFlags: [...path.qualityReasons, ...(!firstReachConfirmed && status === 'CONFIRMED_REACHED' ? ['FIRST_REACH_TIME_UNCERTAIN'] : [])] };
+  }
+  return result;
+}
+
+return {MILESTONE_LEVELS, holdingMilestones};
+})();
+erModuleRegistry["src/exit-research/market-metrics.js"] = (() => {
+const { validateMarketDataBundle, marketSeriesFingerprint, marketBundleFingerprint } = erModuleRegistry["src/exit-research/market-data.js"];
+const { PRICE_SOURCE_MODES, MARKET_TIMEFRAMES } = erModuleRegistry["src/exit-research/market-config.js"];
+const { executionProductForFamily } = erModuleRegistry["src/exit-research/symbol-map.js"];
+const { initialRisk } = erModuleRegistry["src/exit-research/r-math.js"];
+const { analyzeHoldingPath, holdingExcursions } = erModuleRegistry["src/exit-research/path-metrics.js"];
+const { holdingMilestones } = erModuleRegistry["src/exit-research/milestones.js"];
+const { clone, uniqueSorted } = erModuleRegistry["src/exit-research/research-common.js"];
+const safeTime = time => Number.isSafeInteger(time) && time >= 0;
+function supportsTrade(series, trade) {
+  if (series.role !== 'EXECUTION_PRIMARY' || series.researchFamily !== trade.researchFamily) return false;
+  if (series.priceSourceMode === 'EXACT_EXECUTION_CONTRACT') return series.product === trade.executionProduct && series.contract === trade.executionContract;
+  if (series.product !== trade.researchFamily || series.proxyForContract !== trade.executionContract) return false;
+  if (series.priceSourceMode === 'CONTINUOUS_CONTRACT_PROXY') return true; // Producer explicitly attests the resolved proxy symbol/contract; never manufacture it.
+  const expiry = (contract, product) => contract.startsWith(product) && /^[FGHJKMNQUVXZ]\d{1,4}$/.test(contract.slice(product.length)) ? contract.slice(product.length) : null;
+  return expiry(series.contract, series.product) !== null && expiry(series.contract, series.product) === expiry(trade.executionContract, trade.executionProduct);
+}
+function marketMetricsQuality(trade, { reasons = [], priceSourceMode = null, coverageStatus = 'INCOMPLETE', conflict = false } = {}) {
+  const blocked = [], review = [];
+  if (trade.qualityStatus === 'BLOCKED') blocked.push('STEP3_BLOCKED', ...(trade.qualityReasons || []));
+  else if (trade.qualityStatus === 'REVIEW_REQUIRED') review.push('STEP3_REVIEW_REQUIRED', ...(trade.qualityReasons || []));
+  else if (trade.qualityStatus !== 'READY') blocked.push('STEP3_QUALITY_INVALID');
+  if (conflict) blocked.push(...reasons);
+  else if (coverageStatus !== 'COMPLETE') blocked.push('MARKET_DATA_INCOMPLETE', ...reasons);
+  else review.push(...reasons);
+  if (priceSourceMode && priceSourceMode !== 'EXACT_EXECUTION_CONTRACT') review.push('PRICE_SOURCE_PROXY', ...(priceSourceMode === 'CONTINUOUS_CONTRACT_PROXY' ? ['CONTINUOUS_CONTRACT_PROXY'] : []));
+  return { qualityStatus: blocked.length ? 'BLOCKED' : review.length ? 'REVIEW_REQUIRED' : 'READY', qualityReasons: uniqueSorted([...blocked, ...review]) };
+}
+function calculateMarketMetrics(trade, bundle, { primarySeriesId = null, detailSeriesId = undefined, executionTickSize = null } = {}) {
+  const risk = initialRisk(trade, { tickSize: executionTickSize });
+  const base = { schemaVersion: 1, researchTradeId: trade.researchTradeId ?? null, marketSeriesId: null, priceSourceMode: null,
+    marketDataFingerprint: null, bundleFingerprint: null, provenance: null,
+    initialRiskPoints: risk.initialRiskPoints, initialRiskTicks: risk.initialRiskTicks,
+    holdingWindow: { startAt: trade.actualEntryTime ?? null, endAt: trade.actualExitTime ?? null, intervalSemantics: 'CLOSED' },
+    mfe: null, mae: null, milestones: null, coverageStatus: 'INCOMPLETE', detailModeUsed: 'NONE', metricQuality: null, statisticsEligible: false };
+  const blocked = reasons => ({ ...base, ...marketMetricsQuality(trade, { reasons, conflict: true }) });
+  if (!risk.valid) return blocked(risk.qualityReasons);
+  if (typeof trade.researchTradeId !== 'string' || !trade.researchTradeId || executionProductForFamily(trade.researchFamily) === null || trade.executionProduct !== executionProductForFamily(trade.researchFamily) ||
+    typeof trade.executionContract !== 'string' || !trade.executionContract || !safeTime(trade.actualEntryTime) || !safeTime(trade.actualExitTime) ||
+    trade.actualExitTime < trade.actualEntryTime || !Number.isFinite(trade.actualExitPrice) || trade.actualExitPrice <= 0) return blocked(['RESEARCH_EXECUTION_WINDOW_INVALID']);
+  const validation = validateMarketDataBundle(bundle);
+  if (!validation.valid) return blocked(validation.qualityReasons);
+  let candidates = primarySeriesId === null ? bundle.series.filter(s => supportsTrade(s, trade)) : bundle.series.filter(s => s.seriesId === primarySeriesId);
+  if (!candidates.length) return blocked(['EXECUTION_PATH_MISSING']);
+  if (primarySeriesId === null) {
+    const bestRank = Math.min(...candidates.map(s => PRICE_SOURCE_MODES.indexOf(s.priceSourceMode)));
+    candidates = candidates.filter(s => PRICE_SOURCE_MODES.indexOf(s.priceSourceMode) === bestRank);
+  }
+  if (candidates.length !== 1) return blocked(['EXECUTION_SERIES_AMBIGUOUS']);
+  const primary = candidates[0];
+  if (!supportsTrade(primary, trade)) return blocked(['EXECUTION_MARKET_MISMATCH']);
+  if (primary.timeframeMs !== MARKET_TIMEFRAMES.PRIMARY) return blocked(['PRIMARY_TIMEFRAME_INVALID']);
+  let detail = null;
+  if (detailSeriesId !== null) {
+    const related = bundle.series.filter(s => s.role === 'EXECUTION_DETAIL' && s.researchFamily === primary.researchFamily);
+    const available = detailSeriesId === undefined ? related.filter(s => ['provider', 'providerSymbol', 'product', 'contract', 'priceSourceMode'].every(key => s[key] === primary[key]) && (s.proxyForContract ?? null) === (primary.proxyForContract ?? null)) : bundle.series.filter(s => s.seriesId === detailSeriesId);
+    if (!available.length && (detailSeriesId !== undefined || related.length)) return blocked(['DETAIL_MARKET_MISMATCH']);
+    if (available.length > 1) return blocked(['DETAIL_SERIES_AMBIGUOUS']);
+    detail = available[0] ?? null;
+  }
+  const path = analyzeHoldingPath(trade, primary, detail);
+  if (!path.valid) return blocked(path.qualityReasons);
+  const excursions = holdingExcursions(trade, path);
+  if (excursions.valid === false) return blocked(excursions.qualityReasons);
+  if ([excursions.mfe.confirmedR, excursions.mae.confirmedR].some(value => !Number.isFinite(value)) ||
+    path.coverageStatus === 'COMPLETE' && [excursions.mfe.possibleMaxR, excursions.mae.possibleMaxR].some(value => !Number.isFinite(value))) return blocked(['R_NUMERIC_OVERFLOW']);
+  const milestones = holdingMilestones(trade, path);
+  const reasons = [...path.qualityReasons, ...(Object.values(milestones).some(m => m.thresholdPrice === null) ? ['R_NUMERIC_OVERFLOW'] : [])];
+  const quality = marketMetricsQuality(trade, { reasons, priceSourceMode: primary.priceSourceMode, coverageStatus: path.coverageStatus,
+    conflict: reasons.includes('R_NUMERIC_OVERFLOW') });
+  const seriesProvenance = s => ({ seriesId: s.seriesId, provider: s.provider, providerSymbol: s.providerSymbol, product: s.product, contract: s.contract,
+    priceSourceMode: s.priceSourceMode, proxyForContract: s.proxyForContract ?? null, timeframeMs: s.timeframeMs,
+    coverageStart: s.coverageStart, coverageEnd: s.coverageEnd, fingerprint: marketSeriesFingerprint(s) });
+  return { ...base, marketSeriesId: primary.seriesId, priceSourceMode: primary.priceSourceMode,
+    marketDataFingerprint: marketSeriesFingerprint(primary), bundleFingerprint: marketBundleFingerprint(bundle),
+    provenance: { source: bundle.source, sourceVersion: bundle.sourceVersion, createdAt: bundle.createdAt, primary: seriesProvenance(primary),
+      detail: detail ? seriesProvenance(detail) : null, detailUsed: path.detailModeUsed === 'ON_DEMAND' },
+    holdingWindow: clone(path.holdingWindow), ...excursions, milestones, coverageStatus: path.coverageStatus, coverageGaps: clone(path.coverageGaps), detailModeUsed: path.detailModeUsed,
+    metricQuality: primary.priceSourceMode === 'EXACT_EXECUTION_CONTRACT' ? 'EXACT' : 'PROXY', ...quality,
+    statisticsEligible: quality.qualityStatus === 'READY' && primary.priceSourceMode === 'EXACT_EXECUTION_CONTRACT' };
+}
+
+return {marketMetricsQuality, calculateMarketMetrics};
+})();
+erModuleRegistry["src/exit-research/policy-schema.js"] = (() => {
+const EXECUTION_MODEL_VERSION = 'OHLC_STOP_NEXT_BAR_V1';
+const SETUP_STATE_SOURCES = Object.freeze(['MANUAL_ACTUAL', 'FIXED_INITIAL_SETUP', 'RESEARCH_TRANSITION_RULE']);
+const exact = (v, keys) => v && typeof v === 'object' && !Array.isArray(v) && keys.length === Object.keys(v).length && keys.every(k => Object.hasOwn(v, k));
+const text = v => typeof v === 'string' && v.trim().length > 0;
+function validateExitPolicy(policy) {
+  const reasons = [];
+  if (!exact(policy, ['policyId', 'policyVersion', 'setupClass', 'pairedPolicyId', 'classification', 'stages', 'allowProtectionLoosening', 'activationTiming', 'executionModelVersion']) ||
+      !text(policy.policyId) || policy.policyVersion !== 1 || !['PB', 'BOF'].includes(policy.setupClass) || !text(policy.pairedPolicyId) ||
+      policy.classification !== 'EXPERIMENTAL_BASELINE' || policy.allowProtectionLoosening !== false ||
+      policy.activationTiming !== 'NEXT_BAR_AFTER_CONFIRMATION' || policy.executionModelVersion !== EXECUTION_MODEL_VERSION || !Array.isArray(policy.stages) || !policy.stages.length) {
+    return { valid: false, qualityReasons: ['POLICY_SCHEMA_INVALID'] };
+  }
+  const names = new Set();
+  policy.stages.forEach((s, i) => {
+    if (!exact(s, ['name', 'activateAtMfeR', 'givebackPct', 'minimumLockR', 'forceExit', 'ceilingMode']) || !text(s.name) || names.has(s.name) ||
+        !Number.isFinite(s.activateAtMfeR) || s.activateAtMfeR < 0 || (i === 0 ? s.activateAtMfeR !== 0 : s.activateAtMfeR <= policy.stages[i - 1]?.activateAtMfeR) ||
+        (s.givebackPct !== null && (!Number.isFinite(s.givebackPct) || s.givebackPct <= 0 || s.givebackPct >= 1)) ||
+        (s.minimumLockR !== null && (!Number.isFinite(s.minimumLockR) || s.minimumLockR < 0 || s.minimumLockR > s.activateAtMfeR)) ||
+        typeof s.forceExit !== 'boolean' || !['NONE', 'SOFT', 'HARD'].includes(s.ceilingMode) || s.forceExit !== (s.ceilingMode === 'HARD') ||
+        (s.ceilingMode !== 'NONE' && i !== policy.stages.length - 1) || (i === 0 && (s.givebackPct !== null || s.minimumLockR !== null || s.forceExit))) reasons.push('POLICY_STAGE_INVALID');
+    names.add(s?.name);
+  });
+  return { valid: !reasons.length, qualityReasons: [...new Set(reasons)] };
+}
+function stageAtMfe(policy, mfeR) {
+  return policy.stages.filter(s => s.activateAtMfeR <= mfeR).at(-1);
+}
+
+return {EXECUTION_MODEL_VERSION, SETUP_STATE_SOURCES, validateExitPolicy, stageAtMfe};
+})();
+erModuleRegistry["src/exit-research/policies-v1.js"] = (() => {
+const { EXECUTION_MODEL_VERSION } = erModuleRegistry["src/exit-research/policy-schema.js"];
+function policy(setupClass, variant) {
+  const thresholds = setupClass === 'PB' ? [0, 2, 6, 8, 10] : [0, 2, 4, 6, 8];
+  const names = setupClass === 'PB' ? ['INITIAL', 'RUNNER', 'PROTECT', 'EXTREME', 'SOFT_CEILING'] : ['INITIAL', 'RUNNER', 'TARGET_REVIEW', 'EXTREME', 'SOFT_CEILING'];
+  const givebacks = variant === 'TIGHT_GIVEBACK' ? [null, null, .25, .20, .15] : [null, null, .30, .25, .20];
+  if (variant === 'HARD_CEILING') names[4] = 'HARD_CEILING';
+  const stages = thresholds.map((activateAtMfeR, i) => Object.freeze({ name: names[i], activateAtMfeR, givebackPct: givebacks[i], minimumLockR: null,
+    forceExit: i === 4 && variant === 'HARD_CEILING', ceilingMode: i === 4 ? (variant === 'HARD_CEILING' ? 'HARD' : 'SOFT') : 'NONE' }));
+  return Object.freeze({ policyId: `${setupClass}_${variant}_V1`, policyVersion: 1, setupClass, pairedPolicyId: `${setupClass === 'PB' ? 'BOF' : 'PB'}_${variant}_V1`,
+    classification: 'EXPERIMENTAL_BASELINE', stages: Object.freeze(stages), allowProtectionLoosening: false,
+    activationTiming: 'NEXT_BAR_AFTER_CONFIRMATION', executionModelVersion: EXECUTION_MODEL_VERSION });
+}
+const POLICIES_V1 = Object.freeze(Object.fromEntries(['BASELINE', 'TIGHT_GIVEBACK', 'HARD_CEILING'].flatMap(variant => ['PB', 'BOF'].map(setup => {
+  const p = policy(setup, variant); return [p.policyId, p];
+}))));
+
+return {POLICIES_V1};
+})();
+erModuleRegistry["src/exit-research/protection.js"] = (() => {
+const { initialRisk, rAtPrice } = erModuleRegistry["src/exit-research/r-math.js"];
+function calculateProtectionR(previousR, knownMfeR, stage) {
+  return Math.max(previousR, stage.givebackPct === null ? previousR : knownMfeR * (1 - stage.givebackPct), stage.minimumLockR ?? previousR);
+}
+function protectionAtR(trade, protectionR, executionTickSize = null) {
+  const risk = initialRisk(trade, { tickSize: executionTickSize });
+  if (!risk.valid || !Number.isFinite(protectionR)) return { valid: false, qualityReasons: risk.qualityReasons.length ? risk.qualityReasons : ['PROTECTION_INVALID'] };
+  const theoreticalPrice = trade.actualEntryPrice + (trade.direction === 'LONG' ? 1 : -1) * protectionR * risk.initialRiskPoints;
+  let price = theoreticalPrice;
+  if (executionTickSize !== null) {
+    const units = theoreticalPrice / executionTickSize;
+    if (!Number.isFinite(units) || Math.abs(units) > Number.MAX_SAFE_INTEGER) return { valid: false, qualityReasons: ['TICK_NUMERIC_OVERFLOW'] };
+    // Correct only floating representation error around a grid point; otherwise round adversely.
+    const nearest = Math.round(units), tolerance = Math.min(1e-7, 8 * Number.EPSILON * Math.max(1, Math.abs(units)));
+    const gridUnits = Math.abs(units - nearest) <= tolerance ? nearest : trade.direction === 'LONG' ? Math.floor(units) : Math.ceil(units);
+    price = gridUnits * executionTickSize;
+  }
+  const roundedR = rAtPrice(trade, price);
+  if (roundedR === null) return { valid: false, qualityReasons: ['PROTECTION_PRICE_INVALID'] };
+  return { valid: true, protectionR, theoreticalPrice, price, roundedR, tickSize: executionTickSize,
+    qualityReasons: executionTickSize === null ? ['TICK_ROUNDING_UNAVAILABLE'] : [] };
+}
+
+return {calculateProtectionR, protectionAtR};
+})();
+erModuleRegistry["src/exit-research/execution-model.js"] = (() => {
+const SLIPPAGE_MODEL_VERSION = 'NONE_V1';
+function stopFill(direction, bar, stopPrice, closeTime) {
+  const long = direction === 'LONG';
+  if (long ? bar.open <= stopPrice : bar.open >= stopPrice) return { triggered: true, price: bar.open, time: bar.openTime,
+    timeRange: { startAt: bar.openTime, endAt: bar.openTime, semantics: 'MODEL_BAR_OPEN' }, reason: 'STOP_GAP_THROUGH' };
+  if (long ? bar.low <= stopPrice : bar.high >= stopPrice) return { triggered: true, price: stopPrice, time: null,
+    timeRange: { startAt: bar.openTime, endAt: closeTime, semantics: 'BAR_INTERVAL_END_EXCLUSIVE' }, reason: 'STOP_TRIGGERED' };
+  return { triggered: false };
+}
+const stopMayBeTouched = (direction, bar, stop) => direction === 'LONG' ? bar.low <= stop : bar.high >= stop;
+
+return {SLIPPAGE_MODEL_VERSION, stopFill, stopMayBeTouched};
+})();
+erModuleRegistry["src/exit-research/replay-data.js"] = (() => {
+const { validateMarketDataBundle, marketSeriesFingerprint, marketBundleFingerprint } = erModuleRegistry["src/exit-research/market-data.js"];
+const { analyzeHoldingPath } = erModuleRegistry["src/exit-research/path-metrics.js"];
+const { PRICE_SOURCE_MODES } = erModuleRegistry["src/exit-research/market-config.js"];
+const { executionProductForFamily } = erModuleRegistry["src/exit-research/symbol-map.js"];
+const fields = ['provider', 'providerSymbol', 'researchFamily', 'product', 'contract', 'priceSourceMode'];
+function matches(s, t) {
+  if (s.role !== 'EXECUTION_PRIMARY' || s.researchFamily !== t.researchFamily) return false;
+  if (s.priceSourceMode === 'EXACT_EXECUTION_CONTRACT') return s.product === t.executionProduct && s.contract === t.executionContract;
+  if (s.product !== t.researchFamily || s.proxyForContract !== t.executionContract) return false;
+  if (s.priceSourceMode === 'CONTINUOUS_CONTRACT_PROXY') return true;
+  const expiry = (c, p) => c.startsWith(p) && /^[FGHJKMNQUVXZ]\d{1,4}$/.test(c.slice(p.length)) ? c.slice(p.length) : null;
+  return expiry(s.contract, s.product) !== null && expiry(s.contract, s.product) === expiry(t.executionContract, t.executionProduct);
+}
+function prepareReplayData(trade, bundle, options) {
+  const fail = reasons => ({ valid: false, qualityReasons: reasons });
+  const validation = validateMarketDataBundle(bundle);
+  if (!validation.valid) return fail(validation.qualityReasons);
+  if (typeof trade.researchTradeId !== 'string' || !trade.researchTradeId.trim() || typeof trade.executionContract !== 'string' || !trade.executionContract.trim() || trade.executionProduct !== executionProductForFamily(trade.researchFamily) || !trade.executionContract) return fail(['RESEARCH_EXECUTION_IDENTITY_INVALID']);
+  let candidates = options.primarySeriesId == null ? bundle.series.filter(s => matches(s, trade)) : bundle.series.filter(s => s.seriesId === options.primarySeriesId);
+  if (!candidates.length) return fail(['EXECUTION_PATH_MISSING']);
+  if (options.primarySeriesId == null) {
+    const best = Math.min(...candidates.map(s => PRICE_SOURCE_MODES.indexOf(s.priceSourceMode)));
+    candidates = candidates.filter(s => PRICE_SOURCE_MODES.indexOf(s.priceSourceMode) === best);
+  }
+  if (candidates.length !== 1) return fail(['EXECUTION_SERIES_AMBIGUOUS']);
+  const primary = candidates[0];
+  if (!matches(primary, trade) || primary.timeframeMs !== 300000) return fail(['REPLAY_PRIMARY_INVALID']);
+  let detail = null;
+  if (options.detailSeriesId !== null) {
+    const related = bundle.series.filter(s => s.role === 'EXECUTION_DETAIL' && s.researchFamily === primary.researchFamily);
+    const fine = options.detailSeriesId === undefined ? related.filter(s => fields.every(k => s[k] === primary[k]) && (s.proxyForContract ?? null) === (primary.proxyForContract ?? null)) : bundle.series.filter(s => s.seriesId === options.detailSeriesId);
+    if (!fine.length && (related.length || options.detailSeriesId !== undefined)) return fail(['DETAIL_MARKET_MISMATCH']);
+    if (fine.length > 1) return fail(['DETAIL_SERIES_AMBIGUOUS']);
+    detail = fine[0] ?? null;
+  }
+  // Reuse frozen interval/detail validation with an independent replay window.
+  const path = analyzeHoldingPath({ ...trade, actualExitTime: options.replayHardEndAt }, primary, detail);
+  if (!path.valid) return fail(path.qualityReasons);
+  return { valid: true, primary, detail, path, fingerprint: marketSeriesFingerprint(primary), bundleFingerprint: marketBundleFingerprint(bundle),
+    provenance: { source: bundle.source, sourceVersion: bundle.sourceVersion, createdAt: bundle.createdAt,
+      primary: { seriesId: primary.seriesId, provider: primary.provider, providerSymbol: primary.providerSymbol, contract: primary.contract, product: primary.product,
+        priceSourceMode: primary.priceSourceMode, timeframeMs: primary.timeframeMs, coverageStart: primary.coverageStart, coverageEnd: primary.coverageEnd },
+      detail: detail ? { seriesId: detail.seriesId, fingerprint: marketSeriesFingerprint(detail) } : null } };
+}
+
+return {prepareReplayData};
+})();
+erModuleRegistry["src/exit-research/replay-trace.js"] = (() => {
+function appendReplayTrace(trace, type, at, data = {}, causeSequence = null) {
+  const event = { sequence: trace.length + 1, type, at, causeSequence, ...structuredClone(data) };
+  trace.push(event); return event.sequence;
+}
+const REPLAY_TRACE_TYPES = Object.freeze(['ENTRY', 'INITIAL_STOP_ACTIVE', 'BAR_STARTED', 'ENTRY_BOUNDARY_IGNORED_FOR_POLICY_ACTIVATION',
+  'MFE_UPDATED', 'MILESTONE_REACHED', 'STAGE_CONFIRMED', 'STAGE_EFFECTIVE', 'BOF_TO_PB_MANUAL_RECORDED', 'BOF_TO_PB_MANUAL_REVERTED',
+  'POLICY_SWITCH_EFFECTIVE', 'PROTECTION_CALCULATED', 'PROTECTION_EFFECTIVE', 'STOP_TRIGGERED', 'HARD_CEILING_CONFIRMED',
+  'HARD_CEILING_EXIT', 'REPLAY_HARD_END_EXIT', 'REPLAY_BLOCKED']);
+
+return {appendReplayTrace, REPLAY_TRACE_TYPES};
+})();
+erModuleRegistry["src/exit-research/replay-quality.js"] = (() => {
+const { uniqueSorted } = erModuleRegistry["src/exit-research/research-common.js"];
+// One quality gate for validation, execution, and final replay results.
+function assessReplayQuality(trade, { reasons = [], blockingReasons = [], priceSourceMode = null, lookaheadQaStatus = 'FAIL' } = {}) {
+  const blocked = [...blockingReasons], review = [...reasons];
+  if (trade?.qualityStatus === 'BLOCKED') blocked.push('STEP3_BLOCKED', ...(trade.qualityReasons || []));
+  else if (trade?.qualityStatus === 'REVIEW_REQUIRED') review.push('STEP3_REVIEW_REQUIRED', ...(trade.qualityReasons || []));
+  else if (trade?.qualityStatus !== 'READY') blocked.push('STEP3_QUALITY_INVALID');
+  if (priceSourceMode && priceSourceMode !== 'EXACT_EXECUTION_CONTRACT') review.push('PRICE_SOURCE_PROXY', ...(priceSourceMode === 'CONTINUOUS_CONTRACT_PROXY' ? ['CONTINUOUS_CONTRACT_PROXY'] : []));
+  if (lookaheadQaStatus !== 'PASS') blocked.push('LOOKAHEAD_QA_NOT_PASSED');
+  const qualityStatus = blocked.length ? 'BLOCKED' : review.length ? 'REVIEW_REQUIRED' : 'READY';
+  return { qualityStatus, qualityReasons: uniqueSorted([...blocked, ...review]), statisticsEligible: qualityStatus === 'READY' && priceSourceMode === 'EXACT_EXECUTION_CONTRACT' };
+}
+
+return {assessReplayQuality};
+})();
+erModuleRegistry["src/exit-research/lookahead-qa.js"] = (() => {
+const { rAtPrice } = erModuleRegistry["src/exit-research/r-math.js"];
+const { calculateProtectionR, protectionAtR } = erModuleRegistry["src/exit-research/protection.js"];
+const { stageAtMfe, validateExitPolicy } = erModuleRegistry["src/exit-research/policy-schema.js"];
+const { stopFill, stopMayBeTouched } = erModuleRegistry["src/exit-research/execution-model.js"];
+const { REPLAY_TRACE_TYPES } = erModuleRegistry["src/exit-research/replay-trace.js"];
+// Independent chronological audit of the exported run ledger, not a constant PASS marker.
+function auditReplayLookahead(run, trade, bundle = null) {
+  const reasons = [], fail = code => reasons.push(code);
+  if (!run || !Number.isSafeInteger(run.replayHardEndAt) || run.replayHardEndAt <= trade?.actualEntryTime || run.replayStartAt !== trade.actualEntryTime) fail('HARD_END_NOT_PRECONFIGURED');
+  if (!Array.isArray(run?.auditBars) || !run.auditBars.length || !Array.isArray(run?.trace) || !run.trace.length) return { status: 'FAIL', reasons: ['REPLAY_AUDIT_MISSING', ...reasons] };
+  const sourceSeries = bundle?.series ?? [];
+  let known = 0, previous = null;
+  for (const b of run.auditBars) {
+    if (b.barCloseTime - b.barOpenTime !== 300000 || b.startAt !== Math.max(b.barOpenTime, trade.actualEntryTime) || b.barOpenTime >= run.replayHardEndAt) fail('BAR_WINDOW_INVALID');
+    if (b.knownMfeBefore !== known) fail('FUTURE_MFE_AT_BAR_START');
+    if (previous && (b.barOpenTime !== previous.barCloseTime || previous.exited)) fail('FUTURE_BAR_ORDER_INVALID');
+    if (previous?.next) {
+      if (b.activeProtectionR !== previous.next.protectionR || b.activeProtectionPrice !== previous.next.protectionPrice || b.activeStage !== previous.next.stage || b.activePolicyId !== previous.next.policyId) fail('NEXT_BAR_STATE_MISMATCH');
+    } else if (!previous && (b.activeProtectionR !== -1 || b.activeProtectionPrice !== trade.initialStop)) fail('INITIAL_PROTECTION_CHANGED');
+    if (b.activeProtectionR < (previous?.activeProtectionR ?? -1)) fail('PROTECTION_LOOSENED');
+    let nextKnown = known;
+    for (const e of b.evidence) {
+      if (bundle) {
+        const source = sourceSeries.find(s => s.seriesId === e.seriesId), bar = source?.bars.find(v => v.openTime === e.openTime);
+        if (!bar || source.timeframeMs !== e.closeTime - e.openTime || bar.high !== e.high || bar.low !== e.low || bar.close !== e.close) fail('MFE_EVIDENCE_SOURCE_CONFLICT');
+      }
+      if (!e.fullyContained || e.openTime < trade.actualEntryTime || e.closeTime > Math.min(b.barCloseTime, run.replayHardEndAt) || e.openTime < b.barOpenTime || e.availableAt !== e.closeTime) fail('UNCONFIRMED_OR_FUTURE_EXTREME');
+      const r = rAtPrice(trade, trade.direction === 'LONG' ? e.high : e.low);
+      if (r === null) fail('INVALID_MFE_EVIDENCE'); else nextKnown = Math.max(nextKnown, r);
+    }
+    // A stop/ceiling exit does not permit reading surviving/completed full-bar extremes.
+    if (b.barCloseTime > run.replayHardEndAt || b.exited && !b.next) nextKnown = known;
+    if (b.knownMfeAfter !== nextKnown) fail('KNOWN_MFE_EVIDENCE_MISMATCH');
+    known = nextKnown;
+    if (b.next) {
+      const policy = Object.values(run.policyDefinitions || {}).find(p => p.policyId === b.next.policyId);
+      if (!validateExitPolicy(policy).valid) fail('QA_POLICY_INVALID');
+      else {
+        const stage = stageAtMfe(policy, known), expectedR = calculateProtectionR(b.activeProtectionR, known, stage), expectedPrice = expectedR === -1 ? trade.initialStop : protectionAtR(trade, expectedR, run.executionTickSize).price;
+        if (b.next.stage !== stage.name || b.next.protectionR !== expectedR || b.next.protectionPrice !== expectedPrice || b.next.forceExit !== stage.forceExit) fail('POLICY_CONFIRMATION_MISMATCH');
+      }
+      if (b.next.effectiveAt !== b.barCloseTime) fail('SAME_BAR_ACTIVATION');
+    }
+    previous = b;
+  }
+  if (run.maxKnownMfeR !== known) fail('FINAL_MFE_MISMATCH');
+  let previousAt = -1;
+  const forbidden = /^(finalMfe|finalExit|futureMilestone|possibleMaxR|researchMfe|actualExit|futureBar)/i;
+  for (const [i, e] of run.trace.entries()) {
+    if (e.sequence !== i + 1 || !REPLAY_TRACE_TYPES.includes(e.type) || e.at < previousAt || e.at > run.replayHardEndAt) fail('TRACE_ORDER_INVALID');
+    previousAt = e.at;
+    const hasForbidden = v => v && typeof v === 'object' && Object.entries(v).some(([k, value]) => forbidden.test(k) || hasForbidden(value));
+    if (hasForbidden(e)) fail('TRACE_FUTURE_FIELD');
+    const cause = e.causeSequence === null ? null : run.trace[e.causeSequence - 1];
+    if (e.causeSequence !== null && (!cause || cause.sequence >= e.sequence || cause.at > e.at)) fail('TRACE_CAUSE_INVALID');
+    if (['STAGE_EFFECTIVE', 'PROTECTION_EFFECTIVE', 'HARD_CEILING_EXIT'].includes(e.type)) {
+      if (!cause || !['STAGE_CONFIRMED', 'PROTECTION_CALCULATED', 'HARD_CEILING_CONFIRMED'].includes(cause.type) || cause.at !== e.at) fail('NEXT_BAR_CAUSE_INVALID');
+      const causeBar = [...run.auditBars].reverse().find(b => b.barCloseTime === cause?.at);
+      const effectBar = run.auditBars.find(b => b.barOpenTime === e.at);
+      if (!causeBar || !effectBar || causeBar.barOpenTime >= effectBar.barOpenTime) fail('SAME_BAR_EFFECT');
+    }
+    if (['BOF_TO_PB_MANUAL_RECORDED', 'BOF_TO_PB_MANUAL_REVERTED'].includes(e.type)) {
+      const original = trade.manualEvents?.find(v => v.id === e.eventId), anchor = sourceSeries.find(s => s.seriesId === run.provenance?.primary?.seriesId)?.bars[0]?.openTime ?? run.auditBars[0].barOpenTime;
+      const expectedAt = original ? anchor + (Math.floor((original.recordedAt - anchor) / 300000) + 1) * 300000 : null;
+      if (!original || original.recordedAt !== e.manualTransitionAt || e.policyTransitionEffectiveAt !== expectedAt || e.at < original.recordedAt) fail('MANUAL_FACT_OR_TIMING_CONFLICT');
+    }
+    if (e.type === 'POLICY_SWITCH_EFFECTIVE') {
+      if (run.setupStateSource !== 'MANUAL_ACTUAL' || !cause || !['BOF_TO_PB_MANUAL_RECORDED', 'BOF_TO_PB_MANUAL_REVERTED'].includes(cause.type) || e.at < cause.policyTransitionEffectiveAt) fail('MANUAL_SWITCH_EARLY');
+    }
+    if (e.type === 'BAR_STARTED') {
+      const b = run.auditBars.find(b => b.barOpenTime === e.barOpenTime);
+      if (!b || e.activeProtectionR !== b.activeProtectionR || e.activeProtectionPrice !== b.activeProtectionPrice || e.policyKnownMfeR !== b.knownMfeBefore || e.stage !== b.activeStage) fail('TRACE_BAR_STATE_MISMATCH');
+    }
+    if (e.type === 'MFE_UPDATED') {
+      const b = run.auditBars.find(b => b.barCloseTime === e.at);
+      if (!b || e.policyKnownMfeR !== b.knownMfeAfter || e.confirmedBarClose !== e.at) fail('TRACE_MFE_EARLY');
+    }
+  }
+  if (!['STOP_TRIGGERED', 'STOP_GAP_THROUGH', 'HARD_CEILING', 'REPLAY_HARD_END'].includes(run.exitReason) || !run.auditBars.at(-1).exited) fail('EXIT_AUDIT_MISSING');
+  const last = run.auditBars.at(-1), exitEvent = run.trace.findLast(e => ['STOP_TRIGGERED', 'HARD_CEILING_EXIT', 'REPLAY_HARD_END_EXIT'].includes(e.type));
+  if (!exitEvent || JSON.stringify(exitEvent.timeRange) !== JSON.stringify(run.simulatedExitTimeRange) || exitEvent.fillPrice !== run.simulatedExitPrice || exitEvent.fillReason !== run.exitReason || rAtPrice(trade, run.simulatedExitPrice) !== run.simulatedExitR) fail('EXIT_RESULT_CONFLICT');
+  if (run.exitReason === 'REPLAY_HARD_END' && run.simulatedExitTime !== run.replayHardEndAt) fail('HARD_END_EXIT_TIME_CONFLICT');
+  if (run.exitReason === 'HARD_CEILING' && (!run.auditBars.at(-2)?.next?.forceExit || run.simulatedExitTime !== last.barOpenTime)) fail('CEILING_NOT_NEXT_BAR');
+  if (run.finalActiveProtectionR !== last.activeProtectionR || run.finalActiveProtectionPrice !== last.activeProtectionPrice || run.finalStage !== last.activeStage || run.finalPolicyId !== last.activePolicyId) fail('FINAL_STATE_CONFLICT');
+  if (bundle) {
+    const primary = sourceSeries.find(s => s.seriesId === run.provenance?.primary?.seriesId);
+    for (const b of run.auditBars) for (const s of b.executionSegments || []) {
+      const source = sourceSeries.find(v => v.seriesId === s.seriesId), original = source?.bars.find(v => v.openTime === s.openTime);
+      if (!original || ['open', 'high', 'low', 'close'].some(k => original[k] !== s[k]) || source.timeframeMs !== s.timeframeMs) fail('EXECUTION_SOURCE_CONFLICT');
+    }
+    let expectedFill = null;
+    const primaryLast = primary?.bars.find(b => b.openTime === last.barOpenTime);
+    if (primaryLast && last.barOpenTime >= trade.actualEntryTime) {
+      const gap = stopFill(trade.direction, primaryLast, last.activeProtectionPrice, last.barCloseTime);
+      if (gap.reason === 'STOP_GAP_THROUGH') expectedFill = gap;
+      else if (run.auditBars.at(-2)?.next?.forceExit) expectedFill = { reason: 'HARD_CEILING', price: primaryLast.open, time: primaryLast.openTime };
+    }
+    if (!expectedFill) for (const s of last.executionSegments || []) {
+      if (!s.fullyContained && stopMayBeTouched(trade.direction, s, last.activeProtectionPrice)) fail('BOUNDARY_STOP_UNRESOLVED');
+      if (s.fullyContained) {
+        const fill = stopFill(trade.direction, s, last.activeProtectionPrice, s.closeTime);
+        if (fill.triggered) { expectedFill = fill; break; }
+      }
+    }
+    if (expectedFill?.timeRange && JSON.stringify(expectedFill.timeRange) !== JSON.stringify(run.simulatedExitTimeRange)) fail('EXIT_TIME_RANGE_CONFLICT');
+    if (expectedFill && (run.exitReason !== expectedFill.reason || run.simulatedExitPrice !== expectedFill.price || run.simulatedExitTime !== expectedFill.time)) fail('EXIT_FILL_LOOKAHEAD_OR_PRICE_CONFLICT');
+    if (!expectedFill && run.exitReason !== 'REPLAY_HARD_END') fail('EXIT_WITHOUT_EXECUTION_CAUSE');
+    if (!expectedFill && run.exitReason === 'REPLAY_HARD_END') {
+      const completed = last.executionSegments?.filter(s => s.fullyContained && s.closeTime === run.replayHardEndAt).at(-1);
+      const markPrice = last.barCloseTime === run.replayHardEndAt ? primaryLast?.close : completed?.close ?? run.hardEndMark?.price;
+      if (markPrice !== run.simulatedExitPrice) fail('HARD_END_FUTURE_CLOSE_OR_MARK_CONFLICT');
+    }
+  }
+  if (run.simulatedExitTime !== null && (run.simulatedExitTime < trade.actualEntryTime || run.simulatedExitTime > run.replayHardEndAt)) fail('EXIT_WINDOW_INVALID');
+  return { status: reasons.length ? 'FAIL' : 'PASS', reasons: [...new Set(reasons)].sort() };
+}
+
+return {auditReplayLookahead};
+})();
+erModuleRegistry["src/exit-research/replay-engine.js"] = (() => {
+const { initialRisk, rAtPrice } = erModuleRegistry["src/exit-research/r-math.js"];
+const { researchSetupClass } = erModuleRegistry["src/model.js"];
+const { clone, uniqueSorted } = erModuleRegistry["src/exit-research/research-common.js"];
+const { POLICIES_V1 } = erModuleRegistry["src/exit-research/policies-v1.js"];
+const { validateExitPolicy, stageAtMfe, SETUP_STATE_SOURCES, EXECUTION_MODEL_VERSION } = erModuleRegistry["src/exit-research/policy-schema.js"];
+const { calculateProtectionR, protectionAtR } = erModuleRegistry["src/exit-research/protection.js"];
+const { stopFill, stopMayBeTouched, SLIPPAGE_MODEL_VERSION } = erModuleRegistry["src/exit-research/execution-model.js"];
+const { prepareReplayData } = erModuleRegistry["src/exit-research/replay-data.js"];
+const { appendReplayTrace } = erModuleRegistry["src/exit-research/replay-trace.js"];
+const { assessReplayQuality } = erModuleRegistry["src/exit-research/replay-quality.js"];
+const { auditReplayLookahead } = erModuleRegistry["src/exit-research/lookahead-qa.js"];
+const REPLAY_ENGINE_VERSION = 'CONDITIONED_ENTRY_5M_V1';
+const P = 300000, validTime = t => Number.isSafeInteger(t) && t >= 0;
+function manualTransitions(trade, anchor) {
+  const events = trade.manualEvents;
+  if (!Array.isArray(events)) return { valid: false };
+  const transitions = [], ids = new Set(); let previous = -1, active = null;
+  for (const e of events) {
+    if (!e || typeof e.id !== 'string' || ids.has(e.id) || !validTime(e.recordedAt) || e.recordedAt < previous ||
+        !validTime(e.effectiveAt) || e.effectiveAt > e.recordedAt || e.source !== 'manual_intraday' ||
+        !['INITIAL_STOP_RECORDED', 'INITIAL_STOP_LATE_RECORDED', 'INITIAL_STOP_CORRECTED', 'BOF_TO_PB_RECORDED', 'BOF_TO_PB_REVERTED'].includes(e.type)) return { valid: false };
+    ids.add(e.id); previous = e.recordedAt;
+    if (!e.type.startsWith('BOF_TO_PB_')) continue;
+    if (researchSetupClass(trade.originalSetup) !== 'BOF' || e.effectiveAt !== e.recordedAt || !e.payload) return { valid: false };
+    if (e.type === 'BOF_TO_PB_RECORDED') {
+      if (active || e.payload.from !== 'BOF' || e.payload.to !== 'PB') return { valid: false };
+      active = e.id;
+    } else {
+      if (!active || e.payload.from !== 'PB' || e.payload.to !== 'BOF' || e.payload.revertedEventId !== active) return { valid: false };
+      active = null;
+    }
+    const effectiveAt = anchor + (Math.floor((e.recordedAt - anchor) / P) + 1) * P;
+    if (!validTime(effectiveAt)) return { valid: false };
+    transitions.push({ event: clone(e), effectiveAt, setup: e.type === 'BOF_TO_PB_RECORDED' ? 'PB' : 'BOF', traceCause: null });
+  }
+  if (trade.manualSetupTransitions !== undefined && JSON.stringify(trade.manualSetupTransitions) !== JSON.stringify(transitions.map(t => t.event))) return { valid: false };
+  return { valid: true, transitions };
+}
+function replayExitPolicy(trade, bundle, options = {}) {
+  options = options && typeof options === 'object' && !Array.isArray(options) ? options : {};
+  const { policyId, policies = POLICIES_V1, setupStateSource = 'MANUAL_ACTUAL', replayHardEndAt, executionTickSize = null, hardEndMark = null } = options;
+  const trace = [], auditBars = [], reasons = [], blockedReasons = [];
+  const result = { schemaVersion: 1, researchTradeId: trade?.researchTradeId ?? null, policyId: policyId ?? null, policyVersion: 1,
+    replayEngineVersion: REPLAY_ENGINE_VERSION, executionModelVersion: EXECUTION_MODEL_VERSION, slippageModelVersion: SLIPPAGE_MODEL_VERSION,
+    setupStateSource, priceSourceMode: null, marketDataFingerprint: null, bundleFingerprint: null, provenance: null, policyDefinitions: null,
+    replayStartAt: trade?.actualEntryTime ?? null, replayHardEndAt: replayHardEndAt ?? null,
+    initialRiskPoints: null, executionTickSize, hardEndMark: clone(hardEndMark), simulatedExitTime: null, simulatedExitTimeRange: null, simulatedExitPrice: null, simulatedExitR: null, exitReason: null,
+    maxKnownMfeR: 0, finalActiveProtectionR: -1, finalActiveProtectionPrice: trade?.initialStop ?? null, finalRoundedProtectionR: -1,
+    finalPolicyId: policyId ?? null, finalStage: null, lookaheadQaStatus: 'FAIL', lookaheadQaReasons: ['RUN_NOT_EXECUTED'],
+    qualityStatus: 'BLOCKED', qualityReasons: [], statisticsEligible: false, trace, auditBars };
+  const emit = (type, at, data, cause) => appendReplayTrace(trace, type, at, data, cause);
+  const block = (codes, at = result.replayStartAt) => {
+    blockedReasons.push(...codes);
+    emit('REPLAY_BLOCKED', validTime(at) ? at : 0, { reasons: uniqueSorted(codes) });
+    // Partial state is inspectable, but never retain an apparently valid simulated exit.
+    result.simulatedExitTime = result.simulatedExitTimeRange = result.simulatedExitPrice = result.simulatedExitR = result.exitReason = null;
+    Object.assign(result, assessReplayQuality(trade, { blockingReasons: blockedReasons, reasons, lookaheadQaStatus: result.lookaheadQaStatus })); return result;
+  };
+  if (!trade || typeof options !== 'object' || !validTime(trade.actualEntryTime) || !validTime(replayHardEndAt) || replayHardEndAt <= trade.actualEntryTime) return block(['REPLAY_HARD_END_INVALID']);
+  if (trade.qualityStatus === 'BLOCKED') return block(['STEP3_BLOCKED', ...(trade.qualityReasons || [])]);
+  if (!['READY', 'REVIEW_REQUIRED'].includes(trade.qualityStatus)) return block(['STEP3_QUALITY_INVALID']);
+  if (trade.qualityStatus === 'REVIEW_REQUIRED') reasons.push('STEP3_REVIEW_REQUIRED', ...(trade.qualityReasons || []));
+  if (!SETUP_STATE_SOURCES.includes(setupStateSource)) return block(['SETUP_STATE_SOURCE_INVALID']);
+  if (setupStateSource === 'RESEARCH_TRANSITION_RULE') return block(['RESEARCH_TRANSITION_RULE_NOT_CONFIGURED']);
+  const risk = initialRisk(trade, { tickSize: executionTickSize });
+  if (!risk.valid) return block(risk.qualityReasons);
+  result.initialRiskPoints = risk.initialRiskPoints;
+  let policy = policies?.[policyId];
+  const validation = validateExitPolicy(policy);
+  if (!validation.valid) return block(validation.qualityReasons);
+  if (policy.policyId !== policyId || policy.setupClass !== researchSetupClass(trade.originalSetup) || trade.researchSetupClass !== policy.setupClass) return block(['POLICY_INITIAL_SETUP_MISMATCH']);
+  const paired = policies[policy.pairedPolicyId];
+  const pairCheck = validateExitPolicy(paired);
+  if (!pairCheck.valid || paired.setupClass === policy.setupClass || paired.pairedPolicyId !== policyId || paired.policyId !== policy.pairedPolicyId) return block(['PAIRED_POLICY_INVALID']);
+  const policyMap = { [policy.setupClass]: policy, [paired.setupClass]: paired };
+  result.policyDefinitions = clone(policyMap);
+  const data = prepareReplayData(trade, bundle, options);
+  if (!data.valid) return block(data.qualityReasons);
+  Object.assign(result, { priceSourceMode: data.primary.priceSourceMode, marketDataFingerprint: data.fingerprint, bundleFingerprint: data.bundleFingerprint, provenance: clone(data.provenance) });
+  if (data.primary.priceSourceMode !== 'EXACT_EXECUTION_CONTRACT') reasons.push('PRICE_SOURCE_PROXY', ...(data.primary.priceSourceMode === 'CONTINUOUS_CONTRACT_PROXY' ? ['CONTINUOUS_CONTRACT_PROXY'] : []));
+  const initialProtection = protectionAtR(trade, -1, executionTickSize);
+  if (!initialProtection.valid) return block(initialProtection.qualityReasons);
+  if (executionTickSize !== null && Math.abs(initialProtection.price - trade.initialStop) > 8 * Number.EPSILON * trade.initialStop) return block(['INITIAL_STOP_OFF_EXECUTION_TICK']);
+  reasons.push(...initialProtection.qualityReasons);
+  const manual = manualTransitions(trade, data.primary.bars[0].openTime);
+  if (!manual.valid) return block(['MANUAL_SETUP_EVENTS_INVALID']);
+  if (hardEndMark !== null && (!hardEndMark || Object.keys(hardEndMark).sort().join(',') !== 'at,price,seriesId,source' || hardEndMark.at !== replayHardEndAt ||
+      !Number.isFinite(hardEndMark.price) || hardEndMark.price <= 0 || hardEndMark.seriesId !== data.primary.seriesId || typeof hardEndMark.source !== 'string' || !hardEndMark.source.trim())) return block(['HARD_END_MARK_INVALID']);
+  let knownMfeR = 0, protection = { ...initialProtection, price: trade.initialStop, roundedR: -1 }, stage = stageAtMfe(policy, 0);
+  let pending = null, manualRecorded = 0, manualApplied = 0, switchedCause = null, coveredUntil = trade.actualEntryTime;
+  const entryCause = emit('ENTRY', trade.actualEntryTime, { entryPrice: trade.actualEntryPrice, direction: trade.direction, setupStateSource, policyId, initialRiskPoints: risk.initialRiskPoints });
+  emit('INITIAL_STOP_ACTIVE', trade.actualEntryTime, { protectionR: -1, protectionPrice: protection.price, stage: stage.name, policyId }, entryCause);
+  function recordManualUntil(at) {
+    while (manualRecorded < manual.transitions.length && manual.transitions[manualRecorded].event.recordedAt <= at) {
+      const item = manual.transitions[manualRecorded++];
+      item.traceCause = emit(item.setup === 'PB' ? 'BOF_TO_PB_MANUAL_RECORDED' : 'BOF_TO_PB_MANUAL_REVERTED', at, {
+        eventId: item.event.id, manualTransitionAt: item.event.recordedAt, policyTransitionEffectiveAt: item.effectiveAt, setupStateSource, ignoredForPolicy: setupStateSource === 'FIXED_INITIAL_SETUP' });
+    }
+  }
+  function policyAt(at) {
+    let selected = policy; switchedCause = null;
+    while (manualApplied < manual.transitions.length && manual.transitions[manualApplied].effectiveAt <= at) {
+      const item = manual.transitions[manualApplied++];
+      if (setupStateSource === 'MANUAL_ACTUAL') { selected = policyMap[item.setup]; switchedCause = item.traceCause; }
+    }
+    return selected;
+  }
+  recordManualUntil(trade.actualEntryTime);
+  const entryPolicy = policyAt(trade.actualEntryTime);
+  if (entryPolicy !== policy) {
+    policy = entryPolicy; stage = stageAtMfe(policy, knownMfeR);
+    emit('POLICY_SWITCH_EFFECTIVE', trade.actualEntryTime, { policyId: policy.policyId, knownMfeR, inheritedProtectionR: protection.protectionR }, switchedCause);
+  }
+  function exit(fill, type, at, cause = null) {
+    const exitR = rAtPrice(trade, fill.price);
+    if (exitR === null) return block(['R_NUMERIC_OVERFLOW'], at);
+    emit(type, at, { fillPrice: fill.price, fillReason: fill.reason, timeRange: fill.timeRange, policyKnownMfeR: knownMfeR, activeProtectionR: protection.protectionR }, cause);
+    Object.assign(result, { simulatedExitTime: fill.time, simulatedExitTimeRange: fill.timeRange, simulatedExitPrice: fill.price, simulatedExitR: exitR, exitReason: fill.reason });
+    return null;
+  }
+  const relevant = data.primary.bars.filter(b => b.openTime < replayHardEndAt && b.openTime + P > trade.actualEntryTime);
+  for (const bar of relevant) {
+    const barEnd = bar.openTime + P, startAt = Math.max(bar.openTime, trade.actualEntryTime);
+    if (startAt > coveredUntil) return block(['REPLAY_MARKET_DATA_INCOMPLETE', 'MARKET_DATA_GAP'], coveredUntil);
+    coveredUntil = Math.min(barEnd, replayHardEndAt);
+    if (pending) {
+      if (pending.policy.policyId !== policy.policyId) emit('POLICY_SWITCH_EFFECTIVE', startAt, { policyId: pending.policy.policyId, knownMfeR, inheritedProtectionR: protection.protectionR }, pending.switchCause);
+      if (pending.stage.name !== stage.name || pending.policy.policyId !== policy.policyId) emit('STAGE_EFFECTIVE', startAt, { stage: pending.stage.name, policyId: pending.policy.policyId }, pending.stageCause);
+      if (pending.protection.protectionR !== protection.protectionR || pending.protection.price !== protection.price) emit('PROTECTION_EFFECTIVE', startAt,
+        { protectionR: pending.protection.protectionR, protectionPrice: pending.protection.price, roundedR: pending.protection.roundedR }, pending.protectionCause);
+      policy = pending.policy; stage = pending.stage; protection = pending.protection;
+    }
+    const barCause = emit('BAR_STARTED', startAt, { barOpenTime: bar.openTime, barCloseTime: barEnd, policyId: policy.policyId, stage: stage.name, policyKnownMfeR: knownMfeR,
+      activeProtectionR: protection.protectionR, activeProtectionPrice: protection.price });
+    const audit = { barOpenTime: bar.openTime, barCloseTime: barEnd, startAt, knownMfeBefore: knownMfeR, activePolicyId: policy.policyId, activeStage: stage.name,
+      activeProtectionR: protection.protectionR, activeProtectionPrice: protection.price, executionSegments: [], evidence: [], knownMfeAfter: knownMfeR, next: null, exited: false };
+    auditBars.push(audit);
+    // At a new bar open, existing gap stop has precedence; then a previously queued market ceiling exit; then intrabar stop.
+    if (bar.openTime >= trade.actualEntryTime) {
+      const openFill = stopFill(trade.direction, bar, protection.price, barEnd);
+      audit.openObservation = { openTime: bar.openTime, open: bar.open };
+      if (openFill.reason === 'STOP_GAP_THROUGH') {
+        exit(openFill, 'STOP_TRIGGERED', bar.openTime, barCause); audit.exited = true; break;
+      }
+      if (pending?.forceExit) {
+        exit({ price: bar.open, time: bar.openTime, timeRange: { startAt: bar.openTime, endAt: bar.openTime, semantics: 'MODEL_BAR_OPEN' }, reason: 'HARD_CEILING' }, 'HARD_CEILING_EXIT', bar.openTime, pending.ceilingCause); audit.exited = true; break;
+      }
+    }
+    const segments = data.path.segments.filter(s => s.openTime >= bar.openTime && s.closeTime <= barEnd);
+    for (const segment of segments) {
+      audit.executionSegments.push(clone(segment));
+      if (!segment.fullyContained) {
+        if (stopMayBeTouched(trade.direction, segment, protection.price)) return block([segment.entryOverlap ? 'ENTRY_STOP_BOUNDARY_AMBIGUOUS' : 'HARD_END_STOP_BOUNDARY_AMBIGUOUS'], Math.min(segment.closeTime, replayHardEndAt));
+        reasons.push(segment.entryOverlap ? 'ENTRY_BOUNDARY_IGNORED_FOR_POLICY_ACTIVATION' : 'HARD_END_BOUNDARY_PARTIAL');
+        if (segment.entryOverlap) emit('ENTRY_BOUNDARY_IGNORED_FOR_POLICY_ACTIVATION', Math.min(segment.closeTime, replayHardEndAt), { barOpenTime: segment.openTime }, barCause);
+        continue;
+      }
+      const fill = stopFill(trade.direction, segment, protection.price, segment.closeTime);
+      if (fill.triggered) { exit(fill, 'STOP_TRIGGERED', fill.time ?? segment.closeTime, barCause); audit.exited = true; break; }
+      audit.evidence.push({ openTime: segment.openTime, closeTime: segment.closeTime, high: segment.high, low: segment.low, close: segment.close,
+        fullyContained: true, availableAt: segment.closeTime, seriesId: segment.seriesId });
+    }
+    if (audit.exited) break;
+    // Detail refines path membership/fills only. Policy confirmation remains at primary 5M close.
+    if (barEnd <= replayHardEndAt) {
+      const previousMfe = knownMfeR;
+      for (const e of audit.evidence) {
+        const favorableR = rAtPrice(trade, trade.direction === 'LONG' ? e.high : e.low);
+        if (favorableR === null) return block(['R_NUMERIC_OVERFLOW'], barEnd);
+        knownMfeR = Math.max(knownMfeR, favorableR);
+      }
+      audit.knownMfeAfter = knownMfeR;
+      if (knownMfeR > previousMfe) emit('MFE_UPDATED', barEnd, { policyKnownMfeR: knownMfeR, confirmedBarOpen: bar.openTime, confirmedBarClose: barEnd }, barCause);
+      for (const milestoneR of [2, 4, 6, 8, 10]) if (previousMfe < milestoneR && knownMfeR >= milestoneR) emit('MILESTONE_REACHED', barEnd,
+        { milestoneR, firstReachedBarOpen: bar.openTime, firstReachedBarClose: barEnd }, barCause);
+      recordManualUntil(barEnd);
+      const nextPolicy = policyAt(barEnd), nextStage = stageAtMfe(nextPolicy, knownMfeR);
+      const calculatedR = calculateProtectionR(protection.protectionR, knownMfeR, nextStage);
+      const nextProtection = protectionAtR(trade, calculatedR, executionTickSize);
+      if (!nextProtection.valid) return block(nextProtection.qualityReasons, barEnd);
+      // Preserve the exact frozen Initial Stop before any dynamic protection, including representation error.
+      if (calculatedR === -1) { nextProtection.price = trade.initialStop; nextProtection.roundedR = -1; }
+      let stageCause = null;
+      if (nextStage.name !== stage.name || nextPolicy.policyId !== policy.policyId) stageCause = emit('STAGE_CONFIRMED', barEnd,
+        { stage: nextStage.name, policyId: nextPolicy.policyId, policyKnownMfeR: knownMfeR, effectiveAt: barEnd }, barCause);
+      const protectionCause = emit('PROTECTION_CALCULATED', barEnd, { protectionR: calculatedR, protectionPrice: nextProtection.price, theoreticalPrice: nextProtection.theoreticalPrice,
+        policyKnownMfeR: knownMfeR, stage: nextStage.name, effectiveAt: barEnd }, stageCause ?? barCause);
+      const ceilingCause = nextStage.forceExit ? emit('HARD_CEILING_CONFIRMED', barEnd, { policyId: nextPolicy.policyId, policyKnownMfeR: knownMfeR, effectiveAt: barEnd }, stageCause ?? barCause) : null;
+      pending = { policy: nextPolicy, stage: nextStage, protection: nextProtection, stageCause: stageCause ?? barCause, protectionCause, switchCause: switchedCause, forceExit: nextStage.forceExit, ceilingCause };
+      audit.next = { policyId: nextPolicy.policyId, stage: nextStage.name, protectionR: calculatedR, protectionPrice: nextProtection.price, effectiveAt: barEnd, forceExit: nextStage.forceExit };
+    }
+    if (barEnd >= replayHardEndAt) {
+      const completed = segments.filter(s => s.fullyContained && s.closeTime === replayHardEndAt).at(-1);
+      const price = barEnd === replayHardEndAt ? bar.close : completed?.close ?? hardEndMark?.price;
+      if (price === undefined) return block(['HARD_END_BOUNDARY_AMBIGUOUS'], replayHardEndAt);
+      if (hardEndMark && completed && hardEndMark.price !== completed.close) return block(['HARD_END_MARK_CONFLICT'], replayHardEndAt);
+      if (hardEndMark && barEnd === replayHardEndAt && hardEndMark.price !== bar.close) return block(['HARD_END_MARK_CONFLICT'], replayHardEndAt);
+      if (barEnd > replayHardEndAt && !completed) {
+        reasons.push('HARD_END_EXPLICIT_MARK');
+        if (trade.direction === 'LONG' ? price <= protection.price : price >= protection.price) return block(['HARD_END_MARK_STOP_CONFLICT'], replayHardEndAt);
+      }
+      exit({ price, time: replayHardEndAt, timeRange: { startAt: replayHardEndAt, endAt: replayHardEndAt, semantics: barEnd === replayHardEndAt || completed ? 'MODEL_BAR_CLOSE' : 'EXPLICIT_MARK' }, reason: 'REPLAY_HARD_END' }, 'REPLAY_HARD_END_EXIT', replayHardEndAt, barCause);
+      audit.exited = true; break;
+    }
+  }
+  Object.assign(result, { maxKnownMfeR: knownMfeR, finalActiveProtectionR: protection.protectionR, finalActiveProtectionPrice: protection.price,
+    finalRoundedProtectionR: protection.roundedR, finalPolicyId: policy.policyId, finalStage: stage.name });
+  if (blockedReasons.length) return block(blockedReasons);
+  if (!result.exitReason) return block(['REPLAY_MARKET_DATA_INCOMPLETE'], coveredUntil);
+  const qa = auditReplayLookahead(result, trade, bundle);
+  result.lookaheadQaStatus = qa.status; result.lookaheadQaReasons = qa.reasons;
+  if (qa.status !== 'PASS') return block(['LOOKAHEAD_QA_FAIL', ...qa.reasons], replayHardEndAt);
+  Object.assign(result, assessReplayQuality(trade, { reasons, priceSourceMode: data.primary.priceSourceMode, lookaheadQaStatus: qa.status }));
+  return result;
+}
+
+return {REPLAY_ENGINE_VERSION, replayExitPolicy};
+})();
+erModuleRegistry["src/exit-research/ui/view-model.js"] = (() => {
+const { effectiveInitialStop } = erModuleRegistry["src/model.js"];
+const { reconstructLogicalTrades } = erModuleRegistry["src/exit-research/logical-trade.js"];
+const { buildResearchTrades } = erModuleRegistry["src/exit-research/research-trade.js"];
+const { initialRisk, rAtPrice } = erModuleRegistry["src/exit-research/r-math.js"];
+const { validateMarketDataBundle } = erModuleRegistry["src/exit-research/market-data.js"];
+const { calculateMarketMetrics } = erModuleRegistry["src/exit-research/market-metrics.js"];
+const { POLICIES_V1 } = erModuleRegistry["src/exit-research/policies-v1.js"];
+const { replayExitPolicy } = erModuleRegistry["src/exit-research/replay-engine.js"];
+function buildWorkbenchModel({ intraday, files, flatConfirmed, store }) {
+  // Detached data only: frozen adapters never receive live canonical references.
+  const records = structuredClone(intraday?.records || []), entered = records.filter(r => r.enteredAt !== null);
+  const reconstruction = reconstructLogicalTrades(files.fills || [], { assumeFlatAtStart: flatConfirmed === true });
+  const logicalTrades = reconstruction.closedTrades;
+  const result = buildResearchTrades(entered, logicalTrades, { orders: files.orders || [], positionHistory: files.positions || [], allExecutionFills: files.fills || [], manualStore: store });
+  const matches = new Map(result.matches.map(m => [m.opportunityId, m])), logicalMap = new Map(logicalTrades.map(t => [t.logicalTradeId, t]));
+  const trades = result.researchTrades.map(t => {
+    const matchingIds = matches.get(t.opportunityId)?.candidateLogicalTradeIds || [];
+    const ids=matchingIds.length?matchingIds:t.logicalTradeId?[t.logicalTradeId]:[];
+    const settings = store.settings.tradeOverrides[t.opportunityId] || { replayHardEndAt: null, executionTickSize: null };
+    const risk = initialRisk(t), converted = t.manualEvents.some(e => e.type === 'BOF_TO_PB_RECORDED');
+    return { ...t, hasConversion: converted, initialRiskPoints: risk.initialRiskPoints, realizedR: rAtPrice(t, t.actualExitPrice), settings: structuredClone(settings),
+      candidates: ids.map(id => logicalMap.get(id)).filter(Boolean).map(c => ({ logicalTradeId: c.logicalTradeId, contract: c.contract, direction: c.direction, entryTime: c.entryStartedAt.normalized, exitTime: c.exitCompletedAt.normalized, entryPrice: c.entryVwap, exitPrice: c.exitVwap, quantity: c.quantity, sourceRows: [...c.sourceRows] })) };
+  });
+  const p = store.preferences;
+  const visibleTrades = trades.filter(t => (p.setup === 'ALL' || (p.setup === 'BOF_TO_PB' ? t.hasConversion : t.researchSetupClass === p.setup)) && (p.family === 'ALL' || p.family === t.researchFamily) && (p.quality === 'ALL' || p.quality === t.qualityStatus));
+  const selectedBase = visibleTrades.find(t => t.opportunityId === p.selectedOpportunityId) || visibleTrades[0] || null;
+  let selected = null;
+  if (selectedBase) {
+    const t = selectedBase, end = t.settings.replayHardEndAt;
+    const metrics = files.bundle ? calculateMarketMetrics(t, files.bundle, { executionTickSize: t.settings.executionTickSize }) : null;
+    const hardEndValid = Number.isSafeInteger(end) && end > t.actualEntryTime && t.actualEntryTime !== null;
+    const replayStatus = !hardEndValid ? 'REPLAY_HARD_END_REQUIRED' : !files.bundle ? 'WAITING_MARKET_DATA' : 'EXECUTED';
+    const sources = t.researchSetupClass === 'BOF' ? ['MANUAL_ACTUAL','FIXED_INITIAL_SETUP'] : ['MANUAL_ACTUAL'];
+    const policies = Object.values(POLICIES_V1).filter(policy => policy.setupClass === t.researchSetupClass);
+    const replays = replayStatus === 'EXECUTED' ? policies.flatMap(policy => sources.map(setupStateSource => replayExitPolicy(t, files.bundle, { policyId: policy.policyId, setupStateSource, replayHardEndAt: end, executionTickSize: t.settings.executionTickSize }))) : [];
+    selected = { ...t, metrics, marketStatus: metrics?.qualityStatus || 'WAITING_MARKET_DATA', replayStatus, replays };
+  }
+  return { counts: { records: records.length, entered: entered.length, stops: entered.filter(r => effectiveInitialStop(r) !== null).length, fills: files.fills?.length || 0, orders: files.orders?.length || 0, positions: files.positions?.length || 0, closed: flatConfirmed ? logicalTrades.length : null, open: flatConfirmed ? reconstruction.openPositions.length : null },
+    boundaryStatus: reconstruction.status || 'FLAT_CONFIRMED', flatConfirmed: flatConfirmed === true, logicalTrades, trades, visibleTrades, selected, preferences: structuredClone(p),
+    bundle: files.bundle ? { source: files.bundle.source, sourceVersion: files.bundle.sourceVersion, validation: validateMarketDataBundle(files.bundle), series: files.bundle.series.map(s => ({ seriesId: s.seriesId, role: s.role, symbol: s.providerSymbol, timeframeMs: s.timeframeMs, coverageStart: s.coverageStart, coverageEnd: s.coverageEnd, sourceMode: s.priceSourceMode })) } : null };
+}
+
+return {buildWorkbenchModel};
+})();
+erModuleRegistry["src/exit-research/ui/render.js"] = (() => {
+const erEscape = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const erNumber = value => Number.isFinite(value) ? Number(value.toFixed(4)).toString() : '—';
+const erR = value => Number.isFinite(value) ? erNumber(value) + 'R' : '—';
+const erTime = value => Number.isSafeInteger(value) && value >= 0 ? new Intl.DateTimeFormat('zh-CN',{timeZone:'Asia/Shanghai',year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false}).format(value) : '—';
+const erQuality = status => `<span class="er-quality er-quality--${erEscape(status)}">${erEscape(status === 'REVIEW_REQUIRED' ? 'REVIEW · 待复核' : status || '—')}</span>`;
+const erReasons = codes => codes?.length ? `<details class="er-reasons"><summary>查看原因（${codes.length}）</summary><ul>${codes.map(c=>`<li><code>${erEscape(c)}</code></li>`).join('')}</ul></details>` : '';
+const erFacts = entries => `<dl class="er-facts">${entries.map(([k,v])=>`<div><dt>${erEscape(k)}</dt><dd>${erEscape(v)}</dd></div>`).join('')}</dl>`;
+const erSelect = (name,label,values,current) => `<label>${label}<select data-er-filter="${name}" aria-label="${label}">${values.map(([v,l])=>`<option value="${v}"${v===current?' selected':''}>${l}</option>`).join('')}</select></label>`;
+function formatExcursion(value) {
+  if(!value)return '—';
+  if(!Number.isFinite(value.possibleMaxR) && !value.exact)return `Confirmed ≥ ${erR(value.confirmedR)} / Incomplete · 上界未知`;
+  return value.exact ? erR(value.confirmedR) + ' · Confirmed' : `Confirmed ≥ ${erR(value.confirmedR)} / Possible ≤ ${erR(value.possibleMaxR)}`;
+}
+function describeTrace(event) {
+  const names={ENTRY:'从实际入场开始研究',INITIAL_STOP_ACTIVE:'初始止损已生效',BAR_STARTED:'开始下一根 5M，使用此前已知保护',ENTRY_BOUNDARY_IGNORED_FOR_POLICY_ACTIVATION:'入场边界不确定区间未用于策略激活',MFE_UPDATED:'更新已确认的最大有利变动',MILESTONE_REACHED:`确认达到 ${event.milestoneR ?? '—'}R`,STAGE_CONFIRMED:'完成棒确认新的管理阶段',STAGE_EFFECTIVE:'管理阶段从下一根棒生效',BOF_TO_PB_MANUAL_RECORDED:'读取人工 BOF→PB 记录',BOF_TO_PB_MANUAL_REVERTED:'读取人工 BOF→PB 撤销',POLICY_SWITCH_EFFECTIVE:'人工管理对应策略切换生效',PROTECTION_CALCULATED:'按已知 MFE 计算下一根棒保护',PROTECTION_EFFECTIVE:'新保护从下一根棒生效',STOP_TRIGGERED:'已有止损在此证据区间触发',HARD_CEILING_CONFIRMED:'完成棒确认硬上限',HARD_CEILING_EXIT:'下一根棒开盘按硬上限模拟退出',REPLAY_HARD_END_EXIT:'在明确配置的 Hard End 结束研究',REPLAY_BLOCKED:'数据或边界条件阻断本次回放'};
+  return names[event.type] || '回放事件';
+}
+function erTrace(run) {
+  return `<details class="er-trace"><summary>查看回放轨迹（${run.trace.length} 项）</summary><ol>${run.trace.map(e=>`<li><time>${erEscape(erTime(e.at))}</time><p>${erEscape(describeTrace(e))}</p>${erFacts([['阶段',e.stage||'—'],['已知 MFE',erR(e.policyKnownMfeR??e.knownMfeR)],['保护',erR(e.protectionR??e.activeProtectionR)]])}<details><summary>reason code / 时序证据</summary><code>${erEscape(e.type)}</code><pre>${erEscape(JSON.stringify(e,null,2))}</pre></details></li>`).join('')}</ol></details>`;
+}
+function erReplayCard(run) {
+  const source=run.setupStateSource==='FIXED_INITIAL_SETUP'?'始终按 BOF':'按真实人工管理';
+  return `<article class="er-policy"><header><h4>${erEscape(run.policyId)}</h4>${erQuality(run.qualityStatus)}</header><p>${source} · <code>${erEscape(run.setupStateSource)}</code></p>${erFacts([['Simulated Exit R',erR(run.simulatedExitR)],['Exit Reason',run.exitReason||'—'],['Max Known MFE',erR(run.maxKnownMfeR)],['Lookahead QA',run.lookaheadQaStatus],['模拟退出时间',run.simulatedExitTime!==null?erTime(run.simulatedExitTime):run.simulatedExitTimeRange?`${erTime(run.simulatedExitTimeRange.startAt)} 至 ${erTime(run.simulatedExitTimeRange.endAt)}（区间）`:'—']])}${erReasons([...run.qualityReasons,...run.lookaheadQaReasons])}${erTrace(run)}</article>`;
+}
+function erMetrics(t) {
+  const metrics=t.metrics;
+  const statusNames={CONFIRMED_REACHED:'Confirmed · 已确认',POSSIBLE_BOUNDARY_REACHED:'Possible · 边界可能达到',NOT_REACHED:'Not Reached · 未达到',DATA_INCOMPLETE:'Incomplete · 数据不完整'};
+  return `<section class="er-section" aria-labelledby="er-metrics-title"><h3 id="er-metrics-title">Actual Holding Metrics</h3>${erFacts([['Realized R',erR(t.realizedR)],['1R（价格点数）',erNumber(t.initialRiskPoints)]])}${metrics?`${erQuality(metrics.qualityStatus)}<p class="er-muted">Coverage：${erEscape(metrics.coverageStatus)} · Source Mode：${erEscape(metrics.priceSourceMode||'—')}</p>${erFacts([['MFE',formatExcursion(metrics.mfe)],['MAE',formatExcursion(metrics.mae)]])}<div class="er-milestones">${Object.entries(metrics.milestones||{}).map(([level,m])=>`<div><b>${erEscape(level)}</b><span>${erEscape(statusNames[m.status]||m.status)}</span><small>${erEscape(m.firstReachConfirmed?'首次达到区间已确认':'首次达到时点可能不完整')}</small></div>`).join('')}</div>${erReasons(metrics.qualityReasons)}`:'<p class="er-empty">等待行情数据</p>'}</section>`;
+}
+function erDetails(t) {
+  if(!t)return '<section class="er-section"><h3>单笔交易详情</h3><p class="er-empty">选择 Research Trade 查看交易事实、匹配与指标。</p></section>';
+  const candidates=t.candidates.length?t.candidates: t.logicalTradeId?[{logicalTradeId:t.logicalTradeId,contract:t.executionContract,direction:t.direction,entryTime:new Date(t.actualEntryTime).toISOString(),exitTime:new Date(t.actualExitTime).toISOString(),entryPrice:t.actualEntryPrice,exitPrice:t.actualExitPrice,quantity:t.quantity}]:[];
+  return `<section class="er-section"><header class="er-section-head"><h3>单笔交易详情 · ${erEscape(t.researchFamily)}</h3>${erQuality(t.qualityStatus)}</header><h4>交易事实</h4>${erFacts([['品种 / 方向',`${t.researchFamily} / ${t.direction}`],['原始 Setup',t.originalSetup],['BOF→PB 时间',t.manualSetupTransitions.filter(e=>e.type==='BOF_TO_PB_RECORDED').map(e=>erTime(e.recordedAt)).join('；')||'—'],['registeredAt',erTime(t.registeredAt)],['taskEntryConfirmedAt',erTime(t.taskEntryConfirmedAt)],['taskExitConfirmedAt',erTime(t.taskExitConfirmedAt)],['具体执行合约',t.executionContract||'—'],['Actual Entry',erTime(t.actualEntryTime)],['Actual Entry Price',erNumber(t.actualEntryPrice)],['Actual Exit',erTime(t.actualExitTime)],['Actual Exit Price',erNumber(t.actualExitPrice)],['Qty',erNumber(t.quantity)],['Initial Stop',erNumber(t.initialStop)],['1R（价格点数）',erNumber(t.initialRiskPoints)]])}
+    <h4>Matching · ${erEscape(t.matchingStatus)}</h4>${erFacts([['Entry 时间差（秒）',t.entryDeltaMs===null?'—':erNumber(t.entryDeltaMs/1000)],['Exit 时间差（秒）',t.exitDeltaMs===null?'—':erNumber(t.exitDeltaMs/1000)]])}${erReasons(t.matchingReasons)}${t.matchingStatus==='MATCH_AMBIGUOUS'?'<p>存在多个等价候选，请对照执行资料人工确认；系统不会按 ID 强行配对。</p>':''}<div class="er-candidates">${candidates.map((c,i)=>`<article><b>候选 ${i+1} · ${erEscape(c.contract)}</b>${erFacts([['方向',c.direction],['Entry（源时间）',c.entryTime],['Exit（源时间）',c.exitTime],['Entry / Exit Price',`${erNumber(c.entryPrice)} / ${erNumber(c.exitPrice)}`],['Qty',erNumber(c.quantity)],['Fills CSV 行',(c.sourceRows||[]).join(', ')||'—']])}<div class="er-actions"><button type="button" data-er-action="confirm" data-opportunity="${erEscape(t.opportunityId)}" data-candidate="${i}">确认这笔 · 候选 ${i+1}</button><button type="button" data-er-action="reject" data-opportunity="${erEscape(t.opportunityId)}" data-candidate="${i}">拒绝这笔 · 候选 ${i+1}</button></div></article>`).join('')}</div>
+    <h4>Execution QA</h4>${erFacts([['Orders',t.executionQa?.orders.status||'INSUFFICIENT_DATA'],['Position History',t.executionQa?.positionHistory.status||'INSUFFICIENT_DATA']])}${erReasons(t.qualityReasons)}<p class="er-muted">READY：可正式比较；REVIEW：资料可看但需要复核，并非程序故障；BLOCKED：不能形成正式研究结论。</p></section>${erMetrics(t)}
+    <section class="er-section"><h3>Policy Replay</h3><p class="er-muted">固定使用冻结 experimental policies；不提供参数编辑。所有时间显示为北京时间，输入 Hard End 必须包含时区。</p><form data-er-settings><label>本次交易 Hard End（含时区 ISO 8601）<input name="hardEnd" aria-label="本次交易 Hard End" type="text" placeholder="例如 2037-01-01T01:20:00Z" value="${t.settings.replayHardEndAt===null?'':erEscape(new Date(t.settings.replayHardEndAt).toISOString())}"></label><label>执行 Tick Size（选填，须确认来源）<input name="tick" aria-label="执行 Tick Size" type="number" min="0" step="any" placeholder="未配置：Replay 保持 REVIEW" value="${t.settings.executionTickSize===null?'':erEscape(t.settings.executionTickSize)}"></label><button type="submit">保存本次交易研究设置</button></form>${t.replayStatus==='REPLAY_HARD_END_REQUIRED'?'<p class="er-empty"><code>REPLAY_HARD_END_REQUIRED</code> · 请明确配置，Actual Metrics 不受影响。</p>':t.replayStatus==='WAITING_MARKET_DATA'?'<p class="er-empty">等待行情数据</p>':`<p>Actual：${erR(t.realizedR)} · ${t.researchSetupClass==='BOF'?'按真实人工管理 / 始终按 BOF 并排比较':'原始 PB / MANUAL_ACTUAL'}</p><div class="er-policy-grid">${t.replays.map(erReplayCard).join('')}</div>`}</section>`;
+}
+function renderWorkbench(model) {
+  const c=model.counts,p=model.preferences;
+  return `<div class="er-workbench"><header class="er-heading"><h2>Exit Research <span>持仓管理研究</span></h2><p class="er-muted">以下结果为历史路径研究，不是实时交易指令。</p></header>${model.message?`<p class="er-feedback" role="status">${erEscape(model.message)}</p>`:''}${model.storeError?`<p class="er-feedback" role="alert">${erEscape(model.storeError)}；Research Store 暂不可写，Task Card 不受影响。<button data-er-action="store-reload" type="button">重新读取 Research Store</button></p>`:''}
+    <section class="er-section" aria-labelledby="er-prep-title"><h3 id="er-prep-title">数据准备</h3><div class="er-preparation"><div><h4>Task Card 数据 · 只读当前 V5</h4>${erFacts([['Task Card Records',c.records],['实际已入场',c.entered],['Initial Stop 完整',c.stops]])}<p class="er-muted">Research Trades 仅列出实际已入场记录，不创建新的交易 Truth。</p></div><div><h4>Tradovate · 仅在浏览器内存解析</h4><div class="er-file-grid">${[['fills','Fills.csv'],['orders','Orders.csv'],['positions','Position History.csv']].map(([k,label])=>`<label>${label}<input type="file" data-er-file="${k}" aria-label="${label}" accept=".csv,text/csv"></label>`).join('')}</div>${erFacts([['Fills',c.fills],['Orders',c.orders],['Position History',c.positions],['Logical Trades Closed',c.closed??'待确认 Flat'],['Logical Trades Open',c.open??'待确认 Flat']])}</div></div><label class="er-flat"><input type="checkbox" data-er-flat aria-label="我确认本次 Tradovate 导出窗口开始时相关账户/合约均为 Flat"${model.flatConfirmed?' checked':''}>我确认本次 Tradovate 导出窗口开始时相关账户/合约均为 Flat</label><p class="er-muted"><code>${erEscape(model.boundaryStatus)}</code> · 更换 Fills 后需要重新确认。</p>
+    <details class="er-bundle"><summary>Market Data Bundle · ${model.bundle?model.bundle.series.length+' Series':'等待行情数据'}</summary><label>Market Data Bundle JSON<input type="file" data-er-file="bundle" aria-label="Market Data Bundle JSON" accept=".json,application/json"></label><p class="er-muted">无 Bundle 仍可完成 Task Card ↔ Tradovate reconciliation；不会伪造路径。</p>${model.bundle?`<p>Source：${erEscape(model.bundle.source)} · ${erEscape(model.bundle.validation.qualityStatus)}</p><div class="er-series">${model.bundle.series.map(s=>`<article><b>${erEscape(s.role)}</b><p>${erEscape(s.symbol)} · ${s.timeframeMs/60000}M</p><p>Coverage：${erEscape(erTime(s.coverageStart))} → ${erEscape(erTime(s.coverageEnd))}</p><code>${erEscape(s.sourceMode)}</code></article>`).join('')}</div>`:''}</details><div class="er-actions"><button type="button" data-er-action="request-export"${!model.selected?.logicalTradeId?' disabled':''}>导出行情请求（当前交易）</button><button type="button" data-er-action="store-export">导出 Research Store JSON</button><label>导入 Research Store JSON<input type="file" data-er-file="store" aria-label="导入 Research Store JSON" accept=".json,application/json"></label></div>${model.pendingStore?`<div class="er-import-preview"><p>将替换独立 Research Store（${model.pendingStore.sequence} 条人工决定及研究设置），不修改 Task Card。</p><button type="button" data-er-action="store-confirm">确认导入 Research Store</button><button type="button" data-er-action="store-cancel">取消研究导入</button></div>`:''}</section>
+    <div class="er-columns"><section class="er-section er-trade-list" aria-labelledby="er-list-title"><h3 id="er-list-title">Research Trades · ${model.visibleTrades.length}</h3><div class="er-filters">${erSelect('setup','Setup',[['ALL','全部'],['PB','PB'],['BOF','BOF'],['BOF_TO_PB','BOF→PB']],p.setup)}${erSelect('family','品种',[['ALL','全部品种'],['GC','GC'],['CL','CL'],['ES','ES']],p.family)}${erSelect('quality','匹配质量',[['ALL','全部质量'],['READY','READY'],['REVIEW_REQUIRED','REVIEW'],['BLOCKED','BLOCKED']],p.quality)}</div><p class="er-muted">列表质量来自匹配与 Execution QA；行情和 Replay 各自显示质量。</p><div class="er-trades">${model.visibleTrades.length?model.visibleTrades.map(t=>`<button type="button" class="er-trade${model.selected?.opportunityId===t.opportunityId?' is-selected':''}" data-er-action="select" data-opportunity="${erEscape(t.opportunityId)}" aria-pressed="${model.selected?.opportunityId===t.opportunityId}"><span class="er-trade-top"><b>${erEscape(t.researchFamily)} · ${erEscape(t.direction)}</b>${erQuality(t.qualityStatus)}</span><span>${erEscape(t.originalSetup)}${t.hasConversion?' · BOF→PB':''}</span><span>日期 / Task Entry：${erEscape(erTime(t.taskEntryConfirmedAt))}</span><span>Actual Entry：${erEscape(erTime(t.actualEntryTime))}</span><span>Initial Stop：${erNumber(t.initialStop)}</span><code>${erEscape(t.matchingStatus)}</code></button>`).join(''):'<p class="er-empty">暂无符合条件的 Research Trades。请准备数据或调整过滤条件。</p>'}</div></section><div class="er-detail">${erDetails(model.selected)}</div></div></div>`;
+}
+
+return {formatExcursion, describeTrace, renderWorkbench};
+})();
+erModuleRegistry["src/exit-research/market-request.js"] = (() => {
+const { resolveContextMarket, MARKET_TIMEFRAMES, PRICE_SOURCE_MODES } = erModuleRegistry["src/exit-research/market-config.js"];
+const { executionProductForFamily } = erModuleRegistry["src/exit-research/symbol-map.js"];
+const validTime = value => Number.isSafeInteger(value) && value >= 0;
+function planMarketDataRequests(trade, { contextDefaults } = {}) {
+  if (!trade || typeof trade.researchTradeId !== 'string' || !trade.researchTradeId ||
+    executionProductForFamily(trade.researchFamily) === null || trade.executionProduct !== executionProductForFamily(trade.researchFamily) || typeof trade.executionContract !== 'string' || !trade.executionContract ||
+    !validTime(trade.actualEntryTime) || !validTime(trade.actualExitTime) || trade.actualExitTime < trade.actualEntryTime) {
+    return { schemaVersion: 1, researchTradeId: trade?.researchTradeId ?? null, status: 'BLOCKED', qualityReasons: ['RESEARCH_EXECUTION_WINDOW_INVALID'], requests: [] };
+  }
+  const context = resolveContextMarket(trade, contextDefaults);
+  const requestedWindow = { requiredStartAt: trade.actualEntryTime, requiredEndAt: trade.actualExitTime, includeOverlappingBars: true, timestampSemantics: 'BAR_OPEN_TIME' };
+  return { schemaVersion: 1, researchTradeId: trade.researchTradeId, status: trade.qualityStatus === 'BLOCKED' ? 'BLOCKED' : 'PLANNED',
+    qualityReasons: trade.qualityStatus === 'BLOCKED' ? ['STEP3_BLOCKED'] : [], detailMode: 'ON_DEMAND', requests: [
+      { role: 'EXECUTION_PRIMARY', researchFamily: trade.researchFamily, desiredProduct: trade.executionProduct, desiredContract: trade.executionContract,
+        providerSymbol: null, priceSourcePriority: [...PRICE_SOURCE_MODES], timeframeMs: MARKET_TIMEFRAMES.PRIMARY, ...requestedWindow },
+      { role: 'CONTEXT', researchFamily: trade.researchFamily, ...context, providerSymbol: null, timeframeMs: MARKET_TIMEFRAMES.CONTEXT, ...requestedWindow }
+    ] };
+}
+
+return {planMarketDataRequests};
+})();
+erModuleRegistry["src/exit-research/replay-request.js"] = (() => {
+const { planMarketDataRequests } = erModuleRegistry["src/exit-research/market-request.js"];
+function planReplayMarketDataRequests(trade, { replayHardEndAt } = {}) {
+  if (!Number.isSafeInteger(replayHardEndAt) || replayHardEndAt <= trade?.actualEntryTime) return {
+    schemaVersion: 1, purpose: 'POLICY_REPLAY', researchTradeId: trade?.researchTradeId ?? null, status: 'BLOCKED', qualityReasons: ['REPLAY_HARD_END_INVALID'], requests: [] };
+  // Temporary request adapter only. Does not change Actual Holding truth or its request API.
+  const plan = planMarketDataRequests({ ...trade, actualExitTime: replayHardEndAt });
+  return { ...plan, purpose: 'POLICY_REPLAY', replayHardEndAt, requests: plan.requests.filter(r => r.role === 'EXECUTION_PRIMARY') };
+}
+
+return {planReplayMarketDataRequests};
+})();
+erModuleRegistry["src/exit-research/ui/export.js"] = (() => {
+const { planMarketDataRequests } = erModuleRegistry["src/exit-research/market-request.js"];
+const { planReplayMarketDataRequests } = erModuleRegistry["src/exit-research/replay-request.js"];
+function buildMarketRequestExport(model) {
+  const eligible = model.selected ? [model.selected] : model.trades;
+  return { schemaVersion: 1, purpose: 'EXIT_RESEARCH_MARKET_REQUEST', windowStartAssumption: model.flatConfirmed ? 'FLAT_CONFIRMED_BY_USER' : 'WINDOW_START_FLAT_UNCONFIRMED',
+    trades: eligible.filter(t => t.logicalTradeId !== null).map(t => {
+      const configured = Number.isSafeInteger(t.settings.replayHardEndAt) && t.settings.replayHardEndAt > t.actualEntryTime;
+      return { researchTradeId: t.researchTradeId, executionProduct: t.executionProduct, executionContract: t.executionContract,
+        actualEntry: t.actualEntryTime, actualExit: t.actualExitTime, replayHardEnd: { status: configured ? 'configured' : 'pending', at: configured ? t.settings.replayHardEndAt : null },
+        actual: planMarketDataRequests(t), replay: configured ? planReplayMarketDataRequests(t, { replayHardEndAt: t.settings.replayHardEndAt }) : { status: 'pending', qualityReasons: ['REPLAY_HARD_END_REQUIRED'], requests: [] },
+        detail: { mode: 'ON_DEMAND', role: 'EXECUTION_DETAIL', requestedWhen: ['ENTRY_EXIT_BOUNDARY_AMBIGUOUS','REPLAY_BOUNDARY_AMBIGUOUS'], executionProduct: t.executionProduct, executionContract: t.executionContract, requiredStartAt: t.actualEntryTime, requiredEndAt: configured ? t.settings.replayHardEndAt : t.actualExitTime, timestampSemantics: 'BAR_OPEN_TIME' } };
+    }) };
+}
+function downloadResearchJson(value, name, environment = globalThis) {
+  const blob = new environment.Blob([JSON.stringify(value, null, 2)], {type:'application/json;charset=utf-8'}), url = environment.URL.createObjectURL(blob);
+  const a = environment.document.createElement('a'); a.href = url; a.download = name; a.click(); environment.setTimeout(() => environment.URL.revokeObjectURL(url), 1000);
+}
+
+return {buildMarketRequestExport, downloadResearchJson};
+})();
+erModuleRegistry["src/exit-research/ui/controller.js"] = (() => {
+const { parseTradovateFillsCsv, parseTradovateOrdersCsv, parseTradovatePositionHistoryCsv } = erModuleRegistry["src/exit-research/tradovate-csv.js"];
+const { validateMarketDataBundle } = erModuleRegistry["src/exit-research/market-data.js"];
+const { applyManualMatch, applyManualReject } = erModuleRegistry["src/exit-research/manual-matches.js"];
+const { parseTradovateTime } = erModuleRegistry["src/exit-research/time.js"];
+const { epochMillis } = erModuleRegistry["src/exit-research/research-common.js"];
+const { RESEARCH_UI_KEY, createWorkbenchStore, parseWorkbenchStore, serializeWorkbenchStore, validateWorkbenchStore } = erModuleRegistry["src/exit-research/ui/store.js"];
+const { buildWorkbenchModel } = erModuleRegistry["src/exit-research/ui/view-model.js"];
+const { renderWorkbench } = erModuleRegistry["src/exit-research/ui/render.js"];
+const { buildMarketRequestExport, downloadResearchJson } = erModuleRegistry["src/exit-research/ui/export.js"];
+function createWorkbenchController({getIntraday, storage, onChange = () => {}}) {
+  let store = createWorkbenchStore(), raw = null, storeError = '', files = {fills:[],orders:[],positions:[],bundle:null}, flatConfirmed = false;
+  function loadStore() {
+    try { raw = storage?.getItem(RESEARCH_UI_KEY) ?? null; store = raw === null ? createWorkbenchStore() : parseWorkbenchStore(raw); storeError = ''; }
+    catch (e) { storeError = 'RESEARCH_STORE_UNAVAILABLE_OR_INVALID'; }
+  }
+  loadStore();
+  function persist(next, explicitImport = false) {
+    validateWorkbenchStore(next);
+    if (storeError && !explicitImport) throw new Error(storeError);
+    if (!storage?.setItem || !storage?.getItem) throw new Error('RESEARCH_STORAGE_UNAVAILABLE');
+    if (storage.getItem(RESEARCH_UI_KEY) !== raw) { storeError='RESEARCH_STORE_CHANGED';throw new Error(storeError); }
+    const serialized = serializeWorkbenchStore(next); storage.setItem(RESEARCH_UI_KEY, serialized);
+    if (storage.getItem(RESEARCH_UI_KEY) !== serialized) throw new Error('RESEARCH_STORE_WRITE_FAILED');
+    store = structuredClone(next); raw = serialized; storeError = ''; onChange();
+  }
+  const snapshot = () => ({ ...buildWorkbenchModel({intraday:getIntraday(),files,flatConfirmed,store}), storeError });
+  return {
+    get store() { return structuredClone(store); }, snapshot,
+    importFile(kind, text) {
+      if (typeof text !== 'string' || new TextEncoder().encode(text).length > 8*1024*1024) throw new Error('RESEARCH_FILE_TOO_LARGE');
+      let value;
+      if (kind === 'bundle') { value = JSON.parse(text); const validation = validateMarketDataBundle(value); if (!validation.valid) throw new Error(validation.qualityReasons.join(', ')); }
+      else { const parser = {fills:parseTradovateFillsCsv,orders:parseTradovateOrdersCsv,positions:parseTradovatePositionHistoryCsv}[kind]; if (!parser) throw new Error('RESEARCH_FILE_KIND_INVALID'); value = parser(text).rows; }
+      const nextFiles={...files,[kind]:value}, nextFlat=kind==='fills'?false:flatConfirmed;
+      buildWorkbenchModel({intraday:getIntraday(),files:nextFiles,flatConfirmed:nextFlat,store});
+      files=nextFiles;flatConfirmed=nextFlat;onChange();
+    },
+    confirmFlat(value) { if(typeof value!=='boolean')throw new Error('FLAT_CONFIRMATION_INVALID');buildWorkbenchModel({intraday:getIntraday(),files,flatConfirmed:value,store});flatConfirmed=value;onChange(); },
+    select(id) { const next=structuredClone(store);next.preferences.selectedOpportunityId=id;persist(next); },
+    filters(patch) {const next=structuredClone(store);Object.assign(next.preferences,patch);next.preferences.selectedOpportunityId=null;persist(next);},
+    setReplaySettings(id, settings) {const next=structuredClone(store);next.settings.tradeOverrides[id]=structuredClone(settings);persist(next);},
+    decide(action, opportunityId, logicalTradeId) {
+      const m=snapshot(), t=m.logicalTrades.find(t=>t.logicalTradeId===logicalTradeId), record=m.trades.find(r=>r.opportunityId===opportunityId);
+      if(!t || !record || !['confirm','reject'].includes(action))throw new Error('MANUAL_CANDIDATE_UNAVAILABLE');
+      const next=(action==='confirm'?applyManualMatch:applyManualReject)(store,opportunityId,t,Date.now());persist(next);
+    },
+    exportStore: () => serializeWorkbenchStore(store),
+    importStore(text) {persist(parseWorkbenchStore(text),true);},
+    reloadStore() {loadStore();onChange();}
+  };
+}
+function parseResearchHardEnd(value) {
+  if(!value.trim())return null;
+  const parsed=parseTradovateTime(value.trim(),0,'Replay Hard End');return epochMillis(parsed);
+}
+function initExitResearchWorkbench(host, {getIntraday,storage}) {
+  let message='', pendingStore=null, active=false, controller;
+  const importGenerations = new Map();
+  const paint=()=>{
+    if(!active)return;
+    try { host.innerHTML=renderWorkbench({...controller.snapshot(),message,pendingStore:pendingStore?{sequence:pendingStore.sequence}:null}); }
+    catch (e) {host.innerHTML='<p class="er-feedback" role="alert">研究数据暂不可用。首页状态卡不受影响，请检查输入。</p>';}
+  };
+  controller=createWorkbenchController({getIntraday,storage,onChange:paint});
+  const feedback=e=>{message='处理未完成：'+(e.code||e.message||'RESEARCH_INPUT_ERROR');paint();};
+  host.addEventListener('change',async event=>{
+    const el=event.target;
+    const kind=el.dataset.erFile, generation=kind?(importGenerations.get(kind)||0)+1:null;
+    if(kind)importGenerations.set(kind,generation);
+    try {
+      message='';
+      if(el.dataset.erFile){ const file=el.files?.[0];if(!file)return;if(file.size>8*1024*1024)throw new Error('RESEARCH_FILE_TOO_LARGE');el.disabled=true;const text=await file.text();
+        if(importGenerations.get(kind)!==generation)return;
+        if(kind==='store'){pendingStore=parseWorkbenchStore(text);paint();}else {controller.importFile(kind,text);message='已在本地内存解析；未写入 Task Card。';paint();} }
+      else if(el.dataset.erFlat!==undefined)controller.confirmFlat(el.checked);
+      else if(el.dataset.erFilter)controller.filters({[el.dataset.erFilter]:el.value});
+    }catch(e){if(!kind||importGenerations.get(kind)===generation)feedback(e);}
+    finally{if(el.dataset.erFile){el.disabled=false;el.value='';}}
+  });
+  host.addEventListener('click',event=>{
+    const el=event.target.closest('[data-er-action]');if(!el)return;
+    try{
+      message='';const action=el.dataset.erAction;
+      if(action==='select')controller.select(el.dataset.opportunity);
+      else if(action==='confirm'||action==='reject'){ const t=controller.snapshot().trades.find(t=>t.opportunityId===el.dataset.opportunity); const candidate=t?.candidates[Number(el.dataset.candidate)]; controller.decide(action,el.dataset.opportunity,candidate?.logicalTradeId||t?.logicalTradeId); }
+      else if(action==='store-export')downloadResearchJson(controller.store,'Exit_Research_Store_V1.json');
+      else if(action==='request-export'){const request=buildMarketRequestExport(controller.snapshot());if(!request.trades.length)throw new Error('MATCHED_RESEARCH_TRADE_REQUIRED');downloadResearchJson(request,'Exit_Research_Market_Request.json');}
+      else if(action==='store-confirm'){if(!pendingStore)throw new Error('RESEARCH_IMPORT_NOT_PREVIEWED');controller.importStore(serializeWorkbenchStore(pendingStore));pendingStore=null;message='Research Store 已恢复；Task Card 未修改。';paint();}
+      else if(action==='store-cancel'){pendingStore=null;paint();}
+      else if(action==='store-reload'){controller.reloadStore();}
+    }catch(e){feedback(e);}
+  });
+  host.addEventListener('submit',event=>{
+    if(!event.target.matches('[data-er-settings]'))return;event.preventDefault();
+    try{const form=event.target,m=controller.snapshot(),id=m.selected?.opportunityId;if(!id)return;
+      const end=parseResearchHardEnd(form.elements.hardEnd.value),tick=form.elements.tick.value.trim()?Number(form.elements.tick.value):null;
+      if(end!==null&&(!(end>m.selected.actualEntryTime)||m.selected.actualEntryTime===null))throw new Error('REPLAY_HARD_END_INVALID');
+      controller.setReplaySettings(id,{replayHardEndAt:end,executionTickSize:tick});message='本次交易研究设置已保存。';paint();
+    }catch(e){feedback(e);}
+  });
+  return {refresh(){active=true;paint();},hide(){active=false;},controller};
+}
+
+return {createWorkbenchController, parseResearchHardEnd, initExitResearchWorkbench};
+})();
+return erModuleRegistry;
+})();
+const { initExitResearchWorkbench } = __exitResearchModules["src/exit-research/ui/controller.js"];
 
 const cardsEl = document.querySelector('#cards');
 const commodityDashboardEl = document.querySelector('#commodity-dashboard');
@@ -3108,6 +4903,7 @@ let collapsedCards = new Set();
 let storage = null;
 let commodityPreferences = null;
 let unified = null;
+let researchWorkbench = null;
 let dashboardView = null;
 let fullRiskView = null;
 let appearanceView = null;
@@ -3317,7 +5113,7 @@ function persistChime(next, changedSlotId = null) {
     chimeCoordinator?.settingsChanged(); chimeScheduler?.update(changedSlotId); storageStatus(); renderChime(); return true;
   } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); renderChime(); return false; }
 }
-function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = visibleSymbols.map(renderCard).join(''); renderHistory(); storageStatus(); renderChime(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
+function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = visibleSymbols.map(renderCard).join(''); renderHistory(); storageStatus(); renderChime(); if (globalThis.location?.hash === '#/exit-research') researchWorkbench?.refresh(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
 function openConfirmation(action, title, message, confirm, warning = '') {
   if (pending) return;
   pending = { ...action, revision: state.revision, storageRaw: lastRaw }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm; document.querySelector('#dialog-confirm').disabled = writeLocked() && action.kind !== 'ignore-legacy-chime';
@@ -3484,7 +5280,9 @@ appearanceView = initAppearance(document.querySelector('#appearance-select'), { 
   const candidate = copy(unified); candidate.preferences.appearance = nextAppearance;
   try { unified = saveUnified(candidate, {}, 'appearance_update'); lastRaw = JSON.stringify(unified); state.lastSavedAt = unified.savedAt; dashboardView?.render(); fullRiskView?.render(); storageStatus(); return true; } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); return false; }
 });
-function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else applyRoute(document, normalized); }
+try { researchWorkbench = initExitResearchWorkbench(document.querySelector('#exit-research-host'), { getIntraday: () => state, storage }); }
+catch (error) { const host = document.querySelector('#exit-research-host'); if (host) host.textContent = 'Exit Research 暂不可用；首页状态卡仍可正常使用。'; reportDiagnostic(error, { phase: 'exit_research_init' }); }
+function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else { const result = applyRoute(document, normalized); if (result.route === 'exit-research') researchWorkbench?.refresh(); else researchWorkbench?.hide(); } }
 window.addEventListener('hashchange', route); route();
 try { dashboardView = initRiskDashboard(document.querySelector('#risk-dashboard-host'), {
   getState: () => unified?.sections.riskManager,
