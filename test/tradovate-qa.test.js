@@ -20,8 +20,9 @@ async function samples(action, invalid = false) {
 }
 test('Local QA: BOM survives decoding; output contains only headers and aggregates, never execution identifiers', async () => {
   await samples(async paths => {
-    const output = execFileSync(process.execPath, ['scripts/qa-tradovate.mjs', ...paths], { encoding: 'utf8' });
+    const output = execFileSync(process.execPath, ['scripts/qa-tradovate.mjs', '--window-start-assumption=FLAT_CONFIRMED_FOR_QA', ...paths], { encoding: 'utf8' });
     const result = JSON.parse(output);
+    assert.equal(result.windowStartAssumption, 'FLAT_CONFIRMED_FOR_QA');
     assert.equal(result.files[0].metadata.bom, true); assert.equal(result.files[0].rows, 1);
     assert.equal(result.reconstruction.openPositionCount, 1); assert.equal(result.sourceFillCount, 1);
     assert.equal(result.sourceBytesUnchanged, true); assert.equal(result.deterministicRepeats, 100);
@@ -30,8 +31,15 @@ test('Local QA: BOM survives decoding; output contains only headers and aggregat
 });
 test('Local QA: invalid CSV emits structured error and no partial aggregate output', async () => {
   await samples(async paths => {
-    const result = spawnSync(process.execPath, ['scripts/qa-tradovate.mjs', ...paths], { encoding: 'utf8' });
+    const result = spawnSync(process.execPath, ['scripts/qa-tradovate.mjs', '--window-start-assumption=FLAT_CONFIRMED_FOR_QA', ...paths], { encoding: 'utf8' });
     assert.equal(result.status, 1); assert.equal(result.stdout, '');
     assert.deepEqual(JSON.parse(result.stderr), { code: 'INVALID_NUMBER', sourceRowNumber: 2, field: 'Quantity' });
   }, true);
+});
+
+
+test('Local QA: absent manual Flat confirmation refuses before reading samples and emits no trades', () => {
+  const result = spawnSync(process.execPath, ['scripts/qa-tradovate.mjs', '/missing/fills.csv', '/missing/orders.csv', '/missing/positions.csv'], { encoding: 'utf8' });
+  assert.equal(result.status, 1); assert.equal(result.stdout, '');
+  assert.deepEqual(JSON.parse(result.stderr), { code: 'WINDOW_START_FLAT_UNCONFIRMED', windowStartAssumption: 'UNCONFIRMED' });
 });

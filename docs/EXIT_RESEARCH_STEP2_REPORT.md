@@ -113,7 +113,7 @@ entryFillIds[], exitFillIds[], entryOrderIds[], exitOrderIds[], allFillIds[],
 sourceRows[], fills[], qualityFlags[]
 ```
 
-reconstructLogicalTrades 返回 {closedTrades, openPositions, fills, metadata}。
+显式确认 Flat 后 reconstructLogicalTrades 返回原 {closedTrades, openPositions, fills, metadata}，交易数据结构不变；未确认时返回 WINDOW_START_FLAT_UNCONFIRMED，两个交易数组为空，数量统计 null，不代表已证明 flat。
 metadata 包括 fillCount/groupCount/closedTradeCount/openPositionCount/flagCounts。
 时间字段是完整 time object，fills[] 保留每次真实成交时间、字段和 provenance。
 
@@ -160,7 +160,7 @@ _active=false 保留在 normalized row，但重建以 INACTIVE_FILL_UNSUPPORTED 
 实跑：
 
 ```bash
-node scripts/qa-tradovate.mjs <本地Fills路径> <本地Orders路径> <本地Position-History路径>
+node scripts/qa-tradovate.mjs --window-start-assumption=FLAT_CONFIRMED_FOR_QA <本地Fills路径> <本地Orders路径> <本地Position-History路径>
 ```
 
 | 样本 | rows | accounts | contracts | parse errors | 数值表示差异 |
@@ -169,7 +169,7 @@ node scripts/qa-tradovate.mjs <本地Fills路径> <本地Orders路径> <本地Po
 | Orders | 27 | 1 | 2 | 0 | 5 |
 | Position History | 10 | 1 | 2 | 0 | 0 |
 
-仅基于 Fills：closed=5，open=0；MES=3、MGC=2。
+本报告样本统计的前提：windowStartAssumption=FLAT_CONFIRMED_FOR_QA。即调用者已人工确认样本各账户/具体合约窗口起点 Flat 的条件下，仅基于 Fills：closed=5，open=0；MES=3、MGC=2。工具不自行证明此人工前提，也未执行初始券商仓位或三表对账核验。
 16/16 Fill 均保留在交易 provenance；其中1笔同时有 MULTI_ENTRY_ORDER、MULTI_EXIT_ORDER、UNSUPPORTED_SCALE_PATTERN。
 RE_ADD_AFTER_EXIT_STARTED=0、OPEN_POSITION_AT_FILE_END=0。没有三表 reconciliation；10个 History rows 不被当成10笔 Logical Trade。
 三份 parser 和重建各重复100次，完全一致。读取前后源文件 SHA-256 比较一致；只在内存比较，不把源内容/指纹写入仓库。
@@ -210,7 +210,7 @@ bundle SHA-256：05d031cda7813d526f9f50956a789b0f4ec26c210a55bdf8c41abe298587405
 
 ## 设计限制与停止边界
 
-- 没有证据证明导出窗口起点一定 flat；本轮按授权规则从0重建，不把截断窗口的推导称为完整券商历史真相。
+- 工具没有自行证明窗口起点 Flat；必须由调用者显式确认才按0重建，未确认不输出正式 Logical Trade。5笔为该人工确认条件下的结果，不把截断窗口推导称为完整券商历史真相。
 - Orders/History 的无时区显示时间保持 unknown，Step3 时间口径/三表 QA 仍待将来授权。
 - Reversal/inactive 本轮选择拒绝；若以后需要保留并拆分，需独立授权。
 - 多订单标记保留异常事实；没有判断交易质量、盈利、R、止损、MFE/MAE。
@@ -218,3 +218,18 @@ bundle SHA-256：05d031cda7813d526f9f50956a789b0f4ec26c210a55bdf8c41abe298587405
 
 明确确认：仅一个 Step2 本地 commit；未 push、未 merge、未 deploy、未改 main 或线上版本；未进入 Step3、HTML自动匹配、TradingView行情、Replay Engine。
 完成后停止，等待人工验收。
+
+
+## 起点边界小修复验证（基于 ec24ff0）
+
+本次只显式化边界，不变更交易算法、不进入 Step3/reconciliation、不改生产 UI 或部署。
+API：REQUIRE_FLAT + 显式自身布尔 assumeFlatAtStart=true；不藏确认默认值。
+未确认返回 WINDOW_START_FLAT_UNCONFIRMED，合法 Fills 副本保留、closed/open 空、数量 null。
+KNOWN_INITIAL_POSITION 预留但尚未支持；返回 KNOWN_INITIAL_POSITION_UNSUPPORTED，不猜仓位。
+QA 必须显式传入/输出 FLAT_CONFIRMED_FOR_QA；缺少确认时在读取文件前拒绝。
+新增7条测试：未确认、显式正常、ec24ff0黄金边界/ID/VWAP100次比较、open-at-end保持、known模式、非法确认不可绕过、QA无确认拒绝。
+另对修复前保存的合成完整输出 deepEqual，确认不仅 ID/VWAP/时间，完整结果也相同。黄金 fixture 全为合成账户/日期/价格/IDs，无真实 CSV。
+全量373/373通过；npm run build、node --check dist/app.bundle.js、git diff --check通过，bundle 与 ec24ff0字节不变。
+真实文件使用明确 QA 条件重新运行：5 closed / 0 open；MES=3、MGC=2；16/16 Fill保留，flags与前次相同；100次一致，源字节不变。
+这里的人工确认是调用者给定的前置语义；本轮只验证该条件下的重建，没有独立验证初始仓位，不以运行结果反证起点 Flat。
+本修复提交 SHA 以最终交付消息/git rev-parse HEAD 为准。仍只在 codex/exit-research-v0-step2 本地提交一个修复 commit，不 push/merge/deploy；完成后停止。

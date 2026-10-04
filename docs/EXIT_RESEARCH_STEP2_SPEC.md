@@ -46,7 +46,7 @@ Normalized Fill: fillTimeRaw, normalizedLocalTime（显示 Timestamp，时区未
 
 ## Logical Trade
 
-接口 reconstructLogicalTrades(normalizedFills)；输入不原地排序/修改，完整校验再创建结果。
+接口 reconstructLogicalTrades(normalizedFills, options)；输入不原地排序/修改，完整校验再创建结果。options.initialPositionMode 为 REQUIRE_FLAT（默认要求确认）或预留 KNOWN_INITIAL_POSITION；只有 options 自身显式给出 assumeFlatAtStart=true 才可按0重建。
 按 accountId + exact contract 分组；每组按 time.sortKey，然后 sourceRowNumber 排序，不按 Fill ID 大小排序。
 净仓由 0→非0 开始，回到0关闭；正仓 LONG，负仓 SHORT。Orders/Position History 不参与。
 同方向 fills 为 entry components，反方向 fills 为 exit components，保留所有原始归一化 fill。
@@ -58,7 +58,7 @@ Reversal 选择用户允许的 fail-closed 路径：RECONSTRUCTION_REVERSAL_CROS
 文件末尾非零输出 openPositions，status=open、OPEN_POSITION_AT_FILE_END、exitCompletedAt=null，保留已发生的部分退出和所有 fills，不虚构 exit。
 ID 为 lt: + encodeURIComponent(JSON.stringify([accountId, contract, firstEntryFillId, finalExitFillId或null]))；保留 tuple 避免拼接碰撞，既不随机也不依赖时间/数组下标。Open ID 随未来完成会变化。
 返回 {closedTrades, openPositions, fills, metadata}；所有来源 rows/IDs/fills 和 flags 可审计。相同文件重复100次完全一致。
-未能从完整导出证明文件起点一定 flat：V0 按用户定义从0重建，不能把 truncated 文件的输出宣称为完整券商历史真相，Step 3 不在本轮开发。
+工具不能证明导出窗口起点 Flat。合法 Fills 未显式确认起点时返回 status=WINDOW_START_FLAT_UNCONFIRMED、空 closedTrades/openPositions，计数 null（未重建），保留原 Fills 副本。不得默认 assumeFlatAtStart=true；明确确认适用于文件中全部账户/具体合约。KNOWN_INITIAL_POSITION 返回 KNOWN_INITIAL_POSITION_UNSUPPORTED，本轮不推导初始仓位。
 
 ## 实施与验收顺序
 
@@ -74,3 +74,17 @@ ID 为 lt: + encodeURIComponent(JSON.stringify([accountId, contract, firstEntryF
 不是用显示舍入修改执行价格：Fills.price 优先 _price，displayedPrice 保留 Price；rawFields 永久保留两列原文。
 价格 alias 比较仅允许 abs(a-b) ≤ 8×Number.EPSILON×max(abs(a),abs(b))，任何差异均记录 numericRepresentationDifferences，并在 metadata 计数；超过范围仍 fail closed。数量和 ID 不使用容差。
 Orders 优先 decimalFillAvg/decimalLimit/decimalStop 作为中性价格字段；显示原文仍完整保留。此容差仅用于浮点表示校验，不参与 VWAP 舍入或 tick 对齐。
+
+## 起点边界修复（基于 ec24ff0）
+
+```javascript
+reconstructLogicalTrades(fills, {
+  initialPositionMode: 'REQUIRE_FLAT',
+  assumeFlatAtStart: true // 调用者已人工确认各账户/具体合约窗口起点 Flat
+});
+```
+
+未声明/false/继承属性不算明确确认；非法类型、未知模式/参数、KNOWN_INITIAL_POSITION 与 Flat 确认冲突均 fail closed。
+合法且确认 Flat 时，输出结构、ID、VWAP、boundaries、qualityFlags 及文件末尾 open 行为与 ec24ff0 完全不变。
+QA 调用必须先提供 --window-start-assumption=FLAT_CONFIRMED_FOR_QA，输出 windowStartAssumption=FLAT_CONFIRMED_FOR_QA；缺少参数在读文件前拒绝，不生成统计/交易。
+确认来自调用方，工具不自行证明 Flat；5笔只是该人工确认条件下的样本重建，不是三表对账或初始券商仓位核验。

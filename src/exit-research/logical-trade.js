@@ -43,7 +43,13 @@ function outputTrade(facts, net) {
     allFillIds: facts.all.map(fill => fill.fillId), sourceRows: facts.all.map(fill => fill.sourceRowNumber), fills: clone(facts.all), qualityFlags
   };
 }
-export function reconstructLogicalTrades(fills) {
+export function reconstructLogicalTrades(fills, options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options) || Object.keys(options).some(key => !['initialPositionMode', 'assumeFlatAtStart'].includes(key))) throw validationError('INVALID_INITIAL_BOUNDARY_OPTIONS', 0, 'options');
+  const initialPositionMode = Object.hasOwn(options, 'initialPositionMode') ? options.initialPositionMode : 'REQUIRE_FLAT';
+  if (!['REQUIRE_FLAT', 'KNOWN_INITIAL_POSITION'].includes(initialPositionMode)) throw validationError('INVALID_INITIAL_BOUNDARY_OPTIONS', 0, 'initialPositionMode');
+  if (Object.hasOwn(options, 'assumeFlatAtStart') && typeof options.assumeFlatAtStart !== 'boolean') throw validationError('INVALID_INITIAL_BOUNDARY_OPTIONS', 0, 'assumeFlatAtStart');
+  const assumeFlatAtStart = Object.hasOwn(options, 'assumeFlatAtStart') && options.assumeFlatAtStart === true;
+  if (initialPositionMode === 'KNOWN_INITIAL_POSITION' && assumeFlatAtStart) throw validationError('INVALID_INITIAL_BOUNDARY_OPTIONS', 0, 'assumeFlatAtStart');
   if (!Array.isArray(fills)) throw validationError('INVALID_FILLS_INPUT', 0, 'fills');
   const seen = new Set(), groups = new Map();
   for (const fill of fills) {
@@ -58,6 +64,12 @@ export function reconstructLogicalTrades(fills) {
     if (group.some(previous => previous.sourceRowNumber === fill.sourceRowNumber)) throw validationError('DUPLICATE_SOURCE_ROW', fill.sourceRowNumber, 'sourceRowNumber');
     group.push(fill);
   }
+  // Validate source facts, but do not infer any positions without a caller-confirmed boundary.
+  if (initialPositionMode === 'KNOWN_INITIAL_POSITION' || !assumeFlatAtStart) return {
+    status: initialPositionMode === 'KNOWN_INITIAL_POSITION' ? 'KNOWN_INITIAL_POSITION_UNSUPPORTED' : 'WINDOW_START_FLAT_UNCONFIRMED',
+    initialPositionMode, closedTrades: [], openPositions: [], fills: clone(fills),
+    metadata: { fillCount: fills.length, groupCount: groups.size, closedTradeCount: null, openPositionCount: null, flagCounts: {} }
+  };
   const closedTrades = [], openPositions = [];
   for (const key of [...groups.keys()].sort(compareText)) {
     const sorted = [...groups.get(key)].sort((a, b) => compareText(a.time.sortKey, b.time.sortKey) || a.sourceRowNumber - b.sourceRowNumber);

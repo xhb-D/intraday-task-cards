@@ -1,9 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { reconstructLogicalTrades as reconstruct } from '../src/exit-research/logical-trade.js';
+import { readFileSync } from 'node:fs';
+import { reconstructLogicalTrades as reconstructRaw } from '../src/exit-research/logical-trade.js';
 import { parseTradovateFillsCsv } from '../src/exit-research/tradovate-csv.js';
 import { FILL_HEADERS, fillRow, fillsCsv } from './fixtures/tradovate/synthetic.js';
+const flatOptions = Object.freeze({ initialPositionMode: 'REQUIRE_FLAT', assumeFlatAtStart: true });
+const reconstruct = fills => reconstructRaw(fills, flatOptions);
 const row = (index, side, quantity, price, options = {}) => fillRow({ fillId: `9000000000000${String(index).padStart(2, '0')}`,
   orderId: side === 'Buy' ? '900000000001001' : '900000000001002', side, quantity, price,
   time: `2035-02-03 01:02:${String(index).padStart(2, '0')}.100Z`, ...options });
@@ -140,7 +143,68 @@ test('Trades: naive and explicit time parsing produce identical output across th
     import {reconstructLogicalTrades as run} from './src/exit-research/logical-trade.js';
     import {fillRow,fillsCsv,FILL_HEADERS} from './test/fixtures/tradovate/synthetic.js';
     const rows=[fillRow(),fillRow({fillId:'900000000000002',side:'Sell',time:'2035-02-03 01:02:04.100Z',displayTime:'02/03/2035 09:02:04'})];
-    console.log(JSON.stringify([run(parse(fillsCsv(rows)).rows),run(parse(fillsCsv(rows,{headers:FILL_HEADERS.filter(h=>h!=='_timestamp')})).rows)]));`;
+    console.log(JSON.stringify([run(parse(fillsCsv(rows)).rows, {initialPositionMode:'REQUIRE_FLAT',assumeFlatAtStart:true}),run(parse(fillsCsv(rows,{headers:FILL_HEADERS.filter(h=>h!=='_timestamp')})).rows, {initialPositionMode:'REQUIRE_FLAT',assumeFlatAtStart:true})]));`;
   const results = ['UTC', 'America/Chicago', 'Asia/Shanghai'].map(TZ => execFileSync(process.execPath, ['--input-type=module', '-e', code], { encoding: 'utf8', env: { ...process.env, TZ } }));
   assert.equal(results[0], results[1]); assert.equal(results[1], results[2]);
+});
+
+
+test('Window boundary: missing or false Flat confirmation returns unconfirmed state without trades or input mutation', () => {
+  const input = deepFreeze(parse([row(1, 'Buy', 2, 100), row(2, 'Sell', 2, 101)]));
+  const before = structuredClone(input);
+  for (const options of [undefined, {}, { initialPositionMode: 'REQUIRE_FLAT' }, { assumeFlatAtStart: false }, Object.create({ assumeFlatAtStart: true })]) {
+    const result = reconstructRaw(input, options);
+    assert.equal(result.status, 'WINDOW_START_FLAT_UNCONFIRMED');
+    assert.equal(result.initialPositionMode, 'REQUIRE_FLAT');
+    assert.deepEqual(result.closedTrades, []); assert.deepEqual(result.openPositions, []);
+    assert.equal(result.metadata.closedTradeCount, null); assert.equal(result.metadata.openPositionCount, null);
+    assert.deepEqual(result.fills, input); assert.deepEqual(input, before);
+    result.fills[0].price = 0;
+    assert.deepEqual(input, before);
+  }
+});
+test('Window boundary: explicit boolean Flat confirmation keeps the existing normal result structure and facts', () => {
+  const input = parse([row(1, 'Buy', 2, 100), row(2, 'Sell', 2, 101)]);
+  const result = reconstructRaw(input, flatOptions);
+  assert.deepEqual(result, reconstructRaw(input, { assumeFlatAtStart: true }));
+  assert.deepEqual(Object.keys(result), ['closedTrades', 'openPositions', 'fills', 'metadata']);
+  assert.equal(result.closedTrades[0].quantity, 2);
+  assert.equal(result.closedTrades[0].entryVwap, 100); assert.equal(result.closedTrades[0].exitVwap, 101);
+  assert.deepEqual(result.closedTrades[0].fills, input);
+});
+test('Window boundary: explicit Flat IDs, VWAP and boundaries match frozen ec24ff0 output across 100 repeats', () => {
+  const input = parse([row(1, 'Buy', 2, 100), row(2, 'Buy', 3, 101), row(3, 'Sell', 2, 102), row(4, 'Sell', 3, 103),
+    row(5, 'Sell', 2, 201), row(6, 'Buy', 2, 199), row(7, 'Buy', 3, 104)]);
+  const expected = JSON.parse(readFileSync(new URL('./fixtures/tradovate/flat-boundary-baseline.json', import.meta.url), 'utf8'));
+  assert.equal(expected.baseCommit, 'ec24ff0f733166a7654b45fd24a28014c882c820');
+  const project = ({ logicalTradeId, direction, quantity, entryStartedAt, entryCompletedAt, entryVwap, exitStartedAt, exitCompletedAt, exitVwap, qualityFlags }) =>
+    ({ logicalTradeId, direction, quantity, entryStartedAt, entryCompletedAt, entryVwap, exitStartedAt, exitCompletedAt, exitVwap, qualityFlags });
+  for (let i = 0; i < 100; i++) {
+    const result = reconstructRaw(input, flatOptions);
+    assert.deepEqual(result.closedTrades.map(project), expected.closedTrades);
+    assert.deepEqual(result.openPositions.map(project), expected.openPositions);
+  }
+});
+test('Window boundary: explicit Flat preserves partial-entry open position at file end without a fabricated exit', () => {
+  const input = parse([row(1, 'Buy', 2, 100), row(2, 'Buy', 3, 101)]);
+  const result = reconstructRaw(input, flatOptions), open = result.openPositions[0];
+  assert.deepEqual(result.closedTrades, []); assert.equal(open.status, 'open');
+  assert.equal(open.quantity, 5); assert.equal(open.remainingQuantity, 5); assert.equal(open.entryVwap, 100.6);
+  assert.deepEqual(open.entryCompletedAt, input[1].time);
+  assert.equal(open.exitCompletedAt, null); assert.equal(open.exitStartedAt, null); assert.equal(open.exitVwap, null);
+  assert.deepEqual(open.fills, input); assert.deepEqual(open.qualityFlags, ['OPEN_POSITION_AT_FILE_END']);
+});
+test('Window boundary: known initial position mode is reserved and never treated as Flat', () => {
+  const input = parse([row(1, 'Buy', 2, 100), row(2, 'Sell', 2, 101)]);
+  const result = reconstructRaw(input, { initialPositionMode: 'KNOWN_INITIAL_POSITION' });
+  assert.equal(result.status, 'KNOWN_INITIAL_POSITION_UNSUPPORTED');
+  assert.equal(result.initialPositionMode, 'KNOWN_INITIAL_POSITION');
+  assert.deepEqual(result.closedTrades, []); assert.deepEqual(result.openPositions, []);
+});
+test('Window boundary: invalid options and truthy nonboolean confirmations cannot bypass the boundary', () => {
+  const input = parse([row(1, 'Buy', 1, 100)]);
+  for (const options of [null, 'FLAT', [], { assumeFlatAtStart: 'true' }, { assumeFlatAtStart: 1 }, { initialPositionMode: 'FLAT' },
+    { initialPositionMode: null }, { assumeFlatAtStar: true }, { initialPositionMode: 'KNOWN_INITIAL_POSITION', assumeFlatAtStart: true }]) {
+    assert.throws(() => reconstructRaw(input, options), error => error.code === 'INVALID_INITIAL_BOUNDARY_OPTIONS');
+  }
 });

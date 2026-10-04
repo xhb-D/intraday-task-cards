@@ -1,0 +1,105 @@
+{
+  "baseCommit": "ec24ff0f733166a7654b45fd24a28014c882c820",
+  "closedTrades": [
+    {
+      "logicalTradeId": "lt:%5B%2290000991%22%2C%22MESZ9%22%2C%22900000000000001%22%2C%22900000000000004%22%5D",
+      "direction": "LONG",
+      "quantity": 5,
+      "entryStartedAt": {
+        "raw": "2035-02-03 01:02:01.100Z",
+        "normalized": "2035-02-03T01:02:01.100Z",
+        "sortKey": "2035-02-03T01:02:01.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "entryCompletedAt": {
+        "raw": "2035-02-03 01:02:02.100Z",
+        "normalized": "2035-02-03T01:02:02.100Z",
+        "sortKey": "2035-02-03T01:02:02.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "entryVwap": 100.6,
+      "exitStartedAt": {
+        "raw": "2035-02-03 01:02:03.100Z",
+        "normalized": "2035-02-03T01:02:03.100Z",
+        "sortKey": "2035-02-03T01:02:03.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "exitCompletedAt": {
+        "raw": "2035-02-03 01:02:04.100Z",
+        "normalized": "2035-02-03T01:02:04.100Z",
+        "sortKey": "2035-02-03T01:02:04.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "exitVwap": 102.6,
+      "qualityFlags": []
+    },
+    {
+      "logicalTradeId": "lt:%5B%2290000991%22%2C%22MESZ9%22%2C%22900000000000005%22%2C%22900000000000006%22%5D",
+      "direction": "SHORT",
+      "quantity": 2,
+      "entryStartedAt": {
+        "raw": "2035-02-03 01:02:05.100Z",
+        "normalized": "2035-02-03T01:02:05.100Z",
+        "sortKey": "2035-02-03T01:02:05.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "entryCompletedAt": {
+        "raw": "2035-02-03 01:02:05.100Z",
+        "normalized": "2035-02-03T01:02:05.100Z",
+        "sortKey": "2035-02-03T01:02:05.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "entryVwap": 201,
+      "exitStartedAt": {
+        "raw": "2035-02-03 01:02:06.100Z",
+        "normalized": "2035-02-03T01:02:06.100Z",
+        "sortKey": "2035-02-03T01:02:06.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "exitCompletedAt": {
+        "raw": "2035-02-03 01:02:06.100Z",
+        "normalized": "2035-02-03T01:02:06.100Z",
+        "sortKey": "2035-02-03T01:02:06.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "exitVwap": 199,
+      "qualityFlags": []
+    }
+  ],
+  "openPositions": [
+    {
+      "logicalTradeId": "lt:%5B%2290000991%22%2C%22MESZ9%22%2C%22900000000000007%22%2Cnull%5D",
+      "direction": "LONG",
+      "quantity": 3,
+      "entryStartedAt": {
+        "raw": "2035-02-03 01:02:07.100Z",
+        "normalized": "2035-02-03T01:02:07.100Z",
+        "sortKey": "2035-02-03T01:02:07.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "entryCompletedAt": {
+        "raw": "2035-02-03 01:02:07.100Z",
+        "normalized": "2035-02-03T01:02:07.100Z",
+        "sortKey": "2035-02-03T01:02:07.100Z",
+        "timezone": "UTC",
+        "offsetMinutes": 0
+      },
+      "entryVwap": 104,
+      "exitStartedAt": null,
+      "exitCompletedAt": null,
+      "exitVwap": null,
+      "qualityFlags": [
+        "OPEN_POSITION_AT_FILE_END"
+      ]
+    }
+  ]
+}
