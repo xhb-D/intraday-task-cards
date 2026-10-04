@@ -95,19 +95,33 @@
 .holding-reference strong{color:var(--text-primary);font-weight:600}
 
 /* Desktop: reference sits at the upper right of the same status container. */
-.card .task.with-reference{display:grid;grid-template-columns:minmax(0,1fr) 128px;gap:10px;align-items:start}
-.with-reference .task-main{min-width:0}
+.card .task.with-reference{display:grid;grid-template-columns:minmax(0,1fr) 136px;gap:10px;align-items:stretch;min-height:288px}
+.with-reference .task-main{min-width:0;align-self:start}
 .with-reference .task-meta{flex-wrap:wrap;gap:0 6px}
 .with-reference .task-content{grid-template-columns:minmax(0,1fr);gap:9px}
 .with-reference .task-summary{gap:8px 10px}
 .with-reference .task-summary div:nth-child(n+3){padding-top:7px}
 .with-reference .task-summary dd{font-size:13px;line-height:18px}
-.with-reference .holding-reference{align-self:start;padding:6px 7px;font-size:11px;line-height:16px}
+.with-reference .holding-reference{padding:0;border:0;background:transparent;font-size:11px;line-height:16px}
 .with-reference .holding-reference-heading{display:grid;gap:2px}
-/* Mobile: status first, then reference, both remain inside task. */
+.holding-management{min-width:0;padding:7px;border:1px solid var(--border-secondary);border-radius:6px;background:var(--bg-surface-secondary);display:grid;grid-template-rows:auto minmax(0,1fr);color:var(--text-secondary)}
+.management-actions-slot{min-width:0;min-height:144px;margin-top:8px;padding-top:8px;border-top:1px solid var(--border-primary)}
+.holding-management .research-capture{padding:0;border:0;border-radius:0;background:transparent;font-size:11px;line-height:16px}
+.holding-management .research-stop,.holding-management .research-management{min-width:0;overflow-wrap:anywhere}
+.holding-management .research-stop-form{max-width:100%}
+.holding-management .research-stop-form input{max-width:100%}
+.holding-management .research-placeholder{gap:6px}
+/* Equal opportunity-control slots keep the three status frames aligned. */
+.opportunity-field>.segment,.opportunity-field>.readonly{min-height:38px}
+.card:has(.holding-management) .direction-field .option{height:36px}
+.card:has(.holding-management)>.empty{height:34px}
+/* Mobile: the same management panel follows the main status inside task. */
 @media(max-width:629px){
-  .card .task.with-reference{grid-template-columns:minmax(0,1fr)}
+  .card .task.with-reference{grid-template-columns:minmax(0,1fr);min-height:0}
+  .with-reference .task-meta{display:grid;gap:0}
   .with-reference .task-summary dd{font-size:16px;line-height:22px}
   .with-reference .holding-reference{font-size:12px;line-height:18px}
   .with-reference .holding-reference-heading{display:flex}
+  .holding-management .research-capture{font-size:12px;line-height:18px}
+  .management-actions-slot{min-height:0}
 }

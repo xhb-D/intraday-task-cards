@@ -51,7 +51,9 @@ function harness(type = null, holding = false, status = 'wait') {
 test('Production UI: idle and waiting have no stop input or BOF management controls', () => {
   for (const type of [null, 'htf_pb', 'mtf_pb']) {
     const h = harness(type);
-    assert.doesNotMatch(h.cards.innerHTML, /data-stop-input|Initial Stop：|data-action="bof-to-pb"/);
+    assert.doesNotMatch(h.cards.innerHTML, /data-stop-input|data-action="bof-to-pb"/);
+    if (type) assert.match(h.cards.innerHTML, /Initial Stop：—/);
+    else assert.doesNotMatch(h.cards.innerHTML, /Initial Stop：/);
     if (type) {
       h.click('entry'); assert.equal(h.document.querySelector('#confirm-dialog').open, true);
       h.confirm(); assert.match(h.cards.innerHTML, /Initial Stop：待记录/);
@@ -77,11 +79,11 @@ test('Production UI: BOF conversions are immediate; undo appends, preserving ori
   assert.match(h.cards.innerHTML, /data-action="bof-to-pb"/);
 });
 
-test('Production UI: original PB shows Initial Stop only and no BOF conversion', () => {
+test('Production UI: original PB shows its current management and Initial Stop without BOF conversion', () => {
   const h = harness('mtf_pb', true);
   assert.match(h.cards.innerHTML, /data-stop-input="GC"/); assert.doesNotMatch(h.cards.innerHTML, /bof-to-pb|bof-revert/);
   const capture = h.cards.innerHTML.match(/<section class="research-capture"[\s\S]*?<\/section>/)[0];
-  assert.doesNotMatch(capture, /当前管理/);
+  assert.match(capture, /当前管理：PB/);
 });
 
 test('Production UI: none remains unchanged without a holding reference', () => {
@@ -135,24 +137,61 @@ for (const [status, holding] of [['wait', false], ['signal', false], ['position'
     const h = harness('htf_pb', holding, status);
     const layout = referenceLayout(h.cards.innerHTML);
     assert.equal(layout.references.length, 1);
-    assert.equal(layout.references[0].at(-1).includes('task'), true);
+    assert.equal(layout.references[0].some(classes => classes.includes('task')), true);
+    assert.equal(layout.references[0].some(classes => classes.includes('holding-management')), true);
     assert.equal(layout.references[0].some(classes => classes.includes('task-main')), false);
-    assert.match(h.cards.innerHTML, /class="task-main"[\s\S]*class="state-title"[\s\S]*class="task-summary"[\s\S]*<\/dl><\/div><\/div><section class="holding-reference"/);
-    assert.equal(layout.captures.length, holding ? 1 : 0);
-    if (holding) assert.equal(layout.captures[0].some(classes => classes.includes('task')), false);
-    assert.doesNotMatch(h.cards.innerHTML, /<\/section><section class="holding-reference"/);
+    assert.match(h.cards.innerHTML, /class="task-main"[\s\S]*class="state-title"[\s\S]*class="task-summary"[\s\S]*<\/dl><\/div><\/div><aside class="holding-management"/);
+    assert.equal(layout.captures.length, 1);
+    assert.equal(layout.captures[0].some(classes => classes.includes('task')), true);
+    assert.equal(layout.captures[0].at(-1).includes('management-actions-slot'), true);
+    assert.doesNotMatch(h.cards.innerHTML, /<\/section><section class="research-capture"/);
   });
 }
 
-test('Production UI layout: mobile stacks the same task children without moving capture into task', () => {
+test('Production UI layout: mobile stacks main and management with capture inside the same task', () => {
   const css = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
-  assert.match(css, /\.card \.task\.with-reference\{display:grid;grid-template-columns:minmax\(0,1fr\) 128px/);
-  assert.match(css, /@media\(max-width:629px\)\{\s*\.card \.task\.with-reference\{grid-template-columns:minmax\(0,1fr\)\}/);
+  assert.match(css, /\.card \.task\.with-reference\{display:grid;grid-template-columns:minmax\(0,1fr\) 136px/);
+  assert.match(css, /@media\(max-width:629px\)\{\s*\.card \.task\.with-reference\{grid-template-columns:minmax\(0,1fr\);min-height:0\}/);
   const h = harness('htf_pb', true);
-  assert.equal(referenceLayout(h.cards.innerHTML).references[0].at(-1).includes('task'), true);
+  assert.equal(referenceLayout(h.cards.innerHTML).references[0].some(classes => classes.includes('task')), true);
   h.click('bof-to-pb');
   assert.match(h.cards.innerHTML, /class="holding-reference"[\s\S]*?当前管理：<strong>PB/);
-  assert.equal(referenceLayout(h.cards.innerHTML).captures[0].some(classes => classes.includes('task')), false);
+  assert.equal(referenceLayout(h.cards.innerHTML).captures[0].some(classes => classes.includes('task')), true);
+});
+
+for (const status of ['wait', 'signal']) {
+  test(`Unified management UI: ${status} shows read-only placeholders without fake buttons`, () => {
+    const h = harness('htf_pb', false, status);
+    const panel = h.cards.innerHTML.match(/<aside class="holding-management"[\s\S]*?<\/aside>/)[0];
+    assert.match(panel, /计划管理：<strong>BOF/);
+    assert.match(panel, /Initial Stop：—/); assert.match(panel, /当前管理：—/);
+    assert.doesNotMatch(panel, /<button|<input|<form|disabled|data-action/);
+  });
+}
+
+test('Unified management UI: three states share exactly the same outer and main skeleton', () => {
+  const shapes = ['wait', 'signal', 'position'].map(status => {
+    const h = harness('htf_pb', status === 'position', status);
+    const task = h.cards.innerHTML.match(/<section class="task[^"]*"/)[0];
+    assert.equal(task, '<section class="task with-summary with-reference"');
+    const main = h.cards.innerHTML.match(/<div class="task-main">[\s\S]*?<\/dl><\/div><\/div>/)[0];
+    assert.match(h.cards.innerHTML, /<aside class="holding-management"[^>]*><div class="management-reference-slot">/);
+    assert.match(h.cards.innerHTML, /<div class="management-actions-slot">/);
+    return main.replace(/>[^<]*</g, '><');
+  });
+  assert.equal(shapes[0], shapes[1]); assert.equal(shapes[1], shapes[2]);
+  const idle = harness();
+  assert.doesNotMatch(idle.cards.innerHTML, /holding-management|management-actions-slot|Initial Stop/);
+});
+
+test('Unified management UI: rendering placeholders and controls never adds saved fields', () => {
+  for (const status of ['wait', 'signal', 'position']) {
+    const h = harness('htf_pb', status === 'position', status);
+    const before = h.saved(); const raw = h.raw();
+    h.click('toggle-collapse'); h.click('toggle-collapse');
+    assert.deepEqual(h.saved(), before); assert.equal(h.raw(), raw);
+    assert.doesNotMatch(raw, /holdingReference|plannedManagement|currentManagement|referenceRange|referenceVersion|currentR|research-placeholder/);
+  }
 });
 
 test('Production UI: invalid prices retain input and data; successful record and correction append', () => {
