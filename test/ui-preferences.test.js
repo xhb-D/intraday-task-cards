@@ -91,7 +91,8 @@ test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态�
   assert.match(app, /entry-signal-label">入场信号<\/span><span class="entry-signal-lines"><span>均线一侧·BB收窄·气泡攻击&amp;吸收·流动性·信号K<\/span><span>原方向拒绝\+新方向位移（COC）\+价格接受（震荡）<\/span>/);
   assert.doesNotMatch(app, /data-zone|zone-confirm|zone-note|updateDraft|confirmPosition/);
   assert.match(app, /<dt class="sr-only">当前偏见<\/dt>/);
-  assert.match(app, /\$\{controls\}<section class="task/);
+  assert.match(app, /\$\{controls\}\$\{task\}/);
+  assert.match(app, /const task = `<section class="task/);
   assert.match(app, /data-action="toggle-collapse"[^]*?type="button" aria-expanded="\$\{!collapsed\}" aria-label="\$\{toggleLabel\}"/);
   assert.match(app, /class="card-hide" data-action="hide-card"[^]*?title="\$\{hideLabel\}" aria-label="\$\{hideLabel\}"/);
   assert.match(app, /function renderCommodityDashboard\(\)/);

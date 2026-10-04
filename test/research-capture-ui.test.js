@@ -94,11 +94,11 @@ test('Production UI: planned reference precedes entry for wait PB and signal BOF
   for (const [type, status, management] of [['mtf_pb', 'wait', 'PB'], ['htf_bof', 'signal', 'BOF']]) {
     const h = harness(type, false, status);
     assert.match(h.cards.innerHTML, new RegExp(`计划管理：<strong>${management}`));
-    assert.match(h.cards.innerHTML, /class="task with-summary"[\s\S]*class="holding-reference"[\s\S]*data-action="entry"/);
+    assert.match(h.cards.innerHTML, /class="task with-summary with-reference"[\s\S]*class="holding-reference"[\s\S]*data-action="entry"/);
     assert.doesNotMatch(h.cards.innerHTML, /class="research-capture"|当前 R/);
     h.click('entry'); h.confirm();
     assert.match(h.cards.innerHTML, new RegExp(`当前管理：<strong>${management}`));
-    assert.match(h.cards.innerHTML, /class="task with-summary"[\s\S]*class="holding-reference"[\s\S]*class="research-capture"[\s\S]*data-action="exit"/);
+    assert.match(h.cards.innerHTML, /class="task with-summary with-reference"[\s\S]*class="holding-reference"[\s\S]*class="research-capture"[\s\S]*data-action="exit"/);
   }
 });
 
@@ -112,6 +112,47 @@ test('Production UI: reference survives pure rerender without changing persisted
   assert.equal(references.length, 1);
   assert.match(references[0], /当前管理：<strong>PB/);
   assert.doesNotMatch(references[0], /当前 R|MTF|HTF|原始机会/);
+});
+
+// Track nesting in the actual production bundle markup; a sibling reference
+// must fail even when its text and order still look correct.
+function referenceLayout(html) {
+  const stack = [], result = { references: [], captures: [] };
+  for (const match of html.matchAll(/<\/?([a-z][\w-]*)\b([^>]*)>/g)) {
+    const [tag, name, attributes] = match;
+    if (tag.startsWith('</')) { stack.pop(); continue; }
+    const classes = (attributes.match(/class="([^"]*)"/)?.[1] || '').split(' ');
+    const parents = stack.map(item => item.classes);
+    if (classes.includes('holding-reference')) result.references.push(parents);
+    if (classes.includes('research-capture')) result.captures.push(parents);
+    if (!['input', 'br', 'hr', 'img', 'meta', 'link'].includes(name)) stack.push({ classes });
+  }
+  return result;
+}
+
+for (const [status, holding] of [['wait', false], ['signal', false], ['position', true]]) {
+  test(`Production UI layout: ${status} reference is inside task after its main status content`, () => {
+    const h = harness('htf_pb', holding, status);
+    const layout = referenceLayout(h.cards.innerHTML);
+    assert.equal(layout.references.length, 1);
+    assert.equal(layout.references[0].at(-1).includes('task'), true);
+    assert.equal(layout.references[0].some(classes => classes.includes('task-main')), false);
+    assert.match(h.cards.innerHTML, /class="task-main"[\s\S]*class="state-title"[\s\S]*class="task-summary"[\s\S]*<\/dl><\/div><\/div><section class="holding-reference"/);
+    assert.equal(layout.captures.length, holding ? 1 : 0);
+    if (holding) assert.equal(layout.captures[0].some(classes => classes.includes('task')), false);
+    assert.doesNotMatch(h.cards.innerHTML, /<\/section><section class="holding-reference"/);
+  });
+}
+
+test('Production UI layout: mobile stacks the same task children without moving capture into task', () => {
+  const css = readFileSync(new URL('../refinement.css', import.meta.url), 'utf8');
+  assert.match(css, /\.card \.task\.with-reference\{display:grid;grid-template-columns:minmax\(0,1fr\) 128px/);
+  assert.match(css, /@media\(max-width:629px\)\{\s*\.card \.task\.with-reference\{grid-template-columns:minmax\(0,1fr\)\}/);
+  const h = harness('htf_pb', true);
+  assert.equal(referenceLayout(h.cards.innerHTML).references[0].at(-1).includes('task'), true);
+  h.click('bof-to-pb');
+  assert.match(h.cards.innerHTML, /class="holding-reference"[\s\S]*?当前管理：<strong>PB/);
+  assert.equal(referenceLayout(h.cards.innerHTML).captures[0].some(classes => classes.includes('task')), false);
 });
 
 test('Production UI: invalid prices retain input and data; successful record and correction append', () => {

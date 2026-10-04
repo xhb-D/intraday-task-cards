@@ -93,3 +93,21 @@
 .holding-reference{display:grid;gap:2px;min-width:0;padding:7px 10px;border:1px solid var(--border-secondary);border-radius:7px;background:var(--bg-surface-secondary);color:var(--text-secondary);font-size:12px;line-height:18px}
 .holding-reference-heading{display:flex;justify-content:space-between;gap:4px 12px;flex-wrap:wrap}
 .holding-reference strong{color:var(--text-primary);font-weight:600}
+
+/* Desktop: reference sits at the upper right of the same status container. */
+.card .task.with-reference{display:grid;grid-template-columns:minmax(0,1fr) 128px;gap:10px;align-items:start}
+.with-reference .task-main{min-width:0}
+.with-reference .task-meta{flex-wrap:wrap;gap:0 6px}
+.with-reference .task-content{grid-template-columns:minmax(0,1fr);gap:9px}
+.with-reference .task-summary{gap:8px 10px}
+.with-reference .task-summary div:nth-child(n+3){padding-top:7px}
+.with-reference .task-summary dd{font-size:13px;line-height:18px}
+.with-reference .holding-reference{align-self:start;padding:6px 7px;font-size:11px;line-height:16px}
+.with-reference .holding-reference-heading{display:grid;gap:2px}
+/* Mobile: status first, then reference, both remain inside task. */
+@media(max-width:629px){
+  .card .task.with-reference{grid-template-columns:minmax(0,1fr)}
+  .with-reference .task-summary dd{font-size:16px;line-height:22px}
+  .with-reference .holding-reference{font-size:12px;line-height:18px}
+  .with-reference .holding-reference-heading{display:flex}
+}
