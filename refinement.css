@@ -88,3 +88,8 @@
 .research-capture small{font-size:11px;overflow-wrap:anywhere}
 .research-error{margin:0;color:var(--danger);font-size:11px}
 .research-error[hidden]{display:none}
+
+/* Derived UI reference; deliberately quieter than the task status. */
+.holding-reference{display:grid;gap:2px;min-width:0;padding:7px 10px;border:1px solid var(--border-secondary);border-radius:7px;background:var(--bg-surface-secondary);color:var(--text-secondary);font-size:12px;line-height:18px}
+.holding-reference-heading{display:flex;justify-content:space-between;gap:4px 12px;flex-wrap:wrap}
+.holding-reference strong{color:var(--text-primary);font-weight:600}

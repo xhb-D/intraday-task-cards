@@ -1567,6 +1567,34 @@ function assertResearchCapture(item, path) {
 }
 
 
+
+// UI research reference only; never persisted on an opportunity or record.
+const HOLDING_REFERENCE_V1 = Object.freeze({
+  version: 1,
+  PB: Object.freeze({ minR: 6, maxR: 10 }),
+  BOF: Object.freeze({ minR: 3, maxR: 6 })
+});
+
+function managementReferenceFor(opportunity, status) {
+  if (!opportunity || !['wait', 'signal', 'position'].includes(status)) return null;
+  const management = status === 'position' ? derivedManagementState(opportunity) : researchSetupClass(opportunity.type);
+  if (!management) return null;
+  const range = ({ minR, maxR }) => `${minR}–${maxR}R`;
+  return {
+    label: status === 'position' ? '当前管理' : '计划管理',
+    management,
+    pbRange: range(HOLDING_REFERENCE_V1.PB),
+    bofRange: range(HOLDING_REFERENCE_V1.BOF)
+  };
+}
+
+function renderHoldingReference(opportunity, status) {
+  const reference = managementReferenceFor(opportunity, status);
+  if (!reference) return '';
+  return `<section class="holding-reference" aria-label="持仓参考"><div class="holding-reference-heading"><span>持仓参考</span><span>${reference.label}：<strong>${reference.management}</strong></span></div><div>PB 重点区间：<strong>${reference.pbRange}</strong></div><div>BOF 参考区间：<strong>${reference.bofRange}</strong></div></section>`;
+}
+
+
 const CHIME_SCHEMA_VERSION = 1;
 const CHIME_LEGACY_KEY = 'natural-chime-settings';
 const CHIME_PRESETS = Object.freeze(['3', '5', '15', '30', '60', '240', 'custom']);
@@ -3241,13 +3269,14 @@ function renderCard(symbol) {
     entry = `<button class="entry${status === 'signal' ? ' hot' : ''}" data-action="entry" data-symbol="${symbol}" type="button">${symbol} 已入场</button>`;
     ending = `<div class="lifecycle"><button class="ending" data-action="end" data-symbol="${symbol}" data-value="invalid" type="button">机会失效</button><button class="ending" data-action="end" data-symbol="${symbol}" data-value="canceled" type="button">放弃机会</button></div>`;
   } else if (holding) ending = `<button class="exit" data-action="exit" data-symbol="${symbol}" type="button">${symbol} 已平仓</button>`;
+  const holdingReference = renderHoldingReference(opportunity, status);
   const research = holding ? renderResearchCapture(symbol, opportunity) : '';
   const summary = opportunity ? `<dl class="task-summary" aria-label="${symbol} 当前任务摘要"><div><dt class="sr-only">当前偏见</dt><dd data-tone="${semanticTone(card.bias)}">${BIASES[card.bias]}</dd></div><div><dt class="sr-only">交易方向</dt><dd data-tone="${semanticTone(card.direction)}">${['long', 'short'].includes(card.direction) ? `<span class="summary-direction-active" data-tone="${semanticTone(card.direction)}">${DIRECTIONS[card.direction]}</span>` : DIRECTIONS[card.direction]}</dd></div><div><dt class="sr-only">市场结构</dt><dd data-tone="${semanticTone(card.structure3m)}">${STRUCTURES_3M[card.structure3m]}</dd></div><div><dt class="sr-only">当前机会</dt><dd data-tone="neutral">${SETUP_LABELS[opportunity.type]}</dd></div></dl>` : '';
   const controls = `<div class="card-controls"${collapsed ? ' hidden' : ''}>${bias}${structure}<section class="direction-field"><span class="field-label">${holding ? '本笔交易方向' : '交易方向（市场结构不明确时看HTF缺口）'}</span>${direction}</section><section class="opportunity-field"><span class="field-label">${holding ? '本笔机会' : '当前机会'}</span>${setups}${entrySignal}</section>${stages}</div>`;
   const toggleLabel = `${collapsed ? '展开' : '收起'} ${symbol} 卡片`;
   const conflictWarning = holdingConflictWarning(card);
   const hideLabel = `隐藏 ${symbol} 卡片`;
-  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><button class="card-hide" data-action="hide-card" data-symbol="${symbol}" type="button" title="${hideLabel}" aria-label="${hideLabel}">隐藏</button><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${research}${entry}${ending}</article>`;
+  return `<article class="card state-${status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions"><button class="card-hide" data-action="hide-card" data-symbol="${symbol}" type="button" title="${hideLabel}" aria-label="${hideLabel}">隐藏</button><span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${toggleLabel}"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${controls}<section class="task${summary ? ' with-summary' : ''}"><div class="task-meta"><span>当前状态</span><span class="duration">${duration(card)}</span></div><div class="task-content"><div class="task-copy"><p class="state-title" tabindex="-1">${STAGES[status]}</p><p class="instruction">${action}<span>${prohibition}</span>${conflictWarning ? `<strong class="holding-warning">${conflictWarning}</strong>` : ''}</p></div>${summary}</div></section>${holdingReference}${research}${entry}${ending}</article>`;
 }
 function renderCommodityDashboard() {
   const hiddenSymbols = commodityPreferences.hiddenSymbols;
