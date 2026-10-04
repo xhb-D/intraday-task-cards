@@ -54,7 +54,10 @@ function transition(state, opportunity, stage, time) {
 function closeOpportunity(state, card, reason, time, migrationReason = null) {
   const opportunity = opportunityFor(card);
   if (!own(RESULTS, reason) || (reason === 'closed' && opportunity.enteredAt === null) || (reason !== 'closed' && reason !== 'rules_upgrade' && opportunity.enteredAt !== null)) throw new Error('非法结束机会');
-  opportunity.stages.at(-1).end = time; opportunity.endedAt = time; opportunity.reason = reason;
+  const lastStage = opportunity.stages.at(-1);
+  // Reject invalid close times before changing either the opportunity or its record.
+  if (!safeTime(time) || time < lastStage.start || opportunity.researchCapture.manualEvents.some(event => event.recordedAt > time)) throw new Error('结束机会时间无效');
+  lastStage.end = time; opportunity.endedAt = time; opportunity.reason = reason;
   if (reason === 'rules_upgrade') opportunity.migrationReason = migrationReason;
   syncRecord(state, opportunity); card.opportunity = null; card.idleSince = time;
 }
