@@ -6,7 +6,9 @@ export const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', b
 export const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
 export const VISIBLE_STRUCTURES_3M = Object.freeze({ bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
 export const DIRECTIONS = Object.freeze({ long: '做多', short: '做空', none: '暂无交易方向' });
-export const SETUPS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF' });
+export const SETUPS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF（恐慌或走弱 1次）' });
+// V6 creation is narrower than readable historical record types. Keep V5 compatibility intact.
+export const CREATABLE_SETUPS = Object.freeze({ mtf_pb: SETUPS.mtf_pb, htf_bof: SETUPS.htf_bof });
 export const LEGACY_SETUPS = Object.freeze({ pullback: '趋势回调', range: '区间反转', reversal: '趋势反转' });
 export const SETUP_LABELS = Object.freeze({ ...LEGACY_SETUPS, ...SETUPS });
 export const STAGES = Object.freeze({ none: '无机会', wait: '等待', signal: '找信号', position: '持仓' });

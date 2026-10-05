@@ -5,9 +5,9 @@ import { readFileSync } from 'node:fs';
 test('production bundle: index 使用 classic bundle，包含统一持久化与四路由且不依赖网络', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
-  assert.match(html, /<script src="dist\/app\.bundle\.js\?v=multi-trade-v6-m2-final-20261005"><\/script>/);
-  assert.match(html, /<link rel="stylesheet" href="natural-chime\.css\?v=multi-trade-v6-m2-final-20261005">/);
-  assert.equal((html.match(/\?v=multi-trade-v6-m2-final-20261005/g) || []).length, 9, '全部脚本和样式使用同一发布版本，避免新旧资源混载');
+  assert.match(html, /<script src="dist\/app\.bundle\.js\?v=v6-setup-hotfix-20261005"><\/script>/);
+  assert.match(html, /<link rel="stylesheet" href="natural-chime\.css\?v=v6-setup-hotfix-20261005">/);
+  assert.equal((html.match(/\?v=v6-setup-hotfix-20261005/g) || []).length, 9, '全部脚本和样式使用同一发布版本，避免新旧资源混载');
   assert.doesNotMatch(html, /type="module"/);
   assert.doesNotMatch(bundle, /^import\s/m);
   assert.doesNotMatch(bundle, /engine\.calculateRiskDecision/);

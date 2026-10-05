@@ -1,5 +1,5 @@
 import {
-  ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, SETUPS, isSetupAllowed,
+  ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, CREATABLE_SETUPS, isSetupAllowed,
   recordInitialStop as v5RecordInitialStop, correctInitialStop as v5CorrectInitialStop,
   recordBofToPb as v5RecordBofToPb, revertBofToPb as v5RevertBofToPb
 } from '../model.js';
@@ -84,7 +84,7 @@ export function changeDirection(state, symbol, direction, time = Date.now(), con
 
 export function chooseSetup(state, symbol, type, time = Date.now()) {
   return transact(state, next => {
-    if (!own(SETUPS, type)) fail('V6_SETUP_INVALID', 'type');
+    if (!own(CREATABLE_SETUPS, type)) fail('V6_SETUP_INVALID', 'type');
     if (!safeTime(time)) fail('V6_TIME_INVALID', 'time');
     const card = cardFor(next, symbol), direction = effectiveDirectionForSymbol(next, symbol);
     if (!isSetupAllowed(direction, card.structure3m, type)) return { changed: false, reason: 'context' };

@@ -1167,7 +1167,9 @@ const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', bearish:
 const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
 const VISIBLE_STRUCTURES_3M = Object.freeze({ bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
 const DIRECTIONS = Object.freeze({ long: '做多', short: '做空', none: '暂无交易方向' });
-const SETUPS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF' });
+const SETUPS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF（恐慌或走弱 1次）' });
+// V6 creation is narrower than readable historical record types. Keep V5 compatibility intact.
+const CREATABLE_SETUPS = Object.freeze({ mtf_pb: SETUPS.mtf_pb, htf_bof: SETUPS.htf_bof });
 const LEGACY_SETUPS = Object.freeze({ pullback: '趋势回调', range: '区间反转', reversal: '趋势反转' });
 const SETUP_LABELS = Object.freeze({ ...LEGACY_SETUPS, ...SETUPS });
 const STAGES = Object.freeze({ none: '无机会', wait: '等待', signal: '找信号', position: '持仓' });
@@ -1732,7 +1734,7 @@ function reportDiagnostic(error, context) {
 
 
 const intradayV6 = (() => {
-const v6Modules = {'src/model.js': {ORDER,SCHEMA_VERSION,V4_SCHEMA_VERSION,LEGACY_SCHEMA_VERSION,BIASES,STRUCTURES_3M,VISIBLE_STRUCTURES_3M,DIRECTIONS,SETUPS,LEGACY_SETUPS,SETUP_LABELS,STAGES,RESULTS,ATTENTION,copy,stateOf,hasRecord,setupLabel,isDirectionAllowed,isSetupAllowed,holdingConflictWarning,recordSnapshot,createWorkspace,changeBias,changeDirection,changeStructure,chooseSetup,setStage,markEntered,endOpportunity,markExited,deleteRecord,recordProgress,instruction,assertState,assertV4State,assertLegacyState,migrateV3Workspace,migrateV4Workspace,migrateWorkspace,researchSetupClass,effectiveInitialStop,effectiveBofToPbEvent,derivedManagementState,formatStopPrice,recordInitialStop,correctInitialStop,recordBofToPb,revertBofToPb}};
+const v6Modules = {'src/model.js': {ORDER,SCHEMA_VERSION,V4_SCHEMA_VERSION,LEGACY_SCHEMA_VERSION,BIASES,STRUCTURES_3M,VISIBLE_STRUCTURES_3M,DIRECTIONS,SETUPS,CREATABLE_SETUPS,LEGACY_SETUPS,SETUP_LABELS,STAGES,RESULTS,ATTENTION,copy,stateOf,hasRecord,setupLabel,isDirectionAllowed,isSetupAllowed,holdingConflictWarning,recordSnapshot,createWorkspace,changeBias,changeDirection,changeStructure,chooseSetup,setStage,markEntered,endOpportunity,markExited,deleteRecord,recordProgress,instruction,assertState,assertV4State,assertLegacyState,migrateV3Workspace,migrateV4Workspace,migrateWorkspace,researchSetupClass,effectiveInitialStop,effectiveBofToPbEvent,derivedManagementState,formatStopPrice,recordInitialStop,correctInitialStop,recordBofToPb,revertBofToPb}};
 v6Modules["src/intraday-v6/queries.js"] = (() => {
 const { ORDER } = v6Modules["src/model.js"];
 function assertSymbol(symbol) {
@@ -1881,7 +1883,7 @@ function assertV6State(state) {
 return {SCHEMA_VERSION,safeTime,own,fail,assertJsonData,singleRecordV5View,assertV6State};
 })();
 v6Modules["src/intraday-v6/model.js"] = (() => {
-const { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, SETUPS, isSetupAllowed, recordInitialStop: v5RecordInitialStop, correctInitialStop: v5CorrectInitialStop, recordBofToPb: v5RecordBofToPb, revertBofToPb: v5RevertBofToPb } = v6Modules["src/model.js"];
+const { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, CREATABLE_SETUPS, isSetupAllowed, recordInitialStop: v5RecordInitialStop, correctInitialStop: v5CorrectInitialStop, recordBofToPb: v5RecordBofToPb, revertBofToPb: v5RevertBofToPb } = v6Modules["src/model.js"];
 const { activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, assertSymbol } = v6Modules["src/intraday-v6/queries.js"];
 const { assertV6State, SCHEMA_VERSION, safeTime, own, fail, singleRecordV5View } = v6Modules["src/intraday-v6/validation.js"];
 const { effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, researchSetupClass } = v6Modules["src/model.js"];
@@ -1961,7 +1963,7 @@ function changeDirection(state, symbol, direction, time = Date.now(), confirmed 
 
 function chooseSetup(state, symbol, type, time = Date.now()) {
   return transact(state, next => {
-    if (!own(SETUPS, type)) fail('V6_SETUP_INVALID', 'type');
+    if (!own(CREATABLE_SETUPS, type)) fail('V6_SETUP_INVALID', 'type');
     if (!safeTime(time)) fail('V6_TIME_INVALID', 'time');
     const card = cardFor(next, symbol), direction = effectiveDirectionForSymbol(next, symbol);
     if (!isSetupAllowed(direction, card.structure3m, type)) return { changed: false, reason: 'context' };
@@ -2529,7 +2531,7 @@ const captureUi = (() => {
     const background = `<div class="card-controls"${collapsed ? ' hidden' : ''}><section class="classifier bias-field"><span class="field-label">当前偏见</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([k,v]) => option(symbol,'bias',k,v,k===card.bias)).join('')}</div></section><section class="classifier structure-field"><span class="field-label">市场结构（MTF chanlun）</span><div class="segment structure-segment" role="group" aria-label="${symbol} 市场结构">${Object.entries(VISIBLE_STRUCTURES_3M).map(([k,v]) => option(symbol,'structure',k,v,k===card.structure3m)).join('')}</div></section><section class="direction-field"><span class="field-label">交易方向<span class="direction-note">（MTF结构处于HTF波段内部且弱趋势时看HTF缺口）</span></span>${locked ? `<div class="readonly" data-tone="${tone(direction)}">${DIRECTIONS[direction]} · ${trades.length ? '跟随当前持仓' : '当前机会锁定'}</div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([k,v]) => option(symbol,'direction',k,v,k===card.direction,!isDirectionAllowed(card.bias,k))).join('')}</div>`}</section></div>`;
     const holdings = `<section class="active-trades" aria-label="${symbol} 当前持仓"><div class="capture-section-heading"><h3>当前持仓 · ${trades.length} 笔</h3>${trades.length ? action(symbol,'flatten','全部已平仓',null,null,'flatten') : ''}</div>${trades.length ? trades.map(record => renderTrade(record,stopEditors)).join('') : '<p class="holdings-empty">暂无持仓</p>'}</section>`;
     const status = opportunity?.attention ?? 'none';
-    const setups = `<div class="segment setup-segment" role="group" aria-label="${symbol} 新交易机会">${Object.entries(SETUPS).map(([k,v]) => option(symbol,'setup',k,v,opportunity?.type===k,!isSetupAllowed(direction,card.structure3m,k))).join('')}</div>`;
+    const setups = `<div class="segment setup-segment" role="group" aria-label="${symbol} 新交易机会">${Object.entries(CREATABLE_SETUPS).map(([k,v]) => option(symbol,'setup',k,v,opportunity?.type===k,!isSetupAllowed(direction,card.structure3m,k))).join('')}</div>`;
     const entrySignal = '<div class="entry-signal readonly" aria-label="入场信号"><span class="entry-signal-label">入场信号</span><span class="entry-signal-lines"><span>均线一侧·BB收窄·气泡攻击&amp;吸收·流动性·信号K</span><span>原方向拒绝+新方向位移（COC）+价格接受（震荡）</span></span></div>';
     const pending = opportunity ? `<section class="pending-task task state-${status}" id="${domId(opportunity.id)}" data-record-id="${escape(opportunity.id)}"><div class="pending-heading"><strong class="state-title" tabindex="-1">${STAGES[status]}</strong><span>${SETUP_LABELS[opportunity.type]}</span></div>${renderHoldingReference(opportunity,status)}<div class="stage-row" role="group" aria-label="${symbol} 注意力阶段">${['wait','signal'].map(stage => `<button class="stage${stage===status ? ' selected' : ''}" data-action="stage" data-symbol="${symbol}" data-opportunity-id="${escape(opportunity.id)}" data-value="${stage}" type="button" aria-pressed="${stage===status}">${STAGES[stage]}</button>`).join('')}</div>${entrySignal}${action(symbol,'entry',`${symbol} 已入场`,opportunity.id,null,'entry' + (status==='signal' ? ' hot' : ''))}<div class="lifecycle">${action(symbol,'end','机会失效',opportunity.id,'invalid','ending')}${action(symbol,'end','放弃机会',opportunity.id,'canceled','ending')}</div></section>` : '<p class="opportunity-empty">选择 Setup 即登记新机会</p>';
     return `<article class="card capture-card state-${trades.length ? 'position' : status}${collapsed ? ' is-collapsed' : ''}" data-symbol="${symbol}"><header class="card-head"><h2 class="symbol">${symbol}</h2><div class="card-head-actions">${action(symbol,'hide-card','隐藏',null,null,'card-hide')}<span class="tf">3M</span><button class="card-toggle" data-action="toggle-collapse" data-symbol="${symbol}" type="button" aria-expanded="${!collapsed}" aria-label="${collapsed ? '展开' : '收起'} ${symbol} 卡片"><span class="card-chevron" aria-hidden="true"></span></button></div></header>${background}${holdings}<section class="new-opportunity"><h3 tabindex="-1">新交易机会</h3>${setups}${pending}</section></article>`;
@@ -3469,7 +3471,7 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
 
 
 const __exitResearchModules = (() => {
-const erModuleRegistry = {'src/model.js': {ORDER, SCHEMA_VERSION, V4_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, LEGACY_SETUPS, SETUP_LABELS, STAGES, RESULTS, ATTENTION, copy, stateOf, hasRecord, setupLabel, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, recordSnapshot, createWorkspace, changeBias, changeDirection, changeStructure, chooseSetup, setStage, markEntered, endOpportunity, markExited, deleteRecord, recordProgress, instruction, assertState, assertV4State, assertLegacyState, migrateV3Workspace, migrateV4Workspace, migrateWorkspace, researchSetupClass, effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, formatStopPrice, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb}};
+const erModuleRegistry = {'src/model.js': {ORDER, SCHEMA_VERSION, V4_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, CREATABLE_SETUPS, LEGACY_SETUPS, SETUP_LABELS, STAGES, RESULTS, ATTENTION, copy, stateOf, hasRecord, setupLabel, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, recordSnapshot, createWorkspace, changeBias, changeDirection, changeStructure, chooseSetup, setStage, markEntered, endOpportunity, markExited, deleteRecord, recordProgress, instruction, assertState, assertV4State, assertLegacyState, migrateV3Workspace, migrateV4Workspace, migrateWorkspace, researchSetupClass, effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, formatStopPrice, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb}};
 erModuleRegistry["src/exit-research/csv.js"] = (() => {
 // Strict comma-separated text parser. No IO, coercion, recovery or partial results.
 function validationError(code, sourceRowNumber, field) {
@@ -5088,7 +5090,7 @@ const POLICY_LABELS = Object.freeze({ PB_BASELINE_V1: 'PB 基准管理 V1', BOF_
 const EXIT_REASON_LABELS = Object.freeze({ STOP_TRIGGERED: '保护位触发', STOP_GAP_THROUGH: '价格跳过保护位后退出', INITIAL_STOP: '初始止损触发', HARD_CEILING: '达到固定上限后退出', HARD_CEILING_EXIT: '达到固定上限后退出', REPLAY_HARD_END: '到达研究截止时间', SOFT_CEILING: '进入高盈利保护阶段' });
 const TRACE_EVENT_LABELS = Object.freeze({ ENTRY: '真实入场', INITIAL_STOP_ACTIVE: '初始止损生效', BAR_STARTED: '开始下一根 5M，使用此前已知保护位', ENTRY_BOUNDARY_IGNORED_FOR_POLICY_ACTIVATION: '入场边界不确定区间未用于策略激活', MFE_UPDATED: '更新最大已确认 MFE', MILESTONE_REACHED: '达到 {milestone}R', STAGE_CONFIRMED: '确认进入保护阶段', STAGE_EFFECTIVE: '管理阶段正式生效', PROTECTION_CALCULATED: '计算新的保护位', PROTECTION_EFFECTIVE: '新保护位生效', STOP_TRIGGERED: '保护位触发退出', BOF_TO_PB_MANUAL_RECORDED: '人工判断 BOF → PB', BOF_TO_PB_MANUAL_REVERTED: '撤销 BOF → PB，恢复 BOF 管理', POLICY_SWITCH_EFFECTIVE: '{setup} 管理正式生效', HARD_CEILING_CONFIRMED: '确认达到固定上限', HARD_CEILING_EXIT: '达到固定上限后退出', REPLAY_HARD_END_EXIT: '到研究截止时间退出', REPLAY_BLOCKED: '关键数据或边界条件不足，暂不能回放' });
 const MILESTONE_STATUS_LABELS = Object.freeze({ CONFIRMED_REACHED: '已确认达到', POSSIBLE_BOUNDARY_REACHED: '可能达到', NOT_REACHED: '未达到', DATA_INCOMPLETE: '数据不足' });
-const SETUP_LABELS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱1次）', htf_bof: 'HTF BOF' });
+const SETUP_LABELS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱1次）', htf_bof: 'HTF BOF（恐慌或走弱 1次）' });
 const SETUP_SOURCE_LABELS = Object.freeze({ MANUAL_ACTUAL: '按实际人工管理', FIXED_INITIAL_SETUP: '始终按原始 Setup 管理', RESEARCH_TRANSITION_RULE: '研究转换规则：暂未启用' });
 const STAGE_LABELS = Object.freeze({ INITIAL: '初始保护', RUNNER: '持有观察', PROTECT: '盈利保护', TARGET_REVIEW: '目标复核', EXTREME: '高盈利保护', SOFT_CEILING: '高盈利保护阶段', HARD_CEILING: '固定上限' });
 const COVERAGE_LABELS = Object.freeze({ COMPLETE: '完整', INCOMPLETE: '不完整' });

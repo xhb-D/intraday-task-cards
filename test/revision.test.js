@@ -9,7 +9,7 @@ const time = offset => T0 + offset;
 test('revision: 冻结文案和 opportunity key 使用新分类', () => {
   assert.deepEqual(BIASES, { bullish: '偏多', neutral: '无偏见', bearish: '偏空' });
   assert.deepEqual(DIRECTIONS, { long: '做多', short: '做空', none: '暂无交易方向' });
-  assert.deepEqual(SETUPS, { mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF' });
+  assert.deepEqual(SETUPS, { mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF（恐慌或走弱 1次）' });
   assert.equal(holdingConflictWarning(), '');
 });
 

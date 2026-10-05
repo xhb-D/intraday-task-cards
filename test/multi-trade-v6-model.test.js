@@ -191,10 +191,10 @@ test('V6 ID operations cannot affect the wrong stage or reuse an ended trade', (
 test('V6 pending Setup replacement/end preflights time and never changes existing A', () => {
   const state=ready(), a=addTrade(state), savedA=clone(a), pending=m.chooseSetup(state,'GC','mtf_pb',T+20).opportunity;
   m.setOpportunityStage(state,pending.id,'signal',T+25);
-  rejectsUnchanged(state,()=>m.chooseSetup(state,'GC','htf_pb',T+24),'V6_TIME_INVALID');
+  rejectsUnchanged(state,()=>m.chooseSetup(state,'GC','htf_bof',T+24),'V6_TIME_INVALID');
   rejectsUnchanged(state,()=>m.endOpportunity(state,pending.id,'invalid',T+24),'V6_TIME_INVALID');
   rejectsUnchanged(state,()=>m.setOpportunityStage(state,pending.id,'wait',T+24),'V6_TIME_INVALID');
-  const next=m.chooseSetup(state,'GC','htf_pb',T+26).opportunity;
+  const next=m.chooseSetup(state,'GC','htf_bof',T+26).opportunity;
   assert.equal(pending.reason,'canceled'); assert.equal(pending.exitCapture,null); assert.notEqual(next.id,pending.id); assert.deepEqual(a,savedA);
 });
 

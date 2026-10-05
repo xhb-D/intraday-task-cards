@@ -125,3 +125,12 @@ test('M2 full backup: recovery audit, flatten groups, complete manual chains and
 
 test('M2 production preferences: hide/collapse never alter records or manual events',()=>{const {state,a}=pair();v6.recordInitialStop(state,a.id,90,T+30);const h=bundleHarness(state),raw=h.raw();h.click('toggle-collapse');h.click('toggle-collapse');assert.equal(h.raw(),raw);h.click('hide-card');assert.equal(h.raw(),raw);assert.doesNotMatch(h.html(),/data-symbol="GC"/);assert.deepEqual(h.errors,[]);});
 test('M2 production save failure: quota keeps prior truth and never announces successful capture',()=>{const {state,a}=pair(),backing=memory(JSON.stringify(makeUnified(makeEnvelope(state,T+50))),(op,key)=>{if(op==='set'&&key===UNIFIED_KEY)throw new Error('quota');}),h=bundleHarness(state,{backing}),raw=h.raw();h.click('bof-to-pb',a.id);assert.equal(h.raw(),raw);assert.match(h.document.querySelector('#announcer').textContent,/本次操作未保存/);assert.doesNotMatch(h.html(),/当前管理：PB/);assert.equal(h.saved().sections.intraday.state.revision,state.revision);});
+
+test('V6 simplified Setup: old htf_pb History still renders its original name and JSON loads unchanged',()=>{
+  const old=v5Active();old.cards.GC.opportunity.type='htf_pb';old.records[0].type='htf_pb';
+  const migrated=v6.migrateV5ToV6(old,{migratedAt:T+100}).state;
+  const h=bundleHarness(migrated);
+  assert.equal(h.errors.length,0);assert.match(h.history(),/MTF BOF（趋势走弱 1次）/);
+  assert.equal(h.saved().sections.intraday.state.records[0].type,'htf_pb');
+  assert.doesNotMatch(h.html(),/data-action="setup"[^>]*data-value="htf_pb"/);
+});
