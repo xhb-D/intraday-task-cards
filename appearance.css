@@ -139,3 +139,7 @@ body{background:var(--bg-page);color:var(--text-primary)}
 .capture-card .pending-task .stage.selected{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--on-accent);font-weight:700}
 .capture-card .direction-field .option:disabled,.capture-card .pending-task .stage:disabled{background:var(--bg-surface);border-color:var(--border-secondary);color:var(--text-tertiary);border-style:dashed;opacity:.5}
 .capture-card .direction-field .readonly[data-tone]{background:var(--bg-surface);border-color:var(--border-secondary);color:var(--text-tertiary)}
+
+/* Structure describes market state, independently of buy/sell action colors. */
+.capture-card .structure-field .option{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-secondary)}
+.capture-card .structure-field .option.selected{background:var(--text-secondary);border-color:var(--text-secondary);color:var(--bg-surface);font-weight:700}
