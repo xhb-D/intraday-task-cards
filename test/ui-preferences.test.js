@@ -1,3 +1,5 @@
+// V5/M1 layout contracts run against the byte-verified frozen M1 UI artifact.
+// Current V6 production interactions are covered by multi-trade-v6-capture.test.js.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -66,7 +68,7 @@ test('UI preference: 重绘抛错或无 requestAnimationFrame 时仍恢复滚动
 });
 
 test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态且具备可访问语义', () => {
-  const app = readFileSync(new URL('../src/app.js', import.meta.url), 'utf8');
+  const app = readFileSync(new URL('./fixtures/frozen-m1/app.txt', import.meta.url), 'utf8');
   const css = `${readFileSync(new URL('../refinement.css', import.meta.url), 'utf8')}\n${readFileSync(new URL('../appearance.css', import.meta.url), 'utf8')}`;
   assert.match(app, /const summary = opportunity \?[^]*?BIASES\[card\.bias\][^]*?DIRECTIONS\[card\.direction\][^]*?STRUCTURES_3M\[card\.structure3m\][^]*?SETUP_LABELS\[opportunity\.type\]/);
   const semanticToneSource = app.match(/const semanticTone = (value => [^;]+);/);
@@ -132,7 +134,7 @@ test('UI contract: 阶段控制在状态面板前，隐藏控件不触碰状态�
 });
 
 test('production bundle: 折叠与隐藏点击路径可执行，且不会写入交易状态', () => {
-  const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
+  const bundle = readFileSync(new URL('./fixtures/frozen-m1/app.bundle.txt', import.meta.url), 'utf8');
   const elements = new Map();
   const element = () => {
     const children = [];

@@ -1,3 +1,5 @@
+// V5/M1 layout contracts run against the byte-verified frozen M1 UI artifact.
+// Current V6 production interactions are covered by multi-trade-v6-capture.test.js.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -30,7 +32,7 @@ function harness(type = null, holding = false, status = 'wait') {
     console: { error() {} }, setInterval() { return 1; }, clearInterval() {}, setTimeout() { return 1; }, clearTimeout() {},
     URL: { createObjectURL: () => '', revokeObjectURL() {} }, Blob, Intl, Date, JSON, Error, SyntaxError
   };
-  vm.runInNewContext(readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8'), context);
+  vm.runInNewContext(readFileSync(new URL('./fixtures/frozen-m1/app.bundle.txt', import.meta.url), 'utf8'), context);
   const cards = document.querySelector('#cards');
   const click = action => cards.listeners.click({ detail: 1, target: { closest: () => ({ disabled: false, dataset: { action, symbol: 'GC' } }) } });
   const submit = value => {

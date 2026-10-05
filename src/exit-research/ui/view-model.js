@@ -1,3 +1,4 @@
+import { captureResearchInput, blockOverlappingResearch } from './capture-adapter.js';
 import { effectiveInitialStop } from '../../model.js';
 import { reconstructLogicalTrades } from '../logical-trade.js';
 import { buildResearchTrades } from '../research-trade.js';
@@ -8,10 +9,12 @@ import { POLICIES_V1 } from '../policies-v1.js';
 import { replayExitPolicy } from '../replay-engine.js';
 export function buildWorkbenchModel({ intraday, files, flatConfirmed, store }) {
   // Detached data only: frozen adapters never receive live canonical references.
-  const records = structuredClone(intraday?.records || []), entered = records.filter(r => r.enteredAt !== null);
+  const input = captureResearchInput(intraday), records = input.records, entered = records.filter(r => r.enteredAt !== null);
   const reconstruction = reconstructLogicalTrades(files.fills || [], { assumeFlatAtStart: flatConfirmed === true });
   const logicalTrades = reconstruction.closedTrades;
-  const result = buildResearchTrades(entered, logicalTrades, { orders: files.orders || [], positionHistory: files.positions || [], allExecutionFills: files.fills || [], manualStore: store });
+  const result = buildResearchTrades(input.eligible, logicalTrades, { orders: files.orders || [], positionHistory: files.positions || [], allExecutionFills: files.fills || [], manualStore: store });
+  const blocked = blockOverlappingResearch(buildResearchTrades(input.blocked, [], { manualStore: store }));
+  result.matches.push(...blocked.matches); result.researchTrades.push(...blocked.researchTrades);
   const matches = new Map(result.matches.map(m => [m.opportunityId, m])), logicalMap = new Map(logicalTrades.map(t => [t.logicalTradeId, t]));
   const trades = result.researchTrades.map(t => {
     const matchingIds = matches.get(t.opportunityId)?.candidateLogicalTradeIds || [];
@@ -35,7 +38,7 @@ export function buildWorkbenchModel({ intraday, files, flatConfirmed, store }) {
     const replays = replayStatus === 'EXECUTED' ? policies.flatMap(policy => sources.map(setupStateSource => replayExitPolicy(t, files.bundle, { policyId: policy.policyId, setupStateSource, replayHardEndAt: end, executionTickSize: t.settings.executionTickSize }))) : [];
     selected = { ...t, metrics, marketStatus: metrics?.qualityStatus || 'WAITING_MARKET_DATA', replayStatus, replays };
   }
-  return { counts: { records: records.length, entered: entered.length, stops: entered.filter(r => effectiveInitialStop(r) !== null).length, fills: files.fills?.length || 0, orders: files.orders?.length || 0, positions: files.positions?.length || 0, closed: flatConfirmed ? logicalTrades.length : null, open: flatConfirmed ? reconstruction.openPositions.length : null },
+  return { captureVersion: intraday?.schemaVersion ?? 5, counts: { records: records.length, entered: entered.length, stops: entered.filter(r => effectiveInitialStop(r) !== null).length, fills: files.fills?.length || 0, orders: files.orders?.length || 0, positions: files.positions?.length || 0, closed: flatConfirmed ? logicalTrades.length : null, open: flatConfirmed ? reconstruction.openPositions.length : null },
     boundaryStatus: reconstruction.status || 'FLAT_CONFIRMED', flatConfirmed: flatConfirmed === true, logicalTrades, trades, visibleTrades, selected, preferences: structuredClone(p),
     bundle: files.bundle ? { source: files.bundle.source, sourceVersion: files.bundle.sourceVersion, validation: validateMarketDataBundle(files.bundle), series: files.bundle.series.map(s => ({ seriesId: s.seriesId, role: s.role, symbol: s.providerSymbol, timeframeMs: s.timeframeMs, coverageStart: s.coverageStart, coverageEnd: s.coverageEnd, sourceMode: s.priceSourceMode })) } : null };
 }

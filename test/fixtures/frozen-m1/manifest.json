@@ -1,0 +1,9 @@
+{
+  "base": "b6cc7e8eba910b224f4fb3c98535e308e44fcc16",
+  "files": {
+    "app.bundle.txt": "7372cfb300effc6d5283683b610675900fdd87f133e756203d2cd26176ac2a6c",
+    "app.txt": "63f4fd3f9358222c384015ac974831b267323f725791e52239efab6d48acd3d8",
+    "build.txt": "c7c954ffd2794f646b5d8348761311936cb09878925ac109dc84ff34dceab4b9",
+    "research-bundle.txt": "cc1755466b89775a6213feb6618702d1bb03542d70826baaacd066a9dc8d94fc"
+  }
+}

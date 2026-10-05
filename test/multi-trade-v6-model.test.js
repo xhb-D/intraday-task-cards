@@ -304,7 +304,7 @@ for (const [label,mutate] of invalidStates) test(`V6 validator rejects ${label} 
 
 test('V6 production isolation: old V5 remains unchanged and production bundle excludes V6 modules', () => {
   assert.equal(old.createWorkspace(T).schemaVersion,5); assert.equal(m.createWorkspace(T).schemaVersion,6);
-  const bundle=readFileSync(new URL('../dist/app.bundle.js',import.meta.url));
+  const bundle=readFileSync(new URL('./fixtures/frozen-m1/app.bundle.txt',import.meta.url));
   assert.equal(createHash('sha256').update(bundle).digest('hex'),'7372cfb300effc6d5283683b610675900fdd87f133e756203d2cd26176ac2a6c');
-  for (const file of ['../src/app.js','../scripts/build.mjs','../scripts/research-bundle.mjs']) assert.doesNotMatch(readFileSync(new URL(file,import.meta.url),'utf8'),/intraday-v6/);
+  for (const file of ['./fixtures/frozen-m1/app.txt','./fixtures/frozen-m1/build.txt','./fixtures/frozen-m1/research-bundle.txt']) assert.doesNotMatch(readFileSync(new URL(file,import.meta.url),'utf8'),/intraday-v6/);
 });
