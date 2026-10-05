@@ -128,7 +128,7 @@ body{background:var(--bg-page);color:var(--text-primary)}
 .summary-direction-active[data-tone="bearish"]{border-color:color-mix(in srgb,var(--semantic-bearish) 58%,var(--border-primary));background:color-mix(in srgb,var(--semantic-bearish) 13%,var(--bg-surface-secondary));box-shadow:0 0 9px color-mix(in srgb,var(--semantic-bearish) 22%,transparent);color:var(--semantic-bearish)}
 .card .entry,.card .entry.hot{background:var(--bg-surface-secondary);border-color:var(--border-primary);border-style:dashed;color:var(--text-secondary)}
 
-/* V6 home only: selection is filled; available choices and readonly are quieter. */
+/* V6 home only: selection is filled; locked direction retains its action color. */
 .capture-card .direction-field .field-label{white-space:normal}
 .capture-card .direction-note{font-size:10px;font-weight:400;letter-spacing:0;color:var(--text-tertiary)}
 .capture-card .direction-field .option,.capture-card .pending-task .stage{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-secondary)}
@@ -138,7 +138,9 @@ body{background:var(--bg-page);color:var(--text-primary)}
 .capture-card .direction-field .option.selected{background:var(--capture-selection);border-color:var(--capture-selection);color:var(--on-accent);font-weight:700}
 .capture-card .pending-task .stage.selected{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--on-accent);font-weight:700}
 .capture-card .direction-field .option:disabled,.capture-card .pending-task .stage:disabled{background:var(--bg-surface);border-color:var(--border-secondary);color:var(--text-tertiary);border-style:dashed;opacity:.5}
-.capture-card .direction-field .readonly[data-tone]{background:var(--bg-surface);border-color:var(--border-secondary);color:var(--text-tertiary)}
+.capture-card .direction-field .readonly[data-tone]{--capture-direction:var(--theme-accent);background:color-mix(in srgb,var(--capture-direction) 14%,var(--bg-surface));border-color:var(--capture-direction);color:var(--capture-direction)}
+.capture-card .direction-field .readonly[data-tone="bullish"]{--capture-direction:var(--semantic-bullish)}
+.capture-card .direction-field .readonly[data-tone="bearish"]{--capture-direction:var(--semantic-bearish)}
 
 /* Structure describes market state, independently of buy/sell action colors. */
 .capture-card .structure-field .option{background:var(--bg-surface-secondary);border-color:var(--border-primary);color:var(--text-secondary)}
