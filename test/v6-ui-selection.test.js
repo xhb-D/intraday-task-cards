@@ -5,7 +5,7 @@ import * as v6 from '../src/intraday-v6/model.js';
 import { captureUi } from '../src/capture-ui.js';
 
 const T = 1_750_000_000_000;
-const note = '（MTF结构处于HTF波段内部且弱趋势时看HTF缺口）';
+const note = 'HTF方向&gt;缺口方向&gt;MTF方向';
 function buttons(html, action) {
   return [...html.matchAll(/<button\b([^>]*)>([^]*?)<\/button>/g)]
     .map(([, attributes, label]) => ({ attributes, label, selected: /class="[^"]*\bselected\b/.test(attributes) }))
@@ -47,7 +47,7 @@ for (const direction of ['long', 'short', 'none']) {
 }
 test('V6 home title: exact replacement note remains inline within direction label', () => {
   const html = render(v6.createWorkspace(T));
-  assert.ok(html.includes(`<span class="field-label">交易方向<span class="direction-note">${note}</span></span>`));
+  assert.ok(html.includes(`<span class="field-label">交易方向 <span class="direction-note">${note}</span></span>`));
   assert.doesNotMatch(html, /市场结构不明确时看HTF缺口/);
 });
 test('V6 home readonly direction: title note preserved without restoring editable choices', () => {
@@ -62,5 +62,5 @@ test('V6 home readonly direction: title note preserved without restoring editabl
 });
 test('V6 production bundle: renders updated direction explanation', () => {
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
-  assert.ok(bundle.includes(`交易方向<span class="direction-note">${note}</span>`));
+  assert.ok(bundle.includes(`交易方向 <span class="direction-note">${note}</span>`));
 });
