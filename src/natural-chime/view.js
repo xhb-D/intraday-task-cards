@@ -1,6 +1,11 @@
 import { CHIME_PRESETS, periodMinutes, updateSlot, updateChimePreference } from './model.js';
 
 const PRESET_LABELS = Object.freeze({ '3': '每 3 分钟', '5': '每 5 分钟', '15': '每 15 分钟', '30': '每 30 分钟', '60': '每 1 小时', '240': '每 4 小时', custom: '自定义' });
+const NATIVE_STATUS_LABELS = Object.freeze({
+  CONNECTED: '已连接', DISCONNECTED: '未连接', VERSION_MISMATCH: '版本不兼容', ERROR: '异常',
+  RUNNING: '报时中', PAUSED: '已暂停', UNKNOWN: '状态未知',
+  IN_SYNC: '配置已同步', MISMATCH: '配置未同步', CONFIG_MISMATCH: '配置未同步', NONE: '配置未同步'
+});
 
 function node(tag, className, text = '') {
   const element = document.createElement(tag);
@@ -184,8 +189,10 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
 
   function applyRuntime(status, messageText = '') {
     if (mode === 'native') {
-      const configText = status.configState === 'MISMATCH' ? 'CONFIG_MISMATCH' : status.configState || 'UNKNOWN';
-      runtimeStatus.textContent = `后台助手 · ${status.connectionState || 'DISCONNECTED'} · protocol ${status.protocolVersion || '?'} · ${status.runtimeState || 'UNKNOWN'} · ${configText}`;
+      const connectionText = NATIVE_STATUS_LABELS[status.connectionState || 'DISCONNECTED'] || '状态未知';
+      const runtimeText = NATIVE_STATUS_LABELS[status.runtimeState || 'UNKNOWN'] || '状态未知';
+      const configText = NATIVE_STATUS_LABELS[status.configState || 'UNKNOWN'] || '状态未知';
+      runtimeStatus.textContent = `后台助手 · ${connectionText} · 协议 ${status.protocolVersion || '?'} · ${runtimeText} · ${configText}`;
       const messages = [];
       if (status.message) messages.push(status.message);
       if (status.connectionState !== 'CONNECTED') messages.push('当前后台运行状态未知；不会自动切换浏览器报时。');
