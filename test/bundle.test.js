@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 
-test('production bundle: index 使用 classic bundle，包含统一持久化与四路由且不依赖网络', () => {
+test('production bundle: index 使用 classic bundle，包含统一持久化与四路由且仅显式 Native Dev Mode 使用精确 loopback', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
   assert.match(html, /<script src="dist\/app\.bundle\.js\?v=v6-card-header-hotfix-20261006"><\/script>/);
@@ -16,7 +16,9 @@ test('production bundle: index 使用 classic bundle，包含统一持久化与�
   assert.doesNotMatch(html, /type="module"/);
   assert.doesNotMatch(bundle, /^import\s/m);
   assert.doesNotMatch(bundle, /engine\.calculateRiskDecision/);
-  assert.doesNotMatch(bundle, /https?:\/\//);
+  assert.deepEqual([...bundle.matchAll(/https?:\/\/[^'\"\s]+/g)].map(match => match[0]), ['https://127.0.0.1:17839']);
+  assert.match(bundle, /nativeMode: nativeChimeDevMode/);
+  assert.match(bundle, /if \(nativeChimeDevMode\) \{/);
   assert.match(bundle, /trading-control-center:v1/);
   assert.match(bundle, /mountRiskManager/);
   assert.match(html, /#\/home/);

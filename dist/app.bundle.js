@@ -3254,6 +3254,186 @@ function createScheduler({ coordinator, output, getChime, onStatus = () => {}, e
 
 
 
+function canonicalChimeJSON(chime) {
+  validateChime(chime);
+  const ordered = value => Array.isArray(value) ? value.map(ordered) : value && typeof value === 'object'
+    ? Object.fromEntries(Object.keys(value).sort().map(key => [key, ordered(value[key])])) : value;
+  return JSON.stringify(ordered(chime));
+}
+async function nativeConfigHash(chime, cryptoProvider = globalThis.crypto) {
+  if (!cryptoProvider?.subtle) throw new Error('当前安全环境无法验证配置哈希。');
+  const bytes = new TextEncoder().encode(canonicalChimeJSON(chime));
+  const digest = await cryptoProvider.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+}
+
+
+
+const NATIVE_PROTOCOL = 2;
+function createNativeHelperBackend({ getCanonical, isDataCurrent, onChange = () => {}, fetch: fetcher = globalThis.fetch, base = 'https://127.0.0.1:17839', hash = nativeConfigHash, timeoutMs = 5000 }) {
+  let token = null, tail = Promise.resolve(), pendingRefresh = null, actionCount = 0;
+  let snapshot = { mode: 'native', connectionState: 'DISCONNECTED', runtimeState: 'UNKNOWN', configState: 'UNKNOWN', protocolVersion: null, nativeVoices: [], capabilities: {}, message: '', appliedConfigHash: null };
+  function changed() { onChange(getStatus()); }
+  function getStatus() { return { ...snapshot, nativeVoices: [...snapshot.nativeVoices], busy: actionCount > 0 }; }
+  function compatible(data) {
+    const c = data?.capabilities;
+    return data?.ok === true && data.protocolVersion === NATIVE_PROTOCOL && c?.scheduler === 'natural-five-slot-v1' && c.sound === true && c.speech === true && c.appliedSnapshot === true && typeof c.notification === 'boolean';
+  }
+  function issue(code, message) { return Object.assign(new Error(message), { code }); }
+  async function request(route, body) {
+    const controller = new AbortController(), timer = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const options = { signal: controller.signal, credentials: 'omit', cache: 'no-store' };
+      if (body !== undefined) Object.assign(options, { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Chime-Token': token || '' }, body: JSON.stringify(body) });
+      let response;
+      try { response = await fetcher(base + route, options); } catch (cause) { throw issue('DISCONNECTED', `后台助手连接中断；当前后台运行状态未知。${cause.name || ''}`); }
+      let data;
+      try { data = await response.json(); } catch { throw issue('ERROR', '后台助手返回无效响应。'); }
+      if (!response.ok || data?.ok !== true) throw issue(data?.error === 'VERSION_MISMATCH' ? 'VERSION_MISMATCH' : 'ERROR', data?.message || data?.error || `HTTP ${response.status}`);
+      if (!compatible(data)) { snapshot.protocolVersion = data?.protocolVersion ?? null; throw issue('VERSION_MISMATCH', '后台助手版本或必需能力不兼容。'); }
+      return data;
+    } finally { clearTimeout(timer); }
+  }
+  function failed(error) {
+    token = null;
+    snapshot = { ...snapshot, connectionState: ['DISCONNECTED', 'VERSION_MISMATCH'].includes(error.code) ? error.code : 'ERROR', runtimeState: 'UNKNOWN',
+      configState: 'UNKNOWN', message: error.message };
+    changed(); return { ok: false, message: error.message };
+  }
+  function queue(action, run) {
+    if (action) { actionCount += 1; changed(); }
+    const promise = tail.then(run).catch(failed).finally(() => { if (action) { actionCount -= 1; changed(); } });
+    tail = promise.then(() => {}); return promise;
+  }
+  async function handshake() {
+    const health = await request('/health');
+    if (typeof health.sessionToken !== 'string' || !health.sessionToken) throw issue('VERSION_MISMATCH', '后台助手缺少控制握手。');
+    token = health.sessionToken;
+    snapshot = { ...snapshot, protocolVersion: health.protocolVersion, capabilities: health.capabilities };
+  }
+  async function readStatus() {
+    const data = await request('/status');
+    if (!['RUNNING', 'PAUSED'].includes(data.runtimeState) || !['NONE', 'VALID', 'CORRUPT'].includes(data.snapshotState) || (data.snapshotState === 'VALID' && !/^[a-f0-9]{64}$/.test(data.appliedConfigHash || ''))) throw issue('ERROR', '后台助手执行/配置状态无效。');
+    const canonical = getCanonical();
+    const currentHash = canonical?.chime ? await hash(canonical.chime) : null;
+    snapshot = { ...snapshot, connectionState: 'CONNECTED', runtimeState: data.runtimeState, configState: data.snapshotState === 'NONE' ? 'NONE' : data.snapshotState === 'CORRUPT' ? 'CORRUPT' : data.appliedConfigHash === currentHash ? 'IN_SYNC' : 'MISMATCH',
+      appliedConfigHash: data.appliedConfigHash, appliedRevision: data.appliedRevision, nextEvents: data.nextEvents || [], capabilities: data.capabilities, message: '', helperStatus: data };
+    changed(); return data;
+  }
+  async function syncCanonical() {
+    if (!isDataCurrent()) throw issue('ERROR', '统一存档只读、冲突或尚未安全保存；未同步后台助手。');
+    await handshake();
+    const canonical = getCanonical(), chime = structuredClone(canonical.chime), revision = canonical.revision;
+    if (!Number.isSafeInteger(revision) || revision < 0) throw issue('ERROR', '统一存档版本无效。');
+    const configHash = await hash(chime);
+    const latestHash = await hash(getCanonical().chime);
+    if (!isDataCurrent() || getCanonical().revision !== revision || latestHash !== configHash) throw issue('ERROR', '配置在同步前发生变化；未应用过期快照。');
+    const ack = await request('/config/apply', { protocolVersion: NATIVE_PROTOCOL, canonicalRevision: revision, configHash, chime });
+    if (ack.appliedConfigHash !== configHash || ack.appliedRevision !== revision || ack.snapshotState !== 'VALID') throw issue('ERROR', '后台助手配置确认不一致。');
+    return { configHash, revision };
+  }
+  function refresh() {
+    if (pendingRefresh) return pendingRefresh;
+    pendingRefresh = queue(false, async () => {
+      await handshake(); await readStatus();
+      const data = await request('/voices');
+      if (!Array.isArray(data.voices) || data.voices.some(v => typeof v.identifier !== 'string' || typeof v.name !== 'string' || !/^zh-/i.test(v.language || ''))) throw issue('ERROR', '后台中文声音列表无效。');
+      snapshot.nativeVoices = data.voices; changed(); return { ok: true };
+    }).finally(() => { pendingRefresh = null; });
+    return pendingRefresh;
+  }
+  return {
+    mode: 'native', getStatus, refresh,
+    // Telemetry and reconnect NEVER apply; only explicit actions or canonical-save callbacks do.
+    settingsSaved() { return queue(true, async () => { await syncCanonical(); await readStatus(); return { ok: true }; }); },
+    start() { return queue(true, async () => {
+      const applied = await syncCanonical();
+      const latestHash = await hash(getCanonical().chime);
+      if (!isDataCurrent() || latestHash !== applied.configHash) throw issue('ERROR', '配置在START前变化；未启动。');
+      await request('/start', { protocolVersion: NATIVE_PROTOCOL }); const status = await readStatus();
+      if (status.runtimeState !== 'RUNNING' || snapshot.configState !== 'IN_SYNC') throw issue('ERROR', '后台助手尚未确认当前配置RUNNING。');
+      return { ok: true };
+    }); },
+    pause() { return queue(true, async () => { await handshake(); await request('/pause', { protocolVersion: NATIVE_PROTOCOL }); const status = await readStatus(); if (status.runtimeState !== 'PAUSED') throw issue('ERROR', '后台助手未确认PAUSED。'); return { ok: true }; }); },
+    preview() { return queue(true, async () => { await syncCanonical(); await request('/preview', { protocolVersion: NATIVE_PROTOCOL }); await readStatus(); return { ok: true }; }); },
+    invalidate() { snapshot.message = '统一存档当前只读；后台运行状态以助手为准，不会自动修改或接管。'; changed(); },
+    getVoices() { return snapshot.nativeVoices.map(v => ({ voiceURI: v.identifier, name: v.name, lang: v.language })); }
+  };
+}
+
+
+// Selection is performed once, before creating any audible browser engine. No automatic fallback.
+function createChimeExecutionBackend({ nativeMode, createBrowser, createNative }) {
+  return nativeMode ? createNative() : createBrowser();
+}
+function isNativeChimeDevMode(search = '') { return Boolean(search) && new URLSearchParams(search).get('nativeChime') === '1'; }
+
+
+
+// Machine-local capability preference. Never enters Unified/backup or writes canonical configuration.
+const CHIME_EXECUTION_MODE_KEY = 'trading-control-center:natural-chime:execution-mode:v1';
+function readChimeExecutionPreference(storage, search = '') {
+  if (isNativeChimeDevMode(search)) return { mode: 'native', devOverride: true };
+  try {
+    const raw = storage?.getItem(CHIME_EXECUTION_MODE_KEY);
+    if (raw == null) return { mode: 'browser', startRequired: false };
+    const p = JSON.parse(raw);
+    if (p.version !== 1 || !['browser', 'native'].includes(p.mode) || typeof p.startRequired !== 'boolean' || Object.keys(p).some(k => !['version', 'mode', 'startRequired'].includes(k))) throw Error('invalid preference');
+    return p;
+  } catch { return { mode: 'native', invalid: true, startRequired: true }; } // Unknown state cannot restore a browser engine.
+}
+
+// Verify both frozen browser coordination mechanisms after global PAUSE. Never edit leases on behalf of another tab.
+async function verifyBrowserQuiescent({ backend, storage, locks, now = Date.now, wait = ms => new Promise(r => setTimeout(r, ms)), attempts = 50 }) {
+  for (let i = 0; i < attempts; i++) {
+    const s = backend.getStatus(), run = JSON.parse(storage.getItem(CHIME_RUN_KEY) || 'null'), raw = storage.getItem(CHIME_LEASE_KEY);
+    if (s.leader || s.runIntent !== 'paused' || s.coordinationError || run?.intent !== 'paused' || run.version !== 1) return false;
+    let leaseClear = raw === null;
+    if (raw !== null) {
+      const lease = JSON.parse(raw);
+      leaseClear = lease.version === 1 && Number.isFinite(lease.expiresAt) && Number.isFinite(lease.heartbeatAt) && now() >= lease.heartbeatAt && lease.expiresAt <= now();
+    }
+    let lockClear = true;
+    if (locks?.request) {
+      lockClear = false;
+      await locks.request(CHIME_LOCK_NAME, { mode: 'exclusive', ifAvailable: true }, lock => { lockClear = Boolean(lock); });
+    } else if (s.supported && s.mode === 'web-lock') return false;
+    if (leaseClear && lockClear) return true;
+    await wait(200);
+  }
+  return false;
+}
+
+function createChimeModeSwitch({ backend, createNative, storage, verifyBrowser, reload, onChange = () => {} }) {
+  let busy = false, message = '';
+  const status = () => ({ busy, message });
+  async function switchMode(next) {
+    if (busy || !['browser', 'native'].includes(next) || next === backend.mode) return { ok: false };
+    busy = true; message = ''; onChange(status());
+    try {
+      if (backend.mode === 'browser') {
+        const result = await backend.pause();
+        if (!result?.ok || !(await verifyBrowser())) throw Error('尚未确认浏览器报时权已释放；未启用后台助手。');
+        backend.stopForSwitch?.();
+        const native = createNative();
+        // An already-running helper must also be stopped before explicit mode setup changes its snapshot.
+        if (!(await native.pause()).ok || native.getStatus().runtimeState !== 'PAUSED') throw Error('无法连接并确认后台助手已暂停；浏览器保持暂停。');
+        if (!(await native.settingsSaved()).ok || native.getStatus().configState !== 'IN_SYNC') throw Error('当前配置未被后台助手确认；浏览器保持暂停。');
+      } else {
+        if (!(await backend.pause()).ok || backend.getStatus().runtimeState !== 'PAUSED') throw Error('无法确认后台助手已暂停；禁止切回浏览器以避免重复报时。');
+      }
+      const raw = JSON.stringify({ version: 1, mode: next, startRequired: true });
+      storage.setItem(CHIME_EXECUTION_MODE_KEY, raw);
+      if (storage.getItem(CHIME_EXECUTION_MODE_KEY) !== raw) throw Error('无法保存本机模式；当前引擎保持暂停。');
+      message = '模式已保存，重载后请明确点击开始报时。'; reload(); return { ok: true };
+    } catch (error) { message = error.message; return { ok: false, message }; }
+    finally { busy = false; onChange(status()); }
+  }
+  return { switchMode, getStatus: status };
+}
+
+
+
 const PRESET_LABELS = Object.freeze({ '3': '每 3 分钟', '5': '每 5 分钟', '15': '每 15 分钟', '30': '每 30 分钟', '60': '每 1 小时', '240': '每 4 小时', custom: '自定义' });
 
 function node(tag, className, text = '') {
@@ -3277,10 +3457,19 @@ function makeButton(text, action, className = '') {
   return button;
 }
 
-function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceChange, onStart, onPause, onPreview }) {
+function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceChange, onStart, onPause, onPreview, mode = 'browser', getVoices, onModeChange }) {
   if (!summaryHost || !settingsHost) return { render() {}, refreshVoices() {}, showMessage() {} };
 
   const summary = node('section', 'chime-panel'); summary.setAttribute('aria-label', '自然周期报时');
+  const modeSelect = document.createElement('select'); modeSelect.dataset.chimeExecutionMode = 'true'; modeSelect.setAttribute('aria-label', '本机报时方式');
+  for (const [value, text] of [['browser', '浏览器报时'], ['native', '后台助手报时']]) { const option = node('option', '', text); option.value = value; modeSelect.appendChild(option); }
+  modeSelect.value = mode;
+  const modeHint = node('p', 'chime-message', mode === 'browser' ? '浏览器后台不保证持续报时。启用后台助手前请先完成安装和本机 HTTPS 设置。' : '后台助手断连不会切回浏览器。仅使用提示音和中文语音，不使用系统通知。');
+  modeSelect.addEventListener('change', () => { const next = modeSelect.value; modeSelect.value = mode; onModeChange?.(next); });
+  const setupButton = makeButton('安装和连接说明', 'setup');
+  const setupHelp = node('p', 'chime-message', '本机个人版需先安装后台助手并完成 Personal HTTPS 信任设置，再选择后台助手报时；连接后点击开始报时。助手重启后保持暂停；断连请检查登录服务和证书状态。'); setupHelp.hidden = true;
+  setupButton.addEventListener('click', () => { setupHelp.hidden = !setupHelp.hidden; });
+  append(summary, controlLabel('本机报时方式', modeSelect), modeHint, setupButton, setupHelp);
   const clock = node('time', 'chime-clock', '北京时间 --:--:--'); clock.dataset.chimeClock = 'true';
   const runtimeStatus = node('p', 'chime-runtime', '全局已暂停'); runtimeStatus.dataset.chimeRuntime = 'true'; runtimeStatus.setAttribute('role', 'status'); runtimeStatus.setAttribute('aria-live', 'polite');
   const tags = node('div', 'chime-tags'); tags.dataset.chimeTags = 'true'; tags.setAttribute('role', 'list');
@@ -3292,7 +3481,7 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
   const voiceToggle = controlLabel('启用语音播报', voiceEnabled, 'chime-check');
   const voiceSelect = document.createElement('select'); voiceSelect.dataset.chimePreference = 'selectedVoiceURI'; voiceSelect.setAttribute('aria-label', '选择播报声音');
   const notifyEnabled = document.createElement('input'); notifyEnabled.type = 'checkbox'; notifyEnabled.dataset.chimePreference = 'notifyEnabled';
-  const notifyToggle = controlLabel('浏览器系统通知', notifyEnabled, 'chime-check');
+  const notifyToggle = controlLabel(mode === 'native' ? '系统通知（后台助手不使用）' : '浏览器系统通知', notifyEnabled, 'chime-check');
   const preferenceError = node('p', 'chime-slot-error'); preferenceError.dataset.preferenceError = 'true'; preferenceError.setAttribute('role', 'status'); preferenceError.setAttribute('aria-live', 'polite');
   append(preferences, preferencesLegend, voiceToggle, controlLabel('播放声音', voiceSelect, 'chime-field'), notifyToggle, preferenceError);
   const actions = node('div', 'chime-actions');
@@ -3307,7 +3496,7 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
 
   const settings = node('section', 'chime-settings'); settings.setAttribute('aria-labelledby', 'chime-settings-title');
   const settingsTitle = node('h2', '', '自然周期报时设置'); settingsTitle.id = 'chime-settings-title';
-  const explanation = node('p', 'chime-explanation', '周期按北京时间自然边界计算；页面恢复后从下一个未来边界继续，不补播错过的报时。');
+  const explanation = node('p', 'chime-explanation', mode === 'native' ? '周期按北京时间自然边界计算；后台助手执行报时。助手进程重启后保持暂停，需点击开始报时。' : '周期按北京时间自然边界计算；页面恢复后从下一个未来边界继续，不补播错过的报时。');
   const slotGrid = node('div', 'chime-slot-grid');
   const slotControls = new Map();
   for (let index = 0; index < 5; index += 1) {
@@ -3371,7 +3560,7 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
   previewButton.addEventListener('click', () => onPreview?.());
 
   function refreshVoices(chime = currentChime) {
-    const voices = globalThis.speechSynthesis?.getVoices?.() || [];
+    const voices = mode === 'native' ? (getVoices?.() || []) : (globalThis.speechSynthesis?.getVoices?.() || []);
     const prior = chime?.selectedVoiceURI ?? voiceSelect.value ?? '';
     voiceSelect.replaceChildren();
     const automatic = document.createElement('option'); automatic.value = ''; automatic.textContent = '自动选择中文语音'; voiceSelect.appendChild(automatic);
@@ -3403,7 +3592,7 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
       controls.error.hidden = true;
     });
     voiceEnabled.checked = chime.voiceEnabled; notifyEnabled.checked = chime.notifyEnabled;
-    voiceEnabled.disabled = locked; notifyEnabled.disabled = locked; voiceSelect.disabled = locked;
+    voiceEnabled.disabled = locked; notifyEnabled.disabled = locked || mode === 'native'; voiceSelect.disabled = locked;
     if (voiceSelect.value !== chime.selectedVoiceURI || !voiceSelect.options.length) refreshVoices(chime);
     preferenceError.textContent = '';
     lastChime = chime;
@@ -3428,6 +3617,27 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
   }
 
   function applyRuntime(status, messageText = '') {
+    if (mode === 'native') {
+      const configText = status.configState === 'MISMATCH' ? 'CONFIG_MISMATCH' : status.configState || 'UNKNOWN';
+      runtimeStatus.textContent = `后台助手 · ${status.connectionState || 'DISCONNECTED'} · protocol ${status.protocolVersion || '?'} · ${status.runtimeState || 'UNKNOWN'} · ${configText}`;
+      const messages = [];
+      if (status.message) messages.push(status.message);
+      if (status.connectionState !== 'CONNECTED') messages.push('当前后台运行状态未知；不会自动切换浏览器报时。');
+      if (status.configState === 'MISMATCH') messages.push(status.runtimeState === 'RUNNING' ? '后台助手正在按另一份已应用配置运行；点击开始报时将同步当前网页配置并继续。' : '网页与助手配置不同；点击开始报时同步。');
+      if (status.connectionState === 'CONNECTED' && status.helperStatus?.launchManaged === true) messages.push('后台助手由登录服务启动；重启后需手动开始报时。');
+      if (status.connectionState === 'CONNECTED' && status.helperStatus?.lastRebaseReason === 'wake') messages.push('最近唤醒后已重新对齐未来报时；睡眠期间的提醒不补播。');
+      messages.push('后台助手模式仅使用提示音和中文语音，不使用系统通知。');
+      if (status.helperStatus?.tls?.state === 'TLS_RENEWAL_REQUIRED') messages.push('本机 HTTPS 证书将在30天内到期，请运行个人版续期命令。');
+      if (status.helperStatus?.tls?.state === 'TLS_ROOT_REPLACEMENT_REQUIRED') messages.push('本机 HTTPS 根证书需明确更换；请按个人版恢复说明处理。');
+      if (currentChime?.selectedVoiceURI && !(getVoices?.() || []).some(v => v.voiceURI === currentChime.selectedVoiceURI)) messages.push('已保存的声音在后台助手中不可用，当前使用中文默认声音。');
+      message.textContent = messages.join(' '); message.hidden = !message.textContent;
+      const unavailable = status.connectionState !== 'CONNECTED' || status.busy;
+      startButton.disabled = Boolean(status.locked || unavailable || status.preferenceInvalid);
+      pauseButton.disabled = Boolean(status.locked || unavailable || status.runtimeState !== 'RUNNING');
+      previewButton.disabled = Boolean(status.locked || unavailable || status.preferenceInvalid);
+      runtimeStatus.dataset.kind = messages.length ? 'error' : 'normal';
+      return;
+    }
     const runIntent = status?.runIntent || 'paused';
     let statusText;
     if (messageText) statusText = messageText;
@@ -3451,12 +3661,15 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
   return {
     render(chime, status = {}, { locked = false, clockText = '', messageText = '', force = false } = {}) {
       if (!chime) return;
+      modeSelect.disabled = Boolean(locked || status.modeSwitch?.busy);
+      if (status.preferenceInvalid) modeHint.textContent = '本机报时方式存档无法识别；已停止自动选择浏览器。连接助手并明确切换方式后重新保存。';
+      else if (status.modeSwitch?.message) modeHint.textContent = status.modeSwitch.message;
       currentChime = chime;
       currentLocked = locked;
       if (chime !== lastChime || force) { renderSettings(chime, locked); renderTags(chime, locked); }
       else {
         slotControls.forEach((controls, slotId) => { controls.fieldset.disabled = locked; controls.pause.disabled = locked; });
-        voiceEnabled.disabled = locked; voiceSelect.disabled = locked; notifyEnabled.disabled = locked;
+        voiceEnabled.disabled = locked; voiceSelect.disabled = locked; notifyEnabled.disabled = locked || mode === 'native';
         tags.querySelectorAll('button').forEach(button => { button.disabled = locked; });
       }
       count.textContent = `已设置报时 ${chime.slots.filter(slot => slot.enabled).length}/5`;
@@ -5355,8 +5568,13 @@ let chimeOutput = null;
 let chimeCoordinator = null;
 let chimeScheduler = null;
 let chimeStatusMessage = '';
-let audioStateListenerAttached = false;
+let chimeExecution = null;
 try { storage = globalThis.localStorage; } catch (_) { storage = null; }
+const chimeExecutionPreference = readChimeExecutionPreference(storage, globalThis.location?.search || '');
+const nativeChimeDevMode = chimeExecutionPreference.mode === 'native';
+let chimeModeSwitch = null;
+let chimeModeChangedExternally = false;
+let audioStateListenerAttached = false;
 commodityPreferences = loadCommodityPreferences(storage, ORDER);
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -5366,7 +5584,7 @@ const directionShort = direction => direction === 'long' ? '多' : direction ===
 const semanticTone = value => ['bullish', 'long'].includes(value) ? 'bullish' : ['bearish', 'short'].includes(value) ? 'bearish' : 'neutral';
 const writeLocked = () => externalConflict || storageUnsafe || legacyChimeRecovery;
 function chimeDataCurrent() {
-  if (!unified || writeLocked() || corruption || !storage?.getItem || typeof lastRaw !== 'string') return false;
+  if (chimeModeChangedExternally || !unified || writeLocked() || corruption || !storage?.getItem || typeof lastRaw !== 'string') return false;
   try { return storage.getItem(UNIFIED_KEY) === lastRaw; } catch { return false; }
 }
 function saveUnified(candidate, options = {}, phase = 'unified_storage_write') {
@@ -5504,7 +5722,7 @@ function renderChime() {
   const chime = unified?.sections?.chime; if (!chime || !chimeView) return;
   const enabledSlots = chime.slots.filter(slot => slot.enabled).length;
   const eligibleSlots = chime.slots.filter(slot => slot.enabled && !slot.paused).length;
-  chimeView.render(chime, { ...(chimeCoordinator?.getStatus() || {}), enabledSlots, eligibleSlots }, { locked: writeLocked() || corruption, clockText: clockLabel(now()), messageText: chimeStatusMessage });
+  chimeView.render(chime, { ...(chimeExecution?.getStatus() || chimeCoordinator?.getStatus() || {}), modeSwitch: chimeModeSwitch?.getStatus(), preferenceInvalid: chimeExecutionPreference.invalid, enabledSlots, eligibleSlots }, { locked: writeLocked() || corruption || chimeModeChangedExternally || chimeModeSwitch?.getStatus().busy, clockText: clockLabel(now()), messageText: chimeStatusMessage });
 }
 function persistChime(next, changedSlotId = null) {
   if (!unified || writeLocked() || corruption) return false;
@@ -5512,7 +5730,7 @@ function persistChime(next, changedSlotId = null) {
     const candidate = copy(unified); candidate.sections.chime = copy(next);
     unified = saveUnified(candidate, {}, 'chime_settings_commit');
     state.lastSavedAt = unified.savedAt; lastRaw = JSON.stringify(unified); saveError = ''; chimeStatusMessage = '';
-    chimeCoordinator?.settingsChanged(); chimeScheduler?.update(changedSlotId); storageStatus(); renderChime(); return true;
+    chimeCoordinator?.settingsChanged(); chimeScheduler?.update(changedSlotId); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); storageStatus(); renderChime(); return true;
   } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); renderChime(); return false; }
 }
 function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = corruption ? '<section class="migration-blocked"><h2>旧版交易数据需要人工检查</h2><p>系统没有自动修改原数据。</p><button type="button" id="blocked-export-raw">导出原始数据</button></section>' : visibleSymbols.map(renderCard).join(''); if (corruption) { cardsEl.inert = false; document.querySelector('#blocked-export-raw')?.addEventListener('click', () => download(lastRaw || '', `原始数据_${dateKey(now())}.json`, 'application/json')); } renderHistory(); storageStatus(); renderChime(); if (globalThis.location?.hash === '#/exit-research') researchWorkbench?.refresh(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
@@ -5533,15 +5751,15 @@ function finishConfirmation(confirmed) {
       const result = continueLegacyChimeRecovery(storage, { expectedRaw: recoveryCanonicalRaw, expectedLegacyRaw: recoveryLegacyRaw });
       unified = result.state; state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.savedAt; lastRaw = result.raw;
       legacyChimeRecovery = false; recoveryCanonicalRaw = null; recoveryLegacyRaw = null; saveError = ''; restoredNotice = '已按明确确认忽略无法识别的旧报时设置；原旧键保持不变，当前使用默认报时设置。';
-      appearanceView?.render(unified.preferences.appearance); dashboardView?.render(); fullRiskView?.render(); chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); renderAll(); announce('旧报时设置已忽略；统一存档已安全升级，原始旧键保持不变');
+      appearanceView?.render(unified.preferences.appearance); dashboardView?.render(); fullRiskView?.render(); chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); renderAll(); announce('旧报时设置已忽略；统一存档已安全升级，原始旧键保持不变');
     } catch (error) { reportDiagnostic(error, { phase: 'chime_legacy_recovery' }); saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('旧报时设置未忽略；原始数据保持不变，请重新检查存档'); }
     return;
   }
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.kind !== 'restore' && storage?.getItem && storage.getItem(UNIFIED_KEY) !== action.storageRaw) { externalConflict = true; storageStatus(); announce('存档已被其他页面修改；请刷新后重新确认'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V6。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
-  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(intradayV6.createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V6。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(intradayV6.createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   if (!state.cards[action.symbol]) return;
   if (action.kind === 'entry') { if (intradayV6.markEntered(state, action.opportunityId, now(), true).changed) mutate(`${action.symbol} 已确认入场`, action.symbol, action.opportunityId); }
   if (action.kind === 'trade-exit') { if (intradayV6.markTradeExited(state, action.opportunityId, action.exitKind, now(), true).changed) mutate(`${action.symbol} 该笔已退出；保留方向`, action.symbol, action.opportunityId); }
@@ -5615,7 +5833,7 @@ function pauseChime() {
   chimeOutput?.stop();
   const result = chimeCoordinator?.pause();
   chimeStatusMessage = result?.ok ? '' : result?.message || '无法安全暂停报时。';
-  announce(chimeStatusMessage || '自然周期报时已暂停'); renderChime();
+  announce(chimeStatusMessage || '自然周期报时已暂停'); renderChime(); return result;
 }
 async function previewChime() {
   if (writeLocked() || corruption || !unified) return;
@@ -5651,10 +5869,13 @@ document.querySelector('#start-fresh').addEventListener('click', () => { if (!wr
 window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { externalConflict = true; saveError = 'Conflict'; chimeCoordinator?.invalidate('检测到统一存档外部修改；本页报时已停止。'); storageStatus(); renderChime(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
 setInterval(renderChime, 1000);
-globalThis.speechSynthesis?.addEventListener?.('voiceschanged', () => chimeView?.refreshVoices());
+if (!nativeChimeDevMode) globalThis.speechSynthesis?.addEventListener?.('voiceschanged', () => chimeView?.refreshVoices());
 function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; renderTextBanner(banner, message); cardsEl.inert = true; } }
 
 load();
+chimeExecution = createChimeExecutionBackend({
+  nativeMode: nativeChimeDevMode,
+  createBrowser: () => {
 chimeOutput = createOutputAdapter();
 let hadChimeLeadership = false;
 chimeCoordinator = createCoordinator({
@@ -5663,11 +5884,34 @@ chimeCoordinator = createCoordinator({
   onChange: status => { if (hadChimeLeadership && !status.leader) chimeOutput.stop(); hadChimeLeadership = status.leader; chimeScheduler?.update(); renderChime(); }
 });
 chimeScheduler = createScheduler({ coordinator: chimeCoordinator, output: chimeOutput, getChime: () => unified?.sections?.chime, onStatus: message => { chimeStatusMessage = message; renderChime(); } });
+    if (chimeExecutionPreference.startRequired) pauseChime();
+    return { mode: 'browser', getStatus: () => chimeCoordinator.getStatus(), start: startChime, pause: pauseChime, preview: previewChime, stopForSwitch: () => { chimeOutput.stop(); chimeCoordinator.setAudioUnlocked(false); chimeScheduler.stop(); } };
+  },
+  createNative: () => createNativeHelperBackend({
+    getCanonical: () => ({ chime: unified?.sections?.chime, revision: unified?.revision }), isDataCurrent: chimeDataCurrent,
+    onChange: () => { chimeView?.refreshVoices(); renderChime(); }
+  })
+});
+chimeModeSwitch = createChimeModeSwitch({
+  backend: chimeExecution, storage,
+  createNative: () => createNativeHelperBackend({ getCanonical: () => ({ chime: unified?.sections?.chime, revision: unified?.revision }), isDataCurrent: chimeDataCurrent }),
+  verifyBrowser: () => verifyBrowserQuiescent({ backend: chimeExecution, storage, locks: globalThis.navigator?.locks }),
+  reload: () => { const url = new URL(globalThis.location.href); url.searchParams.delete('nativeChime'); if (url.href === globalThis.location.href) globalThis.location.reload(); else globalThis.location.replace(url.href); },
+  onChange: () => renderChime()
+});
+window.addEventListener('storage', event => {
+  if (event.key !== CHIME_EXECUTION_MODE_KEY) return;
+  if (chimeExecution.mode === 'browser') { chimeOutput?.stop(); chimeCoordinator?.invalidate('本机模式已在另一页面改变；当前页已停止报时。'); chimeScheduler?.stop(); }
+  chimeView?.showMessage('本机报时模式已改变；请重载当前页面后操作。');
+  // Do not let an old tab subsequently START/preview its stale engine.
+  chimeModeChangedExternally = true; renderChime();
+});
 chimeView = initChimeView({
   summaryHost: document.querySelector('#chime-summary-host'), settingsHost: document.querySelector('#chime-settings-host'),
   onSlotChange: (slotId, next) => persistChime(next, slotId),
   onPreferenceChange: (_key, next) => persistChime(next),
-  onStart: () => { void startChime(); }, onPause: pauseChime, onPreview: () => { void previewChime(); }
+  mode: chimeExecution.mode, onModeChange: next => { void chimeModeSwitch.switchMode(next); }, getVoices: nativeChimeDevMode ? () => chimeExecution.getVoices() : undefined,
+  onStart: () => { if (!chimeModeChangedExternally && !chimeModeSwitch.getStatus().busy) void chimeExecution.start(); }, onPause: () => { if (!chimeModeChangedExternally && !chimeModeSwitch.getStatus().busy) void chimeExecution.pause(); }, onPreview: () => { if (!chimeModeChangedExternally && !chimeModeSwitch.getStatus().busy) void chimeExecution.preview(); }
 });
 appearanceView = initAppearance(document.querySelector('#appearance-select'), { getItem: () => unified?.preferences?.appearance }, document.documentElement, nextAppearance => {
   if (!unified || writeLocked() || corruption) return false;
@@ -5694,5 +5938,11 @@ try { fullRiskView = initRiskManagerView(document.querySelector('#risk-manager-h
   commit: nextRisk => { const candidate = copy(unified); candidate.sections.riskManager = copy(nextRisk); const saved = saveUnified(candidate, {}, 'risk_view_commit'); unified = saved; lastRaw = JSON.stringify(saved); state.lastSavedAt = saved.savedAt; dashboardView?.render(); storageStatus(); }
 }); } catch (error) { reportDiagnostic(error, { phase: 'risk_view_init' }); }
 renderAll(); storageStatus(); renderChime();
+if (nativeChimeDevMode) {
+  void chimeExecution.refresh();
+  setInterval(() => { if (document.visibilityState !== 'hidden') void chimeExecution.refresh(); }, 3000);
+  window.addEventListener('focus', () => { void chimeExecution.refresh(); });
+  window.addEventListener('pageshow', () => { void chimeExecution.refresh(); });
+}
 
 })();

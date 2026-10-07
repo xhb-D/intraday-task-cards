@@ -23,10 +23,19 @@ function makeButton(text, action, className = '') {
   return button;
 }
 
-export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceChange, onStart, onPause, onPreview }) {
+export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceChange, onStart, onPause, onPreview, mode = 'browser', getVoices, onModeChange }) {
   if (!summaryHost || !settingsHost) return { render() {}, refreshVoices() {}, showMessage() {} };
 
   const summary = node('section', 'chime-panel'); summary.setAttribute('aria-label', '自然周期报时');
+  const modeSelect = document.createElement('select'); modeSelect.dataset.chimeExecutionMode = 'true'; modeSelect.setAttribute('aria-label', '本机报时方式');
+  for (const [value, text] of [['browser', '浏览器报时'], ['native', '后台助手报时']]) { const option = node('option', '', text); option.value = value; modeSelect.appendChild(option); }
+  modeSelect.value = mode;
+  const modeHint = node('p', 'chime-message', mode === 'browser' ? '浏览器后台不保证持续报时。启用后台助手前请先完成安装和本机 HTTPS 设置。' : '后台助手断连不会切回浏览器。仅使用提示音和中文语音，不使用系统通知。');
+  modeSelect.addEventListener('change', () => { const next = modeSelect.value; modeSelect.value = mode; onModeChange?.(next); });
+  const setupButton = makeButton('安装和连接说明', 'setup');
+  const setupHelp = node('p', 'chime-message', '本机个人版需先安装后台助手并完成 Personal HTTPS 信任设置，再选择后台助手报时；连接后点击开始报时。助手重启后保持暂停；断连请检查登录服务和证书状态。'); setupHelp.hidden = true;
+  setupButton.addEventListener('click', () => { setupHelp.hidden = !setupHelp.hidden; });
+  append(summary, controlLabel('本机报时方式', modeSelect), modeHint, setupButton, setupHelp);
   const clock = node('time', 'chime-clock', '北京时间 --:--:--'); clock.dataset.chimeClock = 'true';
   const runtimeStatus = node('p', 'chime-runtime', '全局已暂停'); runtimeStatus.dataset.chimeRuntime = 'true'; runtimeStatus.setAttribute('role', 'status'); runtimeStatus.setAttribute('aria-live', 'polite');
   const tags = node('div', 'chime-tags'); tags.dataset.chimeTags = 'true'; tags.setAttribute('role', 'list');
@@ -38,7 +47,7 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   const voiceToggle = controlLabel('启用语音播报', voiceEnabled, 'chime-check');
   const voiceSelect = document.createElement('select'); voiceSelect.dataset.chimePreference = 'selectedVoiceURI'; voiceSelect.setAttribute('aria-label', '选择播报声音');
   const notifyEnabled = document.createElement('input'); notifyEnabled.type = 'checkbox'; notifyEnabled.dataset.chimePreference = 'notifyEnabled';
-  const notifyToggle = controlLabel('浏览器系统通知', notifyEnabled, 'chime-check');
+  const notifyToggle = controlLabel(mode === 'native' ? '系统通知（后台助手不使用）' : '浏览器系统通知', notifyEnabled, 'chime-check');
   const preferenceError = node('p', 'chime-slot-error'); preferenceError.dataset.preferenceError = 'true'; preferenceError.setAttribute('role', 'status'); preferenceError.setAttribute('aria-live', 'polite');
   append(preferences, preferencesLegend, voiceToggle, controlLabel('播放声音', voiceSelect, 'chime-field'), notifyToggle, preferenceError);
   const actions = node('div', 'chime-actions');
@@ -53,7 +62,7 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
 
   const settings = node('section', 'chime-settings'); settings.setAttribute('aria-labelledby', 'chime-settings-title');
   const settingsTitle = node('h2', '', '自然周期报时设置'); settingsTitle.id = 'chime-settings-title';
-  const explanation = node('p', 'chime-explanation', '周期按北京时间自然边界计算；页面恢复后从下一个未来边界继续，不补播错过的报时。');
+  const explanation = node('p', 'chime-explanation', mode === 'native' ? '周期按北京时间自然边界计算；后台助手执行报时。助手进程重启后保持暂停，需点击开始报时。' : '周期按北京时间自然边界计算；页面恢复后从下一个未来边界继续，不补播错过的报时。');
   const slotGrid = node('div', 'chime-slot-grid');
   const slotControls = new Map();
   for (let index = 0; index < 5; index += 1) {
@@ -117,7 +126,7 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   previewButton.addEventListener('click', () => onPreview?.());
 
   function refreshVoices(chime = currentChime) {
-    const voices = globalThis.speechSynthesis?.getVoices?.() || [];
+    const voices = mode === 'native' ? (getVoices?.() || []) : (globalThis.speechSynthesis?.getVoices?.() || []);
     const prior = chime?.selectedVoiceURI ?? voiceSelect.value ?? '';
     voiceSelect.replaceChildren();
     const automatic = document.createElement('option'); automatic.value = ''; automatic.textContent = '自动选择中文语音'; voiceSelect.appendChild(automatic);
@@ -149,7 +158,7 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
       controls.error.hidden = true;
     });
     voiceEnabled.checked = chime.voiceEnabled; notifyEnabled.checked = chime.notifyEnabled;
-    voiceEnabled.disabled = locked; notifyEnabled.disabled = locked; voiceSelect.disabled = locked;
+    voiceEnabled.disabled = locked; notifyEnabled.disabled = locked || mode === 'native'; voiceSelect.disabled = locked;
     if (voiceSelect.value !== chime.selectedVoiceURI || !voiceSelect.options.length) refreshVoices(chime);
     preferenceError.textContent = '';
     lastChime = chime;
@@ -174,6 +183,27 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   }
 
   function applyRuntime(status, messageText = '') {
+    if (mode === 'native') {
+      const configText = status.configState === 'MISMATCH' ? 'CONFIG_MISMATCH' : status.configState || 'UNKNOWN';
+      runtimeStatus.textContent = `后台助手 · ${status.connectionState || 'DISCONNECTED'} · protocol ${status.protocolVersion || '?'} · ${status.runtimeState || 'UNKNOWN'} · ${configText}`;
+      const messages = [];
+      if (status.message) messages.push(status.message);
+      if (status.connectionState !== 'CONNECTED') messages.push('当前后台运行状态未知；不会自动切换浏览器报时。');
+      if (status.configState === 'MISMATCH') messages.push(status.runtimeState === 'RUNNING' ? '后台助手正在按另一份已应用配置运行；点击开始报时将同步当前网页配置并继续。' : '网页与助手配置不同；点击开始报时同步。');
+      if (status.connectionState === 'CONNECTED' && status.helperStatus?.launchManaged === true) messages.push('后台助手由登录服务启动；重启后需手动开始报时。');
+      if (status.connectionState === 'CONNECTED' && status.helperStatus?.lastRebaseReason === 'wake') messages.push('最近唤醒后已重新对齐未来报时；睡眠期间的提醒不补播。');
+      messages.push('后台助手模式仅使用提示音和中文语音，不使用系统通知。');
+      if (status.helperStatus?.tls?.state === 'TLS_RENEWAL_REQUIRED') messages.push('本机 HTTPS 证书将在30天内到期，请运行个人版续期命令。');
+      if (status.helperStatus?.tls?.state === 'TLS_ROOT_REPLACEMENT_REQUIRED') messages.push('本机 HTTPS 根证书需明确更换；请按个人版恢复说明处理。');
+      if (currentChime?.selectedVoiceURI && !(getVoices?.() || []).some(v => v.voiceURI === currentChime.selectedVoiceURI)) messages.push('已保存的声音在后台助手中不可用，当前使用中文默认声音。');
+      message.textContent = messages.join(' '); message.hidden = !message.textContent;
+      const unavailable = status.connectionState !== 'CONNECTED' || status.busy;
+      startButton.disabled = Boolean(status.locked || unavailable || status.preferenceInvalid);
+      pauseButton.disabled = Boolean(status.locked || unavailable || status.runtimeState !== 'RUNNING');
+      previewButton.disabled = Boolean(status.locked || unavailable || status.preferenceInvalid);
+      runtimeStatus.dataset.kind = messages.length ? 'error' : 'normal';
+      return;
+    }
     const runIntent = status?.runIntent || 'paused';
     let statusText;
     if (messageText) statusText = messageText;
@@ -197,12 +227,15 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   return {
     render(chime, status = {}, { locked = false, clockText = '', messageText = '', force = false } = {}) {
       if (!chime) return;
+      modeSelect.disabled = Boolean(locked || status.modeSwitch?.busy);
+      if (status.preferenceInvalid) modeHint.textContent = '本机报时方式存档无法识别；已停止自动选择浏览器。连接助手并明确切换方式后重新保存。';
+      else if (status.modeSwitch?.message) modeHint.textContent = status.modeSwitch.message;
       currentChime = chime;
       currentLocked = locked;
       if (chime !== lastChime || force) { renderSettings(chime, locked); renderTags(chime, locked); }
       else {
         slotControls.forEach((controls, slotId) => { controls.fieldset.disabled = locked; controls.pause.disabled = locked; });
-        voiceEnabled.disabled = locked; voiceSelect.disabled = locked; notifyEnabled.disabled = locked;
+        voiceEnabled.disabled = locked; voiceSelect.disabled = locked; notifyEnabled.disabled = locked || mode === 'native';
         tags.querySelectorAll('button').forEach(button => { button.disabled = locked; });
       }
       count.textContent = `已设置报时 ${chime.slots.filter(slot => slot.enabled).length}/5`;

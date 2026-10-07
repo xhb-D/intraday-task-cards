@@ -17,6 +17,9 @@ import { createOutputAdapter } from './natural-chime/output.js';
 import { createCoordinator } from './natural-chime/coordinator.js';
 import { createScheduler } from './natural-chime/scheduler.js';
 import { initChimeView } from './natural-chime/view.js';
+import { readChimeExecutionPreference, createChimeModeSwitch, verifyBrowserQuiescent, CHIME_EXECUTION_MODE_KEY } from './natural-chime/release-mode.js';
+import { createChimeExecutionBackend, isNativeChimeDevMode } from './natural-chime/execution-backend.js';
+import { createNativeHelperBackend } from './natural-chime/native-backend.js';
 
 const cardsEl = document.querySelector('#cards');
 const commodityDashboardEl = document.querySelector('#commodity-dashboard');
@@ -52,8 +55,13 @@ let chimeOutput = null;
 let chimeCoordinator = null;
 let chimeScheduler = null;
 let chimeStatusMessage = '';
-let audioStateListenerAttached = false;
+let chimeExecution = null;
 try { storage = globalThis.localStorage; } catch (_) { storage = null; }
+const chimeExecutionPreference = readChimeExecutionPreference(storage, globalThis.location?.search || '');
+const nativeChimeDevMode = chimeExecutionPreference.mode === 'native';
+let chimeModeSwitch = null;
+let chimeModeChangedExternally = false;
+let audioStateListenerAttached = false;
 commodityPreferences = loadCommodityPreferences(storage, ORDER);
 
 const escapeHtml = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
@@ -63,7 +71,7 @@ const directionShort = direction => direction === 'long' ? '多' : direction ===
 const semanticTone = value => ['bullish', 'long'].includes(value) ? 'bullish' : ['bearish', 'short'].includes(value) ? 'bearish' : 'neutral';
 const writeLocked = () => externalConflict || storageUnsafe || legacyChimeRecovery;
 function chimeDataCurrent() {
-  if (!unified || writeLocked() || corruption || !storage?.getItem || typeof lastRaw !== 'string') return false;
+  if (chimeModeChangedExternally || !unified || writeLocked() || corruption || !storage?.getItem || typeof lastRaw !== 'string') return false;
   try { return storage.getItem(UNIFIED_KEY) === lastRaw; } catch { return false; }
 }
 function saveUnified(candidate, options = {}, phase = 'unified_storage_write') {
@@ -201,7 +209,7 @@ function renderChime() {
   const chime = unified?.sections?.chime; if (!chime || !chimeView) return;
   const enabledSlots = chime.slots.filter(slot => slot.enabled).length;
   const eligibleSlots = chime.slots.filter(slot => slot.enabled && !slot.paused).length;
-  chimeView.render(chime, { ...(chimeCoordinator?.getStatus() || {}), enabledSlots, eligibleSlots }, { locked: writeLocked() || corruption, clockText: clockLabel(now()), messageText: chimeStatusMessage });
+  chimeView.render(chime, { ...(chimeExecution?.getStatus() || chimeCoordinator?.getStatus() || {}), modeSwitch: chimeModeSwitch?.getStatus(), preferenceInvalid: chimeExecutionPreference.invalid, enabledSlots, eligibleSlots }, { locked: writeLocked() || corruption || chimeModeChangedExternally || chimeModeSwitch?.getStatus().busy, clockText: clockLabel(now()), messageText: chimeStatusMessage });
 }
 function persistChime(next, changedSlotId = null) {
   if (!unified || writeLocked() || corruption) return false;
@@ -209,7 +217,7 @@ function persistChime(next, changedSlotId = null) {
     const candidate = copy(unified); candidate.sections.chime = copy(next);
     unified = saveUnified(candidate, {}, 'chime_settings_commit');
     state.lastSavedAt = unified.savedAt; lastRaw = JSON.stringify(unified); saveError = ''; chimeStatusMessage = '';
-    chimeCoordinator?.settingsChanged(); chimeScheduler?.update(changedSlotId); storageStatus(); renderChime(); return true;
+    chimeCoordinator?.settingsChanged(); chimeScheduler?.update(changedSlotId); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); storageStatus(); renderChime(); return true;
   } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); renderChime(); return false; }
 }
 function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = corruption ? '<section class="migration-blocked"><h2>旧版交易数据需要人工检查</h2><p>系统没有自动修改原数据。</p><button type="button" id="blocked-export-raw">导出原始数据</button></section>' : visibleSymbols.map(renderCard).join(''); if (corruption) { cardsEl.inert = false; document.querySelector('#blocked-export-raw')?.addEventListener('click', () => download(lastRaw || '', `原始数据_${dateKey(now())}.json`, 'application/json')); } renderHistory(); storageStatus(); renderChime(); if (globalThis.location?.hash === '#/exit-research') researchWorkbench?.refresh(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
@@ -230,15 +238,15 @@ function finishConfirmation(confirmed) {
       const result = continueLegacyChimeRecovery(storage, { expectedRaw: recoveryCanonicalRaw, expectedLegacyRaw: recoveryLegacyRaw });
       unified = result.state; state = copy(unified.sections.intraday.state); state.lastSavedAt = unified.savedAt; lastRaw = result.raw;
       legacyChimeRecovery = false; recoveryCanonicalRaw = null; recoveryLegacyRaw = null; saveError = ''; restoredNotice = '已按明确确认忽略无法识别的旧报时设置；原旧键保持不变，当前使用默认报时设置。';
-      appearanceView?.render(unified.preferences.appearance); dashboardView?.render(); fullRiskView?.render(); chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); renderAll(); announce('旧报时设置已忽略；统一存档已安全升级，原始旧键保持不变');
+      appearanceView?.render(unified.preferences.appearance); dashboardView?.render(); fullRiskView?.render(); chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); renderAll(); announce('旧报时设置已忽略；统一存档已安全升级，原始旧键保持不变');
     } catch (error) { reportDiagnostic(error, { phase: 'chime_legacy_recovery' }); saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('旧报时设置未忽略；原始数据保持不变，请重新检查存档'); }
     return;
   }
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.kind !== 'restore' && storage?.getItem && storage.getItem(UNIFIED_KEY) !== action.storageRaw) { externalConflict = true; storageStatus(); announce('存档已被其他页面修改；请刷新后重新确认'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V6。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
-  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(intradayV6.createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V6。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(intradayV6.createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   if (!state.cards[action.symbol]) return;
   if (action.kind === 'entry') { if (intradayV6.markEntered(state, action.opportunityId, now(), true).changed) mutate(`${action.symbol} 已确认入场`, action.symbol, action.opportunityId); }
   if (action.kind === 'trade-exit') { if (intradayV6.markTradeExited(state, action.opportunityId, action.exitKind, now(), true).changed) mutate(`${action.symbol} 该笔已退出；保留方向`, action.symbol, action.opportunityId); }
@@ -312,7 +320,7 @@ function pauseChime() {
   chimeOutput?.stop();
   const result = chimeCoordinator?.pause();
   chimeStatusMessage = result?.ok ? '' : result?.message || '无法安全暂停报时。';
-  announce(chimeStatusMessage || '自然周期报时已暂停'); renderChime();
+  announce(chimeStatusMessage || '自然周期报时已暂停'); renderChime(); return result;
 }
 async function previewChime() {
   if (writeLocked() || corruption || !unified) return;
@@ -348,10 +356,13 @@ document.querySelector('#start-fresh').addEventListener('click', () => { if (!wr
 window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { externalConflict = true; saveError = 'Conflict'; chimeCoordinator?.invalidate('检测到统一存档外部修改；本页报时已停止。'); storageStatus(); renderChime(); } });
 window.addEventListener('focus', () => renderAll()); setInterval(() => { if (currentDay !== dateKey(now())) renderHistory(); }, 15000);
 setInterval(renderChime, 1000);
-globalThis.speechSynthesis?.addEventListener?.('voiceschanged', () => chimeView?.refreshVoices());
+if (!nativeChimeDevMode) globalThis.speechSynthesis?.addEventListener?.('voiceschanged', () => chimeView?.refreshVoices());
 function safe(fn, context = { phase: 'runtime' }) { try { fn(); } catch (error) { reportDiagnostic(error, context); const banner = document.querySelector('#error-banner'); const message = '页面数据发生异常，已停止编辑；未主动清空存档。请导出 JSON 备份后排查。'; renderTextBanner(banner, message); cardsEl.inert = true; } }
 
 load();
+chimeExecution = createChimeExecutionBackend({
+  nativeMode: nativeChimeDevMode,
+  createBrowser: () => {
 chimeOutput = createOutputAdapter();
 let hadChimeLeadership = false;
 chimeCoordinator = createCoordinator({
@@ -360,11 +371,34 @@ chimeCoordinator = createCoordinator({
   onChange: status => { if (hadChimeLeadership && !status.leader) chimeOutput.stop(); hadChimeLeadership = status.leader; chimeScheduler?.update(); renderChime(); }
 });
 chimeScheduler = createScheduler({ coordinator: chimeCoordinator, output: chimeOutput, getChime: () => unified?.sections?.chime, onStatus: message => { chimeStatusMessage = message; renderChime(); } });
+    if (chimeExecutionPreference.startRequired) pauseChime();
+    return { mode: 'browser', getStatus: () => chimeCoordinator.getStatus(), start: startChime, pause: pauseChime, preview: previewChime, stopForSwitch: () => { chimeOutput.stop(); chimeCoordinator.setAudioUnlocked(false); chimeScheduler.stop(); } };
+  },
+  createNative: () => createNativeHelperBackend({
+    getCanonical: () => ({ chime: unified?.sections?.chime, revision: unified?.revision }), isDataCurrent: chimeDataCurrent,
+    onChange: () => { chimeView?.refreshVoices(); renderChime(); }
+  })
+});
+chimeModeSwitch = createChimeModeSwitch({
+  backend: chimeExecution, storage,
+  createNative: () => createNativeHelperBackend({ getCanonical: () => ({ chime: unified?.sections?.chime, revision: unified?.revision }), isDataCurrent: chimeDataCurrent }),
+  verifyBrowser: () => verifyBrowserQuiescent({ backend: chimeExecution, storage, locks: globalThis.navigator?.locks }),
+  reload: () => { const url = new URL(globalThis.location.href); url.searchParams.delete('nativeChime'); if (url.href === globalThis.location.href) globalThis.location.reload(); else globalThis.location.replace(url.href); },
+  onChange: () => renderChime()
+});
+window.addEventListener('storage', event => {
+  if (event.key !== CHIME_EXECUTION_MODE_KEY) return;
+  if (chimeExecution.mode === 'browser') { chimeOutput?.stop(); chimeCoordinator?.invalidate('本机模式已在另一页面改变；当前页已停止报时。'); chimeScheduler?.stop(); }
+  chimeView?.showMessage('本机报时模式已改变；请重载当前页面后操作。');
+  // Do not let an old tab subsequently START/preview its stale engine.
+  chimeModeChangedExternally = true; renderChime();
+});
 chimeView = initChimeView({
   summaryHost: document.querySelector('#chime-summary-host'), settingsHost: document.querySelector('#chime-settings-host'),
   onSlotChange: (slotId, next) => persistChime(next, slotId),
   onPreferenceChange: (_key, next) => persistChime(next),
-  onStart: () => { void startChime(); }, onPause: pauseChime, onPreview: () => { void previewChime(); }
+  mode: chimeExecution.mode, onModeChange: next => { void chimeModeSwitch.switchMode(next); }, getVoices: nativeChimeDevMode ? () => chimeExecution.getVoices() : undefined,
+  onStart: () => { if (!chimeModeChangedExternally && !chimeModeSwitch.getStatus().busy) void chimeExecution.start(); }, onPause: () => { if (!chimeModeChangedExternally && !chimeModeSwitch.getStatus().busy) void chimeExecution.pause(); }, onPreview: () => { if (!chimeModeChangedExternally && !chimeModeSwitch.getStatus().busy) void chimeExecution.preview(); }
 });
 appearanceView = initAppearance(document.querySelector('#appearance-select'), { getItem: () => unified?.preferences?.appearance }, document.documentElement, nextAppearance => {
   if (!unified || writeLocked() || corruption) return false;
@@ -391,3 +425,9 @@ try { fullRiskView = initRiskManagerView(document.querySelector('#risk-manager-h
   commit: nextRisk => { const candidate = copy(unified); candidate.sections.riskManager = copy(nextRisk); const saved = saveUnified(candidate, {}, 'risk_view_commit'); unified = saved; lastRaw = JSON.stringify(saved); state.lastSavedAt = saved.savedAt; dashboardView?.render(); storageStatus(); }
 }); } catch (error) { reportDiagnostic(error, { phase: 'risk_view_init' }); }
 renderAll(); storageStatus(); renderChime();
+if (nativeChimeDevMode) {
+  void chimeExecution.refresh();
+  setInterval(() => { if (document.visibilityState !== 'hidden') void chimeExecution.refresh(); }, 3000);
+  window.addEventListener('focus', () => { void chimeExecution.refresh(); });
+  window.addEventListener('pageshow', () => { void chimeExecution.refresh(); });
+}

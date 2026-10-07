@@ -1,0 +1,14 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import '../test-support/chime/legacy-poc-harness.js';
+const { createClient } = globalThis.ChimePOC;
+const good = { ok: true, protocolVersion: 1, runtimeState: 'PAUSED', sessionToken: 'test-token' };
+const response = (data = good, status = 200) => ({ ok: status === 200, status, json: async () => data });
+test('POC connected uses actual helper runtime', async () => { const c = createClient({ fetchImpl: async () => response() }); assert.equal((await c.health()).connection, 'CONNECTED'); assert.equal((await c.status()).data.runtimeState, 'PAUSED'); });
+test('POC refused connection reports disconnected', async () => { const c = createClient({ fetchImpl: async () => { throw new TypeError('Failed to fetch'); } }); const r = await c.health(); assert.equal(r.connection, 'DISCONNECTED'); assert.match(r.message, /Failed to fetch/); assert.equal(r.data, undefined); });
+test('POC request timeout reports disconnected', async () => { const c = createClient({ timeoutMs: 5, fetchImpl: (_, options) => new Promise((_, reject) => options.signal.addEventListener('abort', () => reject(new Error('timeout')))) }); assert.equal((await c.health()).connection, 'DISCONNECTED'); });
+test('POC HTTP error does not claim running', async () => { const c = createClient({ fetchImpl: async () => response({}, 403) }); const r = await c.mutate('/start'); assert.equal(r.connection, 'HTTP_ERROR'); assert.equal(r.data, undefined); });
+test('POC protocol mismatch stops mutation', async () => { let calls = 0; const c = createClient({ fetchImpl: async () => { calls++; return response({ ...good, protocolVersion: 2 }); } }); assert.equal((await c.mutate('/start')).connection, 'INCOMPATIBLE_PROTOCOL'); assert.equal(calls, 1); });
+test('POC token handshake and JSON custom-header mutation', async () => { const calls = []; const c = createClient({ fetchImpl: async (url, options) => { calls.push({ url, options }); return response(); } }); await c.mutate('/config', { periodSeconds: 15 }); assert.equal(calls.length, 2); const o = calls[1].options; assert.equal(o.method, 'POST'); assert.equal(o.credentials, 'omit'); assert.equal(o.headers['X-Chime-Token'], 'test-token'); assert.equal(o.headers['Content-Type'], 'application/json'); assert.equal(o.body, '{"periodSeconds":15}'); });
+test('POC malformed helper response shows HTTP error', async () => { const c = createClient({ fetchImpl: async () => ({ ok: true, json: async () => { throw new Error('bad JSON'); } }) }); assert.equal((await c.health()).connection, 'HTTP_ERROR'); });
+test('POC loopback hint is opt-in', async () => { let options; const c = createClient({ loopbackHint: true, fetchImpl: async (_, o) => { options = o; return response(); } }); await c.health(); assert.equal(options.targetAddressSpace, 'loopback'); });

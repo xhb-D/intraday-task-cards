@@ -1,0 +1,170 @@
+[
+  {
+    "chime": {
+      "schemaVersion": 1,
+      "slots": [
+        {
+          "slotId": "slot-1",
+          "enabled": true,
+          "paused": false,
+          "preset": "custom",
+          "minutes": 1,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-2",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-3",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-4",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-5",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        }
+      ],
+      "voiceEnabled": true,
+      "selectedVoiceURI": "",
+      "notifyEnabled": false,
+      "legacyImport": {
+        "status": "defaults",
+        "sourceVersion": null
+      }
+    },
+    "canonical": "{\"legacyImport\":{\"sourceVersion\":null,\"status\":\"defaults\"},\"notifyEnabled\":false,\"schemaVersion\":1,\"selectedVoiceURI\":\"\",\"slots\":[{\"earlySeconds\":30,\"enabled\":true,\"minutes\":1,\"paused\":false,\"preset\":\"custom\",\"slotId\":\"slot-1\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-2\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-3\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-4\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-5\"}],\"voiceEnabled\":true}",
+    "hash": "93d6b0c110d146f2155a68f3ba0508a73636c6904a3ef385e33ca775509eadac"
+  },
+  {
+    "chime": {
+      "schemaVersion": 1,
+      "slots": [
+        {
+          "slotId": "slot-1",
+          "enabled": true,
+          "paused": false,
+          "preset": "custom",
+          "minutes": 17,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-2",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-3",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-4",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-5",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        }
+      ],
+      "voiceEnabled": true,
+      "selectedVoiceURI": "com.apple.voice.compact.zh-CN.Tingting",
+      "notifyEnabled": true,
+      "legacyImport": {
+        "status": "defaults",
+        "sourceVersion": null
+      }
+    },
+    "canonical": "{\"legacyImport\":{\"sourceVersion\":null,\"status\":\"defaults\"},\"notifyEnabled\":true,\"schemaVersion\":1,\"selectedVoiceURI\":\"com.apple.voice.compact.zh-CN.Tingting\",\"slots\":[{\"earlySeconds\":30,\"enabled\":true,\"minutes\":17,\"paused\":false,\"preset\":\"custom\",\"slotId\":\"slot-1\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-2\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-3\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-4\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-5\"}],\"voiceEnabled\":true}",
+    "hash": "78f2a6286366305712b3b0b221655c85cd72c8983bf5c2fa6a4dcbb58515cc0e"
+  },
+  {
+    "chime": {
+      "schemaVersion": 1,
+      "slots": [
+        {
+          "slotId": "slot-1",
+          "enabled": true,
+          "paused": false,
+          "preset": "custom",
+          "minutes": 1440,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-2",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-3",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-4",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-5",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        }
+      ],
+      "voiceEnabled": true,
+      "selectedVoiceURI": "browser/婷婷😀\"\\\n\t  ",
+      "notifyEnabled": true,
+      "legacyImport": {
+        "status": "defaults",
+        "sourceVersion": null
+      }
+    },
+    "canonical": "{\"legacyImport\":{\"sourceVersion\":null,\"status\":\"defaults\"},\"notifyEnabled\":true,\"schemaVersion\":1,\"selectedVoiceURI\":\"browser/婷婷😀\\\"\\\\\\n\\t  \",\"slots\":[{\"earlySeconds\":30,\"enabled\":true,\"minutes\":1440,\"paused\":false,\"preset\":\"custom\",\"slotId\":\"slot-1\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-2\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-3\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-4\"},{\"earlySeconds\":30,\"enabled\":false,\"minutes\":5,\"paused\":false,\"preset\":\"5\",\"slotId\":\"slot-5\"}],\"voiceEnabled\":true}",
+    "hash": "d58d25ae7a3bdc83a45fb791066f78312b52db2d44553f11c32f4fc0909d8f09"
+  }
+]

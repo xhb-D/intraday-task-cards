@@ -1,0 +1,120 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { webcrypto } from 'node:crypto';
+import vm from 'node:vm';
+import { canonicalChimeJSON, nativeConfigHash } from '../src/natural-chime/config-hash.js';
+import { createNativeHelperBackend } from '../src/natural-chime/native-backend.js';
+import { createChimeExecutionBackend, isNativeChimeDevMode } from '../src/natural-chime/execution-backend.js';
+import { initChimeView } from '../src/natural-chime/view.js';
+import { defaultChime } from '../src/natural-chime/model.js';
+import { makeUnified, UNIFIED_KEY } from '../src/capture-unified.js';
+import { makeEnvelope } from '../src/capture-persistence.js';
+import { intradayV6 } from '../src/intraday-v6/index.js';
+const fixture=JSON.parse(readFileSync(new URL('../test-support/chime/native-hash.json',import.meta.url)));
+const hash=c=>nativeConfigHash(c,webcrypto);
+const caps={scheduler:'natural-five-slot-v1',sound:true,speech:true,notification:false,notificationReason:'apple-signing-required',appliedSnapshot:true};
+function server(){
+ let state={ok:true,protocolVersion:2,capabilities:caps,runtimeState:'PAUSED',snapshotState:'NONE',appliedConfigHash:null,appliedRevision:null,nextEvents:[]};
+ const calls=[];let failure=null;
+ return {calls,get state(){return state},set state(v){state=v},fail(v){failure=v},async fetch(url,options={}){
+  const path=new URL(url).pathname;const body=options.body?JSON.parse(options.body):null;calls.push({path,body,options});
+  if(failure==='offline')throw new TypeError('connection refused');
+  if(failure==='json')return {ok:true,json:async()=>{throw new Error('bad JSON')}};
+  if(failure===path)return {ok:false,status:503,json:async()=>({ok:false,error:'PERSISTENCE_ERROR',message:'disk write failed'})};
+  if(path==='/config/apply')state={...state,snapshotState:'VALID',appliedRevision:body.canonicalRevision,appliedConfigHash:body.configHash};
+  if(path==='/start')state={...state,runtimeState:'RUNNING'};
+  if(path==='/pause')state={...state,runtimeState:'PAUSED'};
+  const data={...state,...(path==='/health'?{sessionToken:'ephemeral'}:{}),...(path==='/voices'?{voices:[{identifier:'native-cn',name:'婷婷',language:'zh-CN'}]}:{})};
+  return {ok:true,status:200,json:async()=>data};
+ }};
+}
+function setup(){const api=server();let canonical={chime:structuredClone(fixture[0].chime),revision:10},current=true;const backend=createNativeHelperBackend({getCanonical:()=>canonical,isDataCurrent:()=>current,fetch:api.fetch,hash});return {api,backend,set canonical(v){canonical=v},get canonical(){return canonical},set current(v){current=v}};}
+for(const [i,row]of fixture.entries())test(`Phase3C cross-language hash fixture ${i+1}`,async()=>{assert.equal(canonicalChimeJSON(row.chime),row.canonical);assert.equal(await hash(row.chime),row.hash);const reversed=Object.fromEntries(Object.entries(row.chime).reverse());assert.equal(await hash(reversed),row.hash)});
+test('Phase3C hash rejects invalid full config',async()=>{await assert.rejects(hash({...fixture[0].chime,voiceEnabled:'true'}))});
+test('Phase3C initial telemetry CONNECTED NONE never applies',async()=>{const h=setup();await h.backend.refresh();assert.equal(h.backend.getStatus().connectionState,'CONNECTED');assert.equal(h.backend.getStatus().configState,'NONE');assert.deepEqual(h.api.calls.map(c=>c.path),['/health','/status','/voices']);assert.deepEqual(h.backend.getVoices(),[{voiceURI:'native-cn',name:'婷婷',lang:'zh-CN'}])});
+test('Phase3C START applies ACK then starts then verifies RUNNING IN_SYNC',async()=>{const h=setup();assert.equal((await h.backend.start()).ok,true);assert.deepEqual(h.api.calls.map(c=>c.path),['/health','/config/apply','/start','/status']);assert.equal(h.api.calls[1].options.headers['X-Chime-Token'],'ephemeral');assert.equal(h.backend.getStatus().runtimeState,'RUNNING');assert.equal(h.backend.getStatus().configState,'IN_SYNC')});
+test('Phase3C wrong ACK blocks START',async()=>{const h=setup(),fetch=h.api.fetch;const b=createNativeHelperBackend({getCanonical:()=>h.canonical,isDataCurrent:()=>true,hash,fetch:async(url,o)=>{const r=await fetch(url,o);if(url.endsWith('/config/apply'))return {...r,json:async()=>({...await r.json(),appliedRevision:999})};return r}});assert.equal((await b.start()).ok,false);assert.equal(h.api.calls.some(c=>c.path==='/start'),false);assert.equal(b.getStatus().runtimeState,'UNKNOWN')});
+test('Phase3C apply failure retains canonical and never claims RUNNING',async()=>{const h=setup(),before=structuredClone(h.canonical);h.api.fail('/config/apply');assert.equal((await h.backend.start()).ok,false);assert.equal(h.backend.getStatus().connectionState,'ERROR');assert.equal(h.backend.getStatus().runtimeState,'UNKNOWN');assert.deepEqual(h.canonical,before);assert.equal(h.api.calls.some(c=>c.path==='/start'),false)});
+test('Phase3C disconnect after RUNNING gives UNKNOWN and no automatic fallback',async()=>{const h=setup();await h.backend.start();h.api.fail('offline');await h.backend.refresh();assert.equal(h.backend.getStatus().connectionState,'DISCONNECTED');assert.equal(h.backend.getStatus().runtimeState,'UNKNOWN');assert.equal(h.backend.mode,'native')});
+for(const bad of [{protocolVersion:1},{capabilities:{...caps,speech:false}},{capabilities:{...caps,appliedSnapshot:undefined}}])test(`Phase3C incompatible health blocks all mutation ${JSON.stringify(bad)}`,async()=>{const h=setup();h.api.state={...h.api.state,...bad};await h.backend.start();assert.equal(h.backend.getStatus().connectionState,'VERSION_MISMATCH');assert.equal(h.api.calls.some(c=>c.options.method==='POST'),false)});
+test('Phase3C invalid JSON gives ERROR not paused',async()=>{const h=setup();h.api.fail('json');await h.backend.refresh();assert.equal(h.backend.getStatus().connectionState,'ERROR');assert.equal(h.backend.getStatus().runtimeState,'UNKNOWN')});
+test('Phase3C mismatch on RUNNING reconnect never changes applied config',async()=>{const h=setup();await h.backend.start();const old=h.api.state.appliedConfigHash;h.canonical={chime:structuredClone(fixture[1].chime),revision:11};h.api.calls.length=0;await h.backend.refresh();assert.equal(h.backend.getStatus().configState,'MISMATCH');assert.equal(h.backend.getStatus().runtimeState,'RUNNING');assert.equal(h.api.state.appliedConfigHash,old);assert.equal(h.api.calls.some(c=>c.options.method==='POST'),false);await h.backend.start();assert.equal(h.backend.getStatus().configState,'IN_SYNC');assert.equal(h.api.state.appliedConfigHash,fixture[1].hash)});
+test('Phase3C pause uses no apply and preserves canonical',async()=>{const h=setup();await h.backend.start();const before=structuredClone(h.canonical);h.api.calls.length=0;await h.backend.pause();assert.deepEqual(h.api.calls.map(c=>c.path),['/health','/pause','/status']);assert.equal(h.backend.getStatus().runtimeState,'PAUSED');assert.deepEqual(h.canonical,before)});
+test('Phase3C preview applies preferences and preserves runtime',async()=>{const h=setup();await h.backend.start();h.api.calls.length=0;await h.backend.preview();assert.deepEqual(h.api.calls.map(c=>c.path),['/health','/config/apply','/preview','/status']);assert.equal(h.backend.getStatus().runtimeState,'RUNNING')});
+test('Phase3C restart reconnect reads PAUSED IN_SYNC without auto START',async()=>{const h=setup();await h.backend.start();h.api.state={...h.api.state,runtimeState:'PAUSED'};h.api.calls.length=0;await h.backend.refresh();assert.equal(h.backend.getStatus().runtimeState,'PAUSED');assert.equal(h.backend.getStatus().configState,'IN_SYNC');assert.equal(h.api.calls.some(c=>c.options.method==='POST'),false)});
+test('Phase3C corruption is surfaced without defaults or apply',async()=>{const h=setup();h.api.state={...h.api.state,snapshotState:'CORRUPT'};await h.backend.refresh();assert.equal(h.backend.getStatus().configState,'CORRUPT');assert.equal(h.api.calls.some(c=>c.options.method==='POST'),false)});
+test('Phase3C write lock blocks config and START and preview',async()=>{const h=setup();h.current=false;for(const action of ['settingsSaved','start','preview'])assert.equal((await h.backend[action]()).ok,false);assert.equal(h.api.calls.length,0)});
+test('Phase3C conflict during asynchronous hash blocks stale apply',async()=>{const h=setup();let n=0;const b=createNativeHelperBackend({getCanonical:()=>h.canonical,isDataCurrent:()=>n<2,fetch:h.api.fetch,hash:async c=>{n++;return hash(c)}});assert.equal((await b.start()).ok,false);assert.equal(h.api.calls.some(c=>c.path==='/config/apply'),false)});
+test('Phase3C canonical save callback applies new config without start',async()=>{const h=setup();await h.backend.refresh();h.canonical={chime:structuredClone(fixture[1].chime),revision:2};await h.backend.settingsSaved();assert.equal(h.api.state.appliedConfigHash,fixture[1].hash);assert.equal(h.backend.getStatus().runtimeState,'PAUSED');assert.equal(h.api.calls.some(c=>c.path==='/start'),false)});
+test('Phase3C backend selection does not construct alternate engine',()=>{let browser=0,native=0;for(const mode of [true,false]){const b=createChimeExecutionBackend({nativeMode:mode,createBrowser:()=>{browser++;return {mode:'browser'}},createNative:()=>{native++;return {mode:'native'}}});assert.equal(b.mode,mode?'native':'browser')}assert.equal(browser,1);assert.equal(native,1);assert.equal(isNativeChimeDevMode('?nativeChime=1'),true);assert.equal(isNativeChimeDevMode('?nativeChime=0'),false)});
+class FakeElement {
+  constructor(tagName = 'div') {
+    this.tagName = tagName; this.children = []; this.listeners = new Map(); this.dataset = {};
+    this.className = ''; this.disabled = false; this.hidden = false; this.value = ''; this.checked = false;
+    this.style = { setProperty() {} }; this._text = '';
+    this.classList = { add: token => { if (!this.className.split(/\s+/).includes(token)) this.className = `${this.className} ${token}`.trim(); } };
+  }
+  get options() { return this.tagName === 'select' ? this.children : []; }
+  set textContent(value) { this._text = String(value); this.children = []; }
+  get textContent() { return this._text + this.children.map(child => child.textContent).join(''); }
+  appendChild(child) { this.children.push(child); return child; }
+  append(...children) { children.forEach(child => this.appendChild(child)); }
+  replaceChildren(...children) { this.children = []; this.append(...children); }
+  addEventListener(type, listener) { const handlers = this.listeners.get(type) || []; handlers.push(listener); this.listeners.set(type, handlers); }
+  click() { if (!this.disabled) for (const listener of this.listeners.get('click') || []) listener({ target: this }); }
+  change() { if (!this.disabled) for (const listener of this.listeners.get('change') || []) listener({ target: this }); }
+  setAttribute(name, value) { this.attributes ??= {}; this.attributes[name] = String(value); }
+  getAttribute(name) { return this.attributes?.[name] ?? null; }
+  querySelectorAll(selector) {
+    const found = [];
+    const visit = element => { for (const child of element.children) { if (selector === 'button' && child.tagName === 'button') found.push(child); visit(child); } };
+    visit(this); return found;
+  }
+}
+
+function find(root, predicate) {
+  if (predicate(root)) return root;
+  for (const child of root.children) { const match = find(child, predicate); if (match) return match; }
+  return null;
+}
+
+
+for(const state of ['CONNECTED','DISCONNECTED','VERSION_MISMATCH','ERROR'])test(`Phase3C DOM ${state} controls and personal notification disabled`,()=>{const prior=globalThis.document,speech=globalThis.speechSynthesis;globalThis.document={createElement:t=>new FakeElement(t)};globalThis.speechSynthesis={getVoices(){throw new Error('Native must not read browser voices')}};try{const home=new FakeElement(),settings=new FakeElement();const view=initChimeView({summaryHost:home,settingsHost:settings,mode:'native',getVoices:()=>[{voiceURI:'native-cn',name:'婷婷',lang:'zh-CN'}]});const c={...defaultChime(),notifyEnabled:true,selectedVoiceURI:'browser-old'};view.render(c,{connectionState:state,runtimeState:state==='CONNECTED'?'RUNNING':'UNKNOWN',configState:'MISMATCH',capabilities:caps});assert.match(home.textContent,new RegExp(state));assert.match(home.textContent,/不使用系统通知/);assert.doesNotMatch(home.textContent,/等待.*签名/);assert.equal(find(home,e=>e.dataset.chimePreference==='notifyEnabled').disabled,true);assert.match(home.textContent,/中文默认声音/);assert.equal(find(home,e=>e.dataset.chimeAction==='start').disabled,state!=='CONNECTED');assert.equal(find(home,e=>e.dataset.chimePreference==='notifyEnabled').checked,true);assert.equal(c.selectedVoiceURI,'browser-old');assert.ok(find(home,e=>e.tagName==='option'&&e.value==='native-cn'));assert.match(home.textContent,/CONFIG_MISMATCH/)}finally{globalThis.document=prior;globalThis.speechSynthesis=speech}});
+function bundleHarness(native=true,{quota=false,modePreference=null}={}){
+ const canonical=makeUnified(makeEnvelope(intradayV6.createWorkspace(0),Date.now()));canonical.sections.chime=structuredClone(fixture[0].chime);
+ const data=new Map([[UNIFIED_KEY,JSON.stringify(canonical)]]),writes=[],elements=new Map(),listeners=new Map(),intervals=[],api=server();
+ if(modePreference)data.set('trading-control-center:natural-chime:execution-mode:v1',JSON.stringify(modePreference));
+ const storage={getItem:k=>data.get(k)??null,setItem(k,v){writes.push(k);if(quota)throw new Error('quota');data.set(k,String(v))},removeItem:k=>data.delete(k)};
+ const element=()=>{const e=new FakeElement();e.innerHTML='';e.inert=false;e.querySelector=()=>element();e.querySelectorAll=()=>[];e.add=child=>e.children.push(child);e.focus=()=>{};e.showModal=()=>{};e.close=()=>{};e.classList.toggle=()=>{};return e};
+ const document={visibilityState:'visible',querySelector(s){if(!elements.has(s))elements.set(s,element());return elements.get(s)},getElementById(id){return this.querySelector('#'+id)},querySelectorAll:()=>[],createElement:element,addEventListener(){},documentElement:element()};
+ const engines={scheduler:0,coordinator:0,output:0,audio:0,speech:0,notification:0};
+ const context={document,localStorage:storage,location:{href:'http://127.0.0.1:17841/',replace(url){context.reloadURL=url},reload(){context.reloadURL=context.location.href},search:native?'?nativeChime=1':'',hash:'#/home'},window:{addEventListener(t,fn){listeners.set(t,[...(listeners.get(t)||[]),fn])}},console:{error(){}},setInterval(fn,ms){intervals.push({fn,ms});return 1},clearInterval(){},setTimeout,clearTimeout,Option:function(t,v){return {text:t,value:v}},Blob,URL,URLSearchParams,TextEncoder,Intl,Date,AbortController,crypto:webcrypto,fetch:api.fetch,__engines:engines,AudioContext:function(){engines.audio++},speechSynthesis:{getVoices(){engines.speech++;return []},speak(){engines.speech++},addEventListener(){engines.speech++}},Notification:function(){engines.notification++}};
+ let bundle=readFileSync(new URL('../dist/app.bundle.js',import.meta.url),'utf8');
+ for(const [name,key]of [['createScheduler','scheduler'],['createCoordinator','coordinator'],['createOutputAdapter','output']])bundle=bundle.replace(new RegExp(`(function ${name}\\([^]*?\\) \\{)`),`$1 __engines.${key}++;`);
+ vm.runInNewContext('function structuredClone(v){return JSON.parse(JSON.stringify(v));}\n'+bundle,context);
+ return {api,engines,writes,data,document,listeners,home:document.querySelector('#chime-summary-host'),settings:document.querySelector('#chime-settings-host'),async flush(){for(let i=0;i<20;i++)await new Promise(r=>setTimeout(r,10))}};
+}
+test('Phase3C actual bundled app Native path creates zero browser engines and no browser output',async()=>{const h=bundleHarness();await h.flush();assert.match(h.home.textContent,/CONNECTED/);assert.deepEqual(h.engines,{scheduler:0,coordinator:0,output:0,audio:0,speech:0,notification:0});find(h.home,e=>e.dataset.chimeAction==='start').click();await h.flush();assert.match(h.home.textContent,/RUNNING.*IN_SYNC/);assert.equal(h.api.calls.filter(c=>c.path==='/start').length,1);assert.equal(h.writes.some(k=>/natural-chime:(run|lease)/.test(k)),false);h.api.fail('offline');for(const fn of h.listeners.get('focus'))fn();await h.flush();assert.match(h.home.textContent,/DISCONNECTED.*UNKNOWN/);assert.deepEqual(h.engines,{scheduler:0,coordinator:0,output:0,audio:0,speech:0,notification:0})});
+test('Phase3C actual bundled app Browser path retains all three engines without Helper requests',async()=>{const h=bundleHarness(false);await h.flush();assert.equal(h.engines.scheduler,1);assert.equal(h.engines.coordinator,1);assert.equal(h.engines.output,1);assert.equal(h.api.calls.length,0)});
+test('Phase3C actual Unified save failure never applies Helper or changes canonical',async()=>{const h=bundleHarness(true,{quota:true});await h.flush();const old=h.data.get(UNIFIED_KEY);const field=find(h.settings,e=>e.dataset.slotField==='enabled');field.checked=false;field.change();await h.flush();assert.equal(h.data.get(UNIFIED_KEY),old);assert.equal(h.api.calls.some(c=>c.path==='/config/apply'),false)});
+test('Phase3C actual Unified successful slot save precedes Helper apply and preserves trading data',async()=>{const h=bundleHarness();await h.flush();const old=JSON.parse(h.data.get(UNIFIED_KEY));const field=find(h.settings,e=>e.dataset.slotField==='enabled');field.checked=false;field.change();await h.flush();const next=JSON.parse(h.data.get(UNIFIED_KEY));assert.equal(next.sections.chime.slots[0].enabled,false);const apply=h.api.calls.find(c=>c.path==='/config/apply');assert.equal(apply.body.chime.slots[0].enabled,false);assert.equal(apply.body.canonicalRevision,next.revision);assert.deepEqual(next.sections.intraday,old.sections.intraday);assert.deepEqual(next.sections.riskManager,old.sections.riskManager)});
+
+test('Phase3C failed telemetry cannot infer CONFIG_MISMATCH and shows actual incompatible protocol',async()=>{const h=setup();await h.backend.start();h.api.fail('offline');await h.backend.refresh();assert.equal(h.backend.getStatus().configState,'UNKNOWN');h.api.fail(null);h.api.state={...h.api.state,protocolVersion:1};await h.backend.refresh();assert.equal(h.backend.getStatus().connectionState,'VERSION_MISMATCH');assert.equal(h.backend.getStatus().protocolVersion,1);assert.equal(h.backend.getStatus().configState,'UNKNOWN')});
+
+for(const [name,helperStatus,expected]of [
+ ['managed login',{launchManaged:true},/登录服务启动/],
+ ['same process wake',{launchManaged:true,lastRebaseReason:'wake'},/唤醒后已重新对齐/],
+ ['manual startup',{launchManaged:false},null]
+])test(`Phase3D minimal lifecycle DOM ${name}`,()=>{const prior=globalThis.document;globalThis.document={createElement:t=>new FakeElement(t)};try{const home=new FakeElement();const view=initChimeView({summaryHost:home,settingsHost:new FakeElement(),mode:'native',getVoices:()=>[]});view.render(defaultChime(),{connectionState:'CONNECTED',runtimeState:'PAUSED',configState:'IN_SYNC',capabilities:caps,helperStatus});if(expected)assert.match(home.textContent,expected);else assert.doesNotMatch(home.textContent,/登录服务启动|唤醒后已重新对齐/);view.render(defaultChime(),{connectionState:'DISCONNECTED',runtimeState:'UNKNOWN',configState:'UNKNOWN',capabilities:caps,helperStatus});assert.doesNotMatch(home.textContent,/登录服务启动|唤醒后已重新对齐/);assert.match(home.textContent,/不会自动切换浏览器报时/)}finally{globalThis.document=prior}});
+test('Phase3D compiled Native bundle launchd restart telemetry never auto applies or resumes',async()=>{const h=bundleHarness(true);await h.flush();const before={...h.engines};h.api.fail('offline');for(const f of h.listeners.get('focus')||[])f();await h.flush();h.api.fail(null);h.api.state={...h.api.state,runtimeState:'PAUSED',launchManaged:true,lifecycleState:'ACTIVE'};h.api.calls.length=0;for(const f of h.listeners.get('focus')||[])f();await h.flush();assert.deepEqual(h.engines,before);assert.equal(h.api.calls.some(c=>c.options.method==='POST'),false)});
+
+test('Phase4 actual compiled persistent Native opt-in constructs zero Browser engines; canonical untouched',async()=>{const h=bundleHarness(false,{modePreference:{version:1,mode:'native',startRequired:true}});await h.flush();assert.match(h.home.textContent,/CONNECTED/);assert.deepEqual(h.engines,{scheduler:0,coordinator:0,output:0,audio:0,speech:0,notification:0});assert.equal(h.writes.some(k=>/natural-chime:(run|lease)/.test(k)),false);assert.equal(h.api.calls.some(c=>c.options.method==='POST'),false)});
+test('Phase4 compiled Native switch to Browser verifies PAUSED then stores only machine preference',async()=>{const h=bundleHarness(false,{modePreference:{version:1,mode:'native',startRequired:true}});await h.flush();const before=h.data.get(UNIFIED_KEY);h.api.state={...h.api.state,runtimeState:'RUNNING'};const select=find(h.home,e=>e.dataset.chimeExecutionMode==='true');select.value='browser';select.change();await h.flush();assert.equal(h.api.state.runtimeState,'PAUSED');assert.equal(JSON.parse(h.data.get('trading-control-center:natural-chime:execution-mode:v1')).mode,'browser');assert.equal(h.data.get(UNIFIED_KEY),before);assert.equal(h.writes.some(k=>/natural-chime:(run|lease)/.test(k)),false);assert.equal(h.engines.scheduler,0)});
+test('Phase4 compiled disconnect blocks Native to Browser and leaves opt-in intact',async()=>{const pref={version:1,mode:'native',startRequired:true},h=bundleHarness(false,{modePreference:pref});await h.flush();h.api.fail('offline');const select=find(h.home,e=>e.dataset.chimeExecutionMode==='true');select.value='browser';select.change();await h.flush();assert.deepEqual(JSON.parse(h.data.get('trading-control-center:natural-chime:execution-mode:v1')),pref);assert.equal(h.engines.coordinator,0);assert.match(h.home.textContent,/禁止切回浏览器/)});
+test('Phase4 compiled external mode change disables stale Native START/preview without run writes',async()=>{const h=bundleHarness();await h.flush();h.api.calls.length=0;for(const f of h.listeners.get('storage')||[])f({key:'trading-control-center:natural-chime:execution-mode:v1'});find(h.home,e=>e.dataset.chimeAction==='start').click();find(h.home,e=>e.dataset.chimeAction==='preview').click();await h.flush();assert.equal(h.api.calls.some(c=>c.options.method==='POST'),false)});
+
+test('Phase4 compiled Browser to Native really reloads same URL and never starts automatically',async()=>{const h=bundleHarness(false);await h.flush();const before=h.data.get(UNIFIED_KEY);const select=find(h.home,e=>e.dataset.chimeExecutionMode==='true');select.value='native';select.change();await h.flush();assert.equal(JSON.parse(h.data.get('trading-control-center:natural-chime:execution-mode:v1')).mode,'native');assert.equal(h.api.state.runtimeState,'PAUSED');assert.equal(h.api.calls.some(c=>c.path==='/start'),false);assert.equal(h.data.get(UNIFIED_KEY),before)});
+
+test('Phase4P compiled Native disabled notify keeps true canonical field and constructs zero Browser Notification',async()=>{const h=bundleHarness(true);await h.flush();const before=h.data.get(UNIFIED_KEY);const checkbox=find(h.home,e=>e.dataset.chimePreference==='notifyEnabled');assert.equal(checkbox.disabled,true);checkbox.checked=false;checkbox.change();await h.flush();assert.equal(h.data.get(UNIFIED_KEY),before);assert.equal(h.engines.notification,0);assert.match(h.home.textContent,/不使用系统通知/);assert.doesNotMatch(h.home.textContent,/等待.*签名/)});
+test('Phase4P Browser notification preference remains enabled and editable',async()=>{const h=bundleHarness(false);await h.flush();const checkbox=find(h.home,e=>e.dataset.chimePreference==='notifyEnabled');assert.equal(checkbox.disabled,false);assert.match(h.home.textContent,/浏览器系统通知/);const before=JSON.parse(h.data.get(UNIFIED_KEY));checkbox.checked=!before.sections.chime.notifyEnabled;checkbox.change();await h.flush();const after=JSON.parse(h.data.get(UNIFIED_KEY));assert.equal(after.sections.chime.notifyEnabled,!before.sections.chime.notifyEnabled);assert.deepEqual(after.sections.intraday,before.sections.intraday)});

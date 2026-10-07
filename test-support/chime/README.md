@@ -1,0 +1,1 @@
+These public synthetic fixtures preserve the already accepted regression suite. They are not imported by the production build or runtime. No personal installation, snapshot, Keychain, certificate, private material, or evidence is included. Only test import locations changed for rollout.
