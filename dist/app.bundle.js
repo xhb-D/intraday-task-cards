@@ -976,7 +976,28 @@ const button = (text, className = 'risk-button') => { const node = el('button', 
 const status = decision => decision?.status === 'ALLOWED' ? ['可以交易', 'green'] : decision?.status === 'TAIL_RISK' ? ['尾部风险', 'yellow'] : decision?.status === 'BLOCKED' ? ['禁止开仓', 'red'] : ['需要配置', 'muted'];
 function field(form, { label, name, value = '', type = 'text', required = false, hint = '' }) { const wrap = el('label', 'risk-field'); wrap.appendChild(el('span', null, label)); const input = document.createElement(type === 'select' ? 'select' : 'input'); input.name = name; if (type !== 'select') { input.type = type; input.value = value ?? ''; } if (type === 'number') { input.inputMode = 'decimal'; input.step = '0.01'; input.min = '0.01'; } input.required = required; wrap.appendChild(input); if (hint) wrap.appendChild(el('small', null, hint)); form.appendChild(wrap); return input; }
 let activeRiskDialog = null;
-function riskDialog(title, build) { if (activeRiskDialog) return; const node = el('dialog', 'risk-dialog'); activeRiskDialog = node; const form = el('form', 'risk-dialog-body'); form.method = 'dialog'; form.appendChild(el('h2', null, title)); const close = () => { node.close(); node.remove(); if (activeRiskDialog === node) activeRiskDialog = null; }; build(form, close); node.appendChild(form); document.body.appendChild(node); node.showModal(); }
+function riskDialog(title, build) {
+  if (activeRiskDialog) return;
+  const node = el('dialog', 'risk-dialog');
+  activeRiskDialog = node;
+  const form = el('form', 'risk-dialog-body');
+  form.method = 'dialog';
+  form.appendChild(el('h2', null, title));
+  const cleanup = () => {
+    node.remove();
+    if (activeRiskDialog === node) activeRiskDialog = null;
+  };
+  const close = () => {
+    node.close();
+    // Native close events are queued; release the guard before opening a successor.
+    cleanup();
+  };
+  node.addEventListener('close', cleanup);
+  build(form, close);
+  node.appendChild(form);
+  document.body.appendChild(node);
+  node.showModal();
+}
 
 function mountRiskManager(host, controller, { compact = false } = {}) {
   if (!host || typeof host.appendChild !== 'function') return { render() {}, destroy() {} };
@@ -993,11 +1014,48 @@ function mountRiskManager(host, controller, { compact = false } = {}) {
       const name = field(form, { label: '账户名称', name: 'name', value: existing?.name, required: true }); const firm = field(form, { label: 'Prop Firm（可选）', name: 'firm', value: existing?.propFirm }); const type = field(form, { label: '账户类型（可选）', name: 'type', value: existing?.accountType }); const nominal = field(form, { label: '名义账户规模', name: 'nominal', type: 'number', value: existing?.nominalAccountSize, required: true }); const reference = field(form, { label: '风险参考余额', name: 'reference', type: 'number', value: existing?.riskReferenceBalance, required: true }); const loss = field(form, { label: '最大亏损额度', name: 'hardLoss', type: 'number', value: existing?.hardLossAmount, required: !existing });
       const drawdown = field(form, { label: '回撤类型', name: 'drawdown', type: 'select' }); [['EOD_TRAILING','EOD 日终跟踪回撤'], ['INTRADAY_TRAILING','盘中实时跟踪回撤'], ['STATIC','静态回撤'], ['NONE','无外部回撤限制']].forEach(([value, label]) => { const option = new Option(label, value); option.selected = (existing?.drawdownType || 'EOD_TRAILING') === value; drawdown.add(option); });
       const floor = field(form, { label: '默认 Hard Loss Floor', name: 'floor', type: 'number', value: existing?.defaultHardLossFloor, hint: '无外部回撤限制时留空。' }); const initial = existing ? null : field(form, { label: '初始已实现余额', name: 'initial', type: 'number', required: true }); const error = el('p', 'risk-form-error'); form.appendChild(error);
-      const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const save = button(existing ? '保存账户' : '添加账户', 'risk-button primary'); save.type = 'submit'; cancel.addEventListener('click', close); actions.append(cancel, save); if (existing) { const remove = button('删除账户', 'risk-button danger'); remove.addEventListener('click', () => deleteConfirm(existing, close)); actions.appendChild(remove); } form.appendChild(actions);
+      const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const save = button(existing ? '保存账户' : '添加账户', 'risk-button primary'); save.type = 'submit'; cancel.addEventListener('click', close); actions.append(cancel, save); if (existing) { const remove = button('删除账户', 'risk-button danger'); remove.addEventListener('click', () => { close(); deleteConfirm(existing); }); actions.appendChild(remove); } form.appendChild(actions);
       form.addEventListener('submit', event => { event.preventDefault(); const money = item => Number(item.value); const floorValue = floor.value.trim() ? Number(floor.value) : null; const payload = { name: name.value, propFirm: firm.value, accountType: type.value, nominalAccountSize: money(nominal), riskReferenceBalance: money(reference), hardLossAmount: existing && loss.value.trim() === '' ? null : money(loss), drawdownType: drawdown.value, defaultHardLossFloor: floorValue }; try { const next = existing ? updateAccountMeta(current(), existing.id, payload) : createAccount(current(), { ...payload, initialBalance: money(initial) }); if (mutate(next, existing ? '账户已更新；新配置按既有时段规则生效。' : '账户已添加。')) close(); } catch (failure) { error.textContent = failure.message; } });
     });
   }
-  function deleteConfirm(item, closeParent) { riskDialog('删除账户', (form, close) => { form.appendChild(el('p', 'risk-dialog-note', `确定删除「${item.name}」吗？此操作会移除此账户的本地余额历史。`)); const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const confirm = button('确认删除', 'risk-button danger'); cancel.addEventListener('click', close); confirm.addEventListener('click', () => { if (mutate(deleteAccount(current(), item.id), '账户已删除。')) { close(); closeParent(); } }); actions.append(cancel, confirm); form.appendChild(actions); }); }
+  function deleteConfirm(item) {
+    const confirmedAccount = JSON.stringify(item);
+    riskDialog('删除账户', (form, close) => {
+      form.appendChild(el('p', 'risk-dialog-note', `确定删除「${item.name}」吗？此操作会移除此账户及其本地余额历史，无法直接撤销。`));
+      const error = el('p', 'risk-form-error');
+      form.appendChild(error);
+      const actions = el('div', 'risk-dialog-actions');
+      const cancel = button('取消');
+      const confirm = button('确认删除', 'risk-button danger');
+      let submitted = false;
+      cancel.addEventListener('click', () => { submitted = true; close(); });
+      confirm.addEventListener('click', () => {
+        if (submitted) return;
+        submitted = true;
+        confirm.disabled = true;
+        try {
+          if (locked()) throw new Error('检测到其他标签页更新；风险修改已锁定。请关闭弹窗后重新核对。');
+          const state = current();
+          const latest = state.accounts.find(account => account.id === item.id);
+          if (!latest || JSON.stringify(latest) !== confirmedAccount) {
+            throw new Error('账户已被其他页面删除或更改。请关闭弹窗后重新核对。');
+          }
+          if (mutate(deleteAccount(state, item.id), '账户已删除。')) {
+            close();
+            return;
+          }
+          error.textContent = host.querySelector('.risk-feedback')?.textContent || '未保存，账户未删除。';
+        } catch (failure) {
+          error.textContent = failure.message;
+          notice(failure.message, 'error');
+        }
+        submitted = false;
+        confirm.disabled = false;
+      });
+      actions.append(cancel, confirm);
+      form.appendChild(actions);
+    });
+  }
   function balanceForm(item) { riskDialog('更新余额', (form, close) => { form.appendChild(el('p', 'risk-dialog-note', `当前余额：${fmtUSD(deriveCurrentBalance(item.currentSession))}。仅输入最新已实现余额。`)); const balance = field(form, { label: '最新已实现账户余额', name: 'balance', type: 'number', required: true }); const error = el('p', 'risk-form-error'); form.appendChild(error); const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const save = button('确认更新', 'risk-button primary'); save.type = 'submit'; cancel.addEventListener('click', close); actions.append(cancel, save); form.appendChild(actions); form.addEventListener('submit', event => { event.preventDefault(); try { if (mutate(addBalanceUpdate(current(), item.id, Number(balance.value)), '余额已更新，风险结论已重新计算。')) close(); } catch (failure) { error.textContent = failure.message; } }); }); }
   function floorForm(item) { riskDialog('Hard Loss Floor', (form, close) => { form.appendChild(el('p', 'risk-dialog-note', '该余额线按既有回撤类型规则立即生效；EOD Trailing 在当前时段内冻结。')); const floor = field(form, { label: 'Hard Loss Floor', name: 'floor', type: 'number', value: item.currentSession.hardLossFloor }); const error = el('p', 'risk-form-error'); form.appendChild(error); const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const save = button('保存 Floor', 'risk-button primary'); save.type = 'submit'; cancel.addEventListener('click', close); actions.append(cancel, save); form.appendChild(actions); form.addEventListener('submit', event => { event.preventDefault(); try { if (mutate(updateHardLossFloor(current(), item.id, floor.value.trim() ? Number(floor.value) : null), 'Hard Loss Floor 已更新。')) close(); } catch (failure) { error.textContent = failure.message; } }); }); }
   function undoConfirm(item) { const event = item.currentSession.balanceEvents.at(-1); if (!event) return; riskDialog('撤销上一条余额更新', (form, close) => { form.appendChild(el('p', 'risk-dialog-note', `${fmtUSD(event.previousBalance)} → ${fmtUSD(event.newBalance)} 将被移除，风险状态会重新计算。`)); const actions = el('div', 'risk-dialog-actions'); const cancel = button('取消'); const confirm = button('确认撤销', 'risk-button danger'); cancel.addEventListener('click', close); confirm.addEventListener('click', () => { if (mutate(undoLastBalanceUpdate(current(), item.id), '已撤销上一条余额更新。')) close(); }); actions.append(cancel, confirm); form.appendChild(actions); }); }

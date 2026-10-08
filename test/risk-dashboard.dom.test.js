@@ -9,46 +9,7 @@ import { makeEnvelope } from '../src/capture-persistence.js';
 import { pair, T } from './fixtures/intraday-v6.js';
 import { RISK_MANAGER_SCHEMA_VERSION } from '../src/risk-manager/migration.js';
 
-class FakeElement {
-  constructor(tagName = 'div') { this.tagName = tagName; this.children = []; this.listeners = new Map(); this.dataset = {}; this.className = ''; this.disabled = false; this.value = ''; this.type = ''; this.parentNode = null; this._text = ''; }
-  set value(value) { this._value = String(value); }
-  get value() { return this._value; }
-  set textContent(value) { this._text = String(value); this.children = []; }
-  get textContent() { return this._text; }
-  appendChild(node) { node.parentNode = this; this.children.push(node); return node; }
-  append(...nodes) { nodes.forEach(node => this.appendChild(node)); }
-  add(node) { this.appendChild(node); if (this.tagName === 'select' && (node.selected || this.children.length === 1)) this.value = node.value; }
-  addEventListener(type, listener) { const handlers = this.listeners.get(type) || []; handlers.push(listener); this.listeners.set(type, handlers); }
-  dispatch(type) { const event = { target: this, preventDefault() { this.defaultPrevented = true; } }; (this.listeners.get(type) || []).forEach(listener => listener(event)); return event; }
-  click() { this.dispatch('click'); if (this.type === 'submit') { let parent = this.parentNode; while (parent && parent.tagName !== 'form') parent = parent.parentNode; parent?.dispatch('submit'); } }
-  setAttribute(name, value) { this[name] = String(value); }
-  querySelector(selector) { return find(this, node => selector.startsWith('.') && node.className.split(/\s+/).includes(selector.slice(1))); }
-  showModal() { this.open = true; }
-  close() { this.open = false; }
-  remove() { const siblings = this.parentNode?.children || []; const index = siblings.indexOf(this); if (index >= 0) siblings.splice(index, 1); this.parentNode = null; }
-}
-class FakeOption extends FakeElement {
-  constructor(text, value, defaultSelected = false, selected = false) { super('option'); this.textContent = text; this.value = value; this.defaultSelected = defaultSelected; this.selected = selected; }
-}
-const find = (root, predicate) => {
-  if (predicate(root)) return root;
-  for (const child of root.children) { const hit = find(child, predicate); if (hit) return hit; }
-  return null;
-};
-const byText = (root, text) => find(root, node => node._text === text);
-const byButtonText = (root, text) => {
-  const found = [];
-  const visit = node => { if (node.tagName === 'button' && node._text === text) found.push(node); node.children.forEach(visit); };
-  visit(root); return found.at(-1) || null;
-};
-const byName = (root, name) => find(root, node => node.name === name);
-const byClass = (root, token) => find(root, node => node.className.split(/\s+/).includes(token));
-const all = (root, predicate) => {
-  const found = [];
-  const visit = node => { if (predicate(node)) found.push(node); node.children.forEach(visit); };
-  visit(root); return found;
-};
-const renderedText = node => `${node._text}${node.children.map(renderedText).join('')}`;
+import { FakeElement, FakeOption, byText, byButtonText, byName, byClass, all, renderedText } from '../scripts/qa-fixtures/risk-dom.js';
 
 test('risk dashboard DOM: 点击表单确认会真实创建、更新、撤销、编辑，并保留无效表单', () => {
   const prior = { document: globalThis.document, window: globalThis.window, localStorage: globalThis.localStorage, Option: globalThis.Option };

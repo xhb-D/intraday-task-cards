@@ -1,0 +1,25 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Risk delete native DOM regression · synthetic only</title>
+<button id="run">Run synthetic native DOM tests</button>
+<pre id="results">Ready. Uses in-memory storage only; never reads browser localStorage.</pre>
+<script type="module">
+import {setupDeleteDom, deleteDomCases} from '../../scripts/qa-fixtures/risk-account-delete-cases.js';
+const results = document.querySelector('#results');
+const assert = {
+  equal(actual, expected) { if (actual !== expected) throw new Error(`Not equal: ${actual} / ${expected}`); },
+  deepEqual(actual, expected) { if (JSON.stringify(actual) !== JSON.stringify(expected)) throw new Error('Deep equality failed'); },
+  match(actual, pattern) { if (!pattern.test(actual)) throw new Error(`No match: ${actual}`); },
+  doesNotThrow(run) { run(); },
+};
+document.querySelector('#run').onclick = async event => {
+  event.target.disabled = true; results.textContent = ''; let passed = 0, failed = 0;
+  for (const compact of [true, false]) for (const [name, run] of deleteDomCases) {
+    const context = setupDeleteDom(compact);
+    try { await run(context, assert); passed += 1; results.textContent += `PASS ${compact ? 'home' : 'risk'}: ${name}\n`; }
+    catch (error) { failed += 1; results.textContent += `FAIL ${name}: ${error.message}\n`; }
+    finally { context.dispose(); }
+  }
+  results.textContent += `\nNative DOM: ${passed} PASS / ${failed} FAIL / 0 skipped`;
+};
+</script>
