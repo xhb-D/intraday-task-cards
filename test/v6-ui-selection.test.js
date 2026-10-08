@@ -5,7 +5,7 @@ import * as v6 from '../src/intraday-v6/model.js';
 import { captureUi } from '../src/capture-ui.js';
 
 const T = 1_750_000_000_000;
-const note = 'HTF方向&gt;缺口方向&gt;MTF方向';
+const note = '偏见方向&gt;HTF方向&gt;MTF方向';
 function buttons(html, action) {
   return [...html.matchAll(/<button\b([^>]*)>([^]*?)<\/button>/g)]
     .map(([, attributes, label]) => ({ attributes, label, selected: /class="[^"]*\bselected\b/.test(attributes) }))
