@@ -156,3 +156,6 @@
 .migration-blocked h2{font-size:19px}.migration-blocked button{padding:9px 14px}
 @media(max-width:629px){.capture-card .trade-layout{grid-template-columns:minmax(0,1fr)}.trade-reference .holding-reference{font-size:11px;line-height:18px}.trade-reference .holding-reference-heading{display:flex}.capture-card .trade-exit,.capture-card .flatten{min-height:36px}.capture-card .research-stop-form input{width:110px}.capture-card .research-capture{font-size:12px}}
 @container(max-width:310px){.capture-card .trade-layout{grid-template-columns:minmax(0,1fr)}}
+
+/* V6 card context headings may wrap without changing button or tone styles. */
+.capture-card .classifier .field-label{white-space:normal;overflow-wrap:break-word}
