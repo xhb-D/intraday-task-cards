@@ -4,6 +4,9 @@ import { initRiskDashboard } from '../src/risk-dashboard.js';
 import { initRiskManagerView } from '../src/risk-manager-view.js';
 import { createAccount } from '../src/risk-manager/account-service.js';
 import { addBalanceUpdate } from '../src/risk-manager/session-service.js';
+import { makeUnified, commitUnified, loadUnified, UNIFIED_KEY } from '../src/capture-unified.js';
+import { makeEnvelope } from '../src/capture-persistence.js';
+import { pair, T } from './fixtures/intraday-v6.js';
 import { RISK_MANAGER_SCHEMA_VERSION } from '../src/risk-manager/migration.js';
 
 class FakeElement {
@@ -128,4 +131,35 @@ test('risk manager DOM: 完整页不重复首页摘要，限制 Floor、V1 编�
   } finally {
     globalThis.document = prior.document; globalThis.window = prior.window; globalThis.localStorage = prior.localStorage; globalThis.Option = prior.Option;
   }
+});
+
+
+test('Home layout relocated Risk mount: account creation/editing, balance events, selection, rail and reload use only the same Unified Risk section', () => {
+  const prior = { document: globalThis.document, window: globalThis.window, Option: globalThis.Option };
+  const body=new FakeElement('body'),home=new FakeElement('section'),history=new FakeElement('details'),host=new FakeElement('div');
+  host.id='risk-dashboard-host';home.append(history,host);body.appendChild(home);
+  globalThis.document={body,createElement:tag=>new FakeElement(tag)};globalThis.window={addEventListener(){}};globalThis.Option=FakeOption;
+  try {
+    const {state}=pair();let unified=makeUnified(makeEnvelope(state,T+100)),data=new Map([[UNIFIED_KEY,JSON.stringify(unified)]]),written=[];
+    const storage={getItem:k=>data.get(k)??null,setItem:(k,v)=>{written.push(k);data.set(k,String(v));}};
+    const before=structuredClone(unified),controller={getState:()=>unified.sections.riskManager,isLocked:()=>false,commit:next=>{
+      const candidate=structuredClone(unified);candidate.sections.riskManager=next;
+      unified=commitUnified(storage,candidate,{expectedRaw:JSON.stringify(unified)});
+    }};
+    const view=initRiskDashboard(host,controller);assert.equal(home.children.indexOf(host),home.children.indexOf(history)+1);
+    function add(name){byText(host,'添加账户').click();for(const [field,value] of Object.entries({name,nominal:'50000',reference:'50000',hardLoss:'2000',initial:'50000'}))byName(body,field).value=value;
+      byName(body,'drawdown').value='NONE';byButtonText(body,'添加账户').click();}
+    add('SYNTHETIC-A');add('SYNTHETIC-B');assert.equal(unified.sections.riskManager.accounts.length,2);
+    const a=unified.sections.riskManager.accounts[0],b=unified.sections.riskManager.accounts[1],aId=a.id;
+    byText(host,'更新余额').click();byName(body,'balance').value='50100';byText(body,'确认更新').click();
+    assert.equal(unified.sections.riskManager.accounts[0].currentSession.balanceEvents.length,1);assert.equal(unified.sections.riskManager.accounts[0].currentSession.balanceEvents[0].newBalance,50100);
+    byText(host,'撤销上一条余额更新').click();byText(body,'确认撤销').click();assert.equal(unified.sections.riskManager.accounts[0].currentSession.balanceEvents.length,0);
+    byText(host,'编辑账户').click();byName(body,'name').value='SYNTHETIC-A-EDITED';byText(body,'保存账户').click();assert.equal(unified.sections.riskManager.accounts[0].id,aId);assert.equal(unified.sections.riskManager.accounts[0].name,'SYNTHETIC-A-EDITED');
+    const picker=byClass(host,'risk-mobile-picker');picker.value=b.id;picker.dispatch('change');assert.equal(unified.sections.riskManager.selectedAccountId,b.id);
+    const scroll=[];byClass(host,'risk-rail').scrollBy=options=>scroll.push(options);byButtonText(host,'›').click();byButtonText(host,'‹').click();assert.deepEqual(scroll.map(o=>o.left),[300,-300]);
+    assert.equal(unified.sections.riskManager.accounts.length,2);assert.equal(unified.sections.riskManager.accounts[0].id,aId);
+    assert.deepEqual(unified.sections.intraday,before.sections.intraday);assert.deepEqual(unified.sections.chime,before.sections.chime);assert.deepEqual(unified.preferences,before.preferences);
+    assert.ok(written.length>0&&written.every(k=>k===UNIFIED_KEY));assert.equal(unified.schemaVersion,2);
+    const reloaded=loadUnified(storage).state;assert.deepEqual(reloaded.sections,unified.sections);assert.deepEqual(reloaded.preferences,unified.preferences);view.destroy();
+  } finally {globalThis.document=prior.document;globalThis.window=prior.window;globalThis.Option=prior.Option;}
 });

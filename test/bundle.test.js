@@ -5,13 +5,13 @@ import { readFileSync } from 'node:fs';
 test('production bundle: index 使用 classic bundle，包含统一持久化与四路由且仅显式 Native Dev Mode 使用精确 loopback', () => {
   const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
-  assert.match(html, /<script src="dist\/app\.bundle\.js\?v=v6-htf-structure-v2-hotfix-20261008"><\/script>/);
-  assert.match(html, /<link rel="stylesheet" href="natural-chime\.css\?v=v6-htf-structure-v2-hotfix-20261008">/);
-  assert.match(html, /<link rel="stylesheet" href="appearance\.css\?v=v6-htf-structure-v2-hotfix-20261008">/);
-  assert.equal((html.match(/\?v=v6-htf-structure-v2-hotfix-20261008/g) || []).length, 9, '全部脚本和样式使用同一发布版本，避免新旧资源混载');
+  assert.match(html, /<script src="dist\/app\.bundle\.js\?v=v6-home-layout-refinement-20261008"><\/script>/);
+  assert.match(html, /<link rel="stylesheet" href="natural-chime\.css\?v=v6-home-layout-refinement-20261008">/);
+  assert.match(html, /<link rel="stylesheet" href="appearance\.css\?v=v6-home-layout-refinement-20261008">/);
+  assert.equal((html.match(/\?v=v6-home-layout-refinement-20261008/g) || []).length, 9, '全部脚本和样式使用同一发布版本，避免新旧资源混载');
   const resources = [...html.matchAll(/(?:src|href)="([^\"]+\.(?:css|js)\?v=([^\"]+))"/g)];
   assert.equal(resources.length, 9);
-  assert.ok(resources.every(([, , version]) => version === 'v6-htf-structure-v2-hotfix-20261008'));
+  assert.ok(resources.every(([, , version]) => version === 'v6-home-layout-refinement-20261008'));
   assert.doesNotMatch(html, /v6-setup-hotfix-20261005/);
   assert.doesNotMatch(html, /type="module"/);
   assert.doesNotMatch(bundle, /^import\s/m);

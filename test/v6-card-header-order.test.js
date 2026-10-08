@@ -19,12 +19,12 @@ for (const symbol of ['GC', 'CL', 'ES']) {
       const before = structuredClone(state), html = captureUi.renderCard(state, symbol);
       const controls = html.match(/<div class="card-controls"[^]*?<\/section><\/div>/)?.[0];
       assert.ok(controls);
-      assert.equal((controls.match(/class="field-label"/g) || []).length, 3);
-      assert.match(controls, /structure-field[^]*?HTF结构[^]*?bias-field[^]*?当前偏见[^]*?direction-field[^]*?交易方向 /);
-      assert.ok(controls.includes('field-label">HTF结构（HTF波段动能&amp; 新的未测试优质缺口）</span>'));
-      assert.ok(controls.includes('field-label">当前偏见（价格对HVN拒绝or接受）</span>'));
+      assert.equal((controls.match(/class="field-label(?: context-heading)?"/g) || []).length, 3);
+      assert.match(controls, /structure-field[^]*?大偏见[^]*?bias-field[^]*?小偏见[^]*?direction-field[^]*?交易方向 /);
+      assert.ok(controls.includes('context-note">HTF波段动能&amp;新的未测试优质缺口</span>'));
+      assert.ok(controls.includes('context-note">价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）</span>'));
       assert.ok(controls.includes('交易方向 <span class="direction-note">偏见方向&gt;HTF方向&gt;MTF方向</span>'));
-      assert.ok(controls.includes(`aria-label="${symbol} HTF结构"`));
+      assert.ok(controls.includes(`aria-label="${symbol} 大偏见"`));
       assert.doesNotMatch(controls, /市场结构（MTF chanlun）|MTF结构处于HTF|市场结构不明确时|HTF方向&gt;缺口方向&gt;MTF方向/);
       assert.ok(html.indexOf(controls) < html.indexOf('class="active-trades"'));
       assert.ok(html.indexOf('class="active-trades"') < html.indexOf('class="new-opportunity"'));
@@ -34,7 +34,7 @@ for (const symbol of ['GC', 'CL', 'ES']) {
 }
 test('V6 header bundle: updated labels are included without old production wording', () => {
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
-  assert.ok(bundle.includes('field-label">HTF结构（HTF波段动能&amp; 新的未测试优质缺口）</span>'));
+  assert.ok(bundle.includes('context-note">HTF波段动能&amp;新的未测试优质缺口</span>'));
   assert.ok(bundle.includes('交易方向 <span class="direction-note">偏见方向&gt;HTF方向&gt;MTF方向</span>'));
   assert.doesNotMatch(bundle, /市场结构（MTF chanlun）|MTF结构处于HTF波段内部|HTF方向&gt;缺口方向&gt;MTF方向/);
 });
@@ -65,6 +65,6 @@ test('V6 header context collapsed card: new headings remain together inside hidd
   const html = captureUi.renderCard(state, 'GC', { collapsed: true });
   assert.match(html, /class="card-controls" hidden><section class="classifier structure-field"/);
   assert.ok(html.includes('aria-expanded="false"'));
-  assert.ok(html.includes('当前偏见（价格对HVN拒绝or接受）'));
+  assert.ok(html.includes('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）'));
   assert.deepEqual(state, before);
 });

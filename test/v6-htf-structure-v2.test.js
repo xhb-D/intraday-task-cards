@@ -25,8 +25,8 @@ test('HTF V2 UI: three exact choices in order; precise headings and no legacy cr
     const html=captureUi.renderCard(v6.createWorkspace(T),symbol),section=html.match(/<section class="classifier structure-field">([^]*?)<\/section>/)[1];
     const buttons=[...section.matchAll(/<button[^>]*data-action="structure"[^>]*data-value="([^"]+)"[^>]*>([^]*?)<\/button>/g)];
     assert.deepEqual(buttons.map(m=>m[1]),keys);assert.deepEqual(buttons.map(m=>m[2]),labels);
-    assert.ok(html.indexOf('HTF结构（HTF波段动能&amp; 新的未测试优质缺口）')<html.indexOf('当前偏见（价格对HVN拒绝or接受）'));
-    assert.ok(html.indexOf('当前偏见（价格对HVN拒绝or接受）')<html.indexOf('交易方向 <span'));
+    assert.ok(html.indexOf('HTF波段动能&amp;新的未测试优质缺口')<html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）'));
+    assert.ok(html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）')<html.indexOf('交易方向 <span'));
     assert.ok(html.includes('偏见方向&gt;HTF方向&gt;MTF方向'));
   }
 });

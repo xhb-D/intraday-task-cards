@@ -162,3 +162,9 @@
 
 /* V6 card context headings may wrap without changing button or tone styles. */
 .capture-card .classifier .field-label{white-space:normal;overflow-wrap:break-word}
+
+/* Shared presentation hierarchy for big/small bias; button styles stay untouched. */
+.capture-card .context-heading{display:grid;gap:3px}
+.capture-card .context-title{font-size:13px;line-height:18px;font-weight:650;color:var(--text-primary)}
+.capture-card .context-note{font-size:11px;line-height:16px;font-weight:400;color:var(--text-secondary);white-space:normal;overflow-wrap:break-word}
+#history + #risk-dashboard-host{margin:14px 0 12px}

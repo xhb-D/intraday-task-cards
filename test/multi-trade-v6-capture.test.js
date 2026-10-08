@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { createAccount } from '../src/risk-manager/account-service.js';
 import { createHash } from 'node:crypto';
 import vm from 'node:vm';
 import { intradayV6 as v6 } from '../src/intraday-v6/index.js';
@@ -164,4 +165,15 @@ test('HTF V2 production UI: explicit selection saves exact enum and new snapshot
   assert.deepEqual(next.sections.riskManager,before.sections.riskManager);assert.deepEqual(next.sections.chime,before.sections.chime);
   assert.equal(next.schemaVersion,2);h.click('entry',s.records[0].id);h.confirm();h.click('setup',null,'mtf_bof');
   assert.equal(h.saved().sections.intraday.state.records.at(-1).structure3mAtRegistration,'trend_pullback_weaker');assert.deepEqual(h.errors,[]);
+});
+
+
+test('Home layout production: hide/collapse and per-trade management leave synthetic accounts, balances and chime settings unchanged after reload',()=>{
+  const {state,a}=pair(),unified=makeUnified(makeEnvelope(state,T+100));
+  for(const name of ['SYNTHETIC-A','SYNTHETIC-B'])unified.sections.riskManager=createAccount(unified.sections.riskManager,{name,nominalAccountSize:50000,riskReferenceBalance:50000,hardLossAmount:2000,drawdownType:'NONE',defaultHardLossFloor:null,initialBalance:50000});
+  const h=bundleHarness(undefined,{raw:JSON.stringify(unified)}),before=h.saved();
+  h.click('toggle-collapse');h.click('toggle-collapse');h.click('hide-card',null,null,'CL');h.click('bof-to-pb',a.id);
+  const after=h.saved();assert.deepEqual(after.sections.riskManager,before.sections.riskManager);assert.deepEqual(after.sections.chime,before.sections.chime);
+  assert.equal(after.sections.intraday.state.records[0].researchCapture.manualEvents.at(-1).type,'BOF_TO_PB_RECORDED');
+  const reloaded=bundleHarness(undefined,{raw:h.raw()});assert.deepEqual(reloaded.saved().sections,after.sections);assert.deepEqual(h.errors,[]);assert.deepEqual(reloaded.errors,[]);
 });

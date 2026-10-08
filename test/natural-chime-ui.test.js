@@ -32,11 +32,13 @@ test('Five compact chime tags stay in one row and scroll inside their panel when
   assert.match(rule('.chime-custom-minutes[hidden]'), /display:none/);
 });
 
-test('Homepage keeps risk and chime summaries side by side at every responsive breakpoint', () => {
+test('Homepage keeps only Chime at full width while Risk retains its separate dashboard layout', () => {
   const responsiveCss = css.slice(css.indexOf('@media'));
   assert.doesNotMatch(responsiveCss, /grid-template-areas:"summary" "chime" "accounts"/);
   assert.doesNotMatch(responsiveCss, /#home-top-region\{[^}]*grid-template-columns/);
-  assert.match(rule('#home-top-region'), /grid-template-areas:"summary chime" "accounts accounts"/);
+  assert.match(rule('#home-top-region'), /grid-template-columns:minmax\(0,1fr\)/);
+  assert.doesNotMatch(css, /#risk-dashboard-host|grid-template-areas/);
+  assert.doesNotMatch(rule('#chime-summary-host'), /border-left|grid-area/);
   assert.match(rule('.chime-home-preferences'), /min-width:0/);
   assert.match(rule('.chime-home-preferences .chime-field select'), /min-width:0/);
   assert.match(rule('.chime-home-preferences .chime-field select'), /max-width:100%/);
