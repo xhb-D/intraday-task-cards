@@ -68,7 +68,7 @@ test('V6 I: A BOF→PB and revert are independent of BOF B and do not replace or
   m.recordBofToPb(state,a.id,T+22); const first = clone(a.researchCapture.manualEvents[0]);
   assert.equal(m.derivedManagementState(a),'PB'); assert.equal(m.derivedManagementState(b),'BOF');
   m.revertBofToPb(state,a.id,T+23);
-  assert.equal(m.derivedManagementState(a),'BOF'); assert.equal(a.type,'htf_bof');
+  assert.equal(m.derivedManagementState(a),'BOF'); assert.equal(a.type,'mtf_bof');
   assert.deepEqual(a.researchCapture.manualEvents[0],first); assert.deepEqual(b,savedB);
   assert.equal(a.researchCapture.manualEvents[1].payload.revertedEventId,first.id);
 });
@@ -103,7 +103,7 @@ test('V6 Q boundary: flatten rejects before the later position stage start; A is
 
 test('V6 R: flatten leaves pending C and unrelated CL trade completely unchanged', () => {
   const { state } = pair(); m.changeStructure(state,'CL','range'); m.changeDirection(state,'CL','short',T+25);
-  const cl=addTrade(state,'htf_bof',T+26,'CL'), c=m.chooseSetup(state,'GC','mtf_pb',T+30).opportunity;
+  const cl=addTrade(state,'mtf_bof',T+26,'CL'), c=m.chooseSetup(state,'GC','mtf_pb',T+30).opportunity;
   const cBefore=clone(c), clBefore=clone(cl); m.markAllTradesExited(state,'GC',T+40,true);
   assert.deepEqual(c,cBefore); assert.deepEqual(cl,clBefore);
   assert.equal(q.activeOpportunityForSymbol(state,'GC'),c);
@@ -191,10 +191,10 @@ test('V6 ID operations cannot affect the wrong stage or reuse an ended trade', (
 test('V6 pending Setup replacement/end preflights time and never changes existing A', () => {
   const state=ready(), a=addTrade(state), savedA=clone(a), pending=m.chooseSetup(state,'GC','mtf_pb',T+20).opportunity;
   m.setOpportunityStage(state,pending.id,'signal',T+25);
-  rejectsUnchanged(state,()=>m.chooseSetup(state,'GC','htf_bof',T+24),'V6_TIME_INVALID');
+  rejectsUnchanged(state,()=>m.chooseSetup(state,'GC','mtf_bof',T+24),'V6_TIME_INVALID');
   rejectsUnchanged(state,()=>m.endOpportunity(state,pending.id,'invalid',T+24),'V6_TIME_INVALID');
   rejectsUnchanged(state,()=>m.setOpportunityStage(state,pending.id,'wait',T+24),'V6_TIME_INVALID');
-  const next=m.chooseSetup(state,'GC','htf_bof',T+26).opportunity;
+  const next=m.chooseSetup(state,'GC','mtf_bof',T+26).opportunity;
   assert.equal(pending.reason,'canceled'); assert.equal(pending.exitCapture,null); assert.notEqual(next.id,pending.id); assert.deepEqual(a,savedA);
 });
 

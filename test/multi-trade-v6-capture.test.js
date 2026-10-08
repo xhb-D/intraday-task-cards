@@ -115,8 +115,8 @@ test('M2 production lifecycle: same Setup entry twice retains record IDs and bac
 
 test('M2 full backup: recovery audit, flatten groups, complete manual chains and multi-active reload all survive',()=>{
   const legacy=v5Active();legacy.records=[];const state=v6.migrateV5ToV6(legacy,{migratedAt:T+100}).state;
-  addTrade(state,'htf_bof',T+10);v6.markAllTradesExited(state,'GC',T+30,true);
-  const a=addTrade(state,'htf_bof',T+40),b=addTrade(state,'htf_bof',T+50);
+  addTrade(state,'mtf_bof',T+10);v6.markAllTradesExited(state,'GC',T+30,true);
+  const a=addTrade(state,'mtf_bof',T+40),b=addTrade(state,'mtf_bof',T+50);
   v6.recordInitialStop(state,a.id,90,T+60);v6.correctInitialStop(state,a.id,89,T+61);v6.recordBofToPb(state,a.id,T+62);v6.revertBofToPb(state,a.id,T+63);v6.recordInitialStop(state,b.id,95,T+64);v6.chooseSetup(state,'GC','mtf_pb',T+70);
   const value=makeUnified(makeEnvelope(state,T+80)),restored=normalizeImport(JSON.parse(JSON.stringify(value)),makeUnified()).state;
   assert.deepEqual(restored,value);assert.equal(restored.sections.intraday.state.migrationAudit[0].code,'ACTIVE_RECORD_RECOVERED_FROM_V5_CARD');assert.equal(restored.sections.intraday.state.records[0].exitCapture.groupId,restored.sections.intraday.state.records[1].exitCapture.groupId);
@@ -133,4 +133,24 @@ test('V6 simplified Setup: old htf_pb History still renders its original name an
   assert.equal(h.errors.length,0);assert.match(h.history(),/MTF BOF（趋势走弱 1次）/);
   assert.equal(h.saved().sections.intraday.state.records[0].type,'htf_pb');
   assert.doesNotMatch(h.html(),/data-action="setup"[^>]*data-value="htf_pb"/);
+});
+
+test('MTF BOF production bundle: new setup persists through entry and history; legacy creation is rejected',()=>{
+  const h=bundleHarness(ready());
+  for(const type of ['htf_pb','htf_bof']){const raw=h.raw();h.click('setup',null,type);assert.equal(h.raw(),raw);}
+  assert.deepEqual(h.errors.map(e=>e[1].errorCode),['V6_SETUP_INVALID','V6_SETUP_INVALID']);h.errors.length=0;
+  h.click('setup',null,'mtf_bof');let r=h.saved().sections.intraday.state.records.at(-1);
+  assert.equal(r.type,'mtf_bof');assert.match(h.html(),/MTF BOF（做多等收敛 做空等扫高）/);
+  h.click('entry',r.id);h.confirm();assert.equal(h.saved().sections.intraday.state.records.at(-1).type,'mtf_bof');
+  assert.match(h.history(),/MTF BOF（做多等收敛 做空等扫高）/);
+  h.click('setup',null,'mtf_bof');r=h.saved().sections.intraday.state.records.at(-1);h.click('entry',r.id);h.confirm();
+  assert.equal(v6.activeTradesForSymbol(h.saved().sections.intraday.state,'GC').length,2);
+  assert.deepEqual(h.errors,[]);
+});
+test('MTF BOF production bundle: old HTF BOF history and active lifecycle keep their original name and ID',()=>{
+  const state=v6.migrateV5ToV6(v5Active('wait'),{migratedAt:T+100}).state,id=state.records[0].id,h=bundleHarness(state);
+  assert.match(h.html(),/HTF BOF（恐慌或走弱 1次）/);h.click('entry',id);h.confirm();
+  assert.equal(h.saved().sections.intraday.state.records[0].type,'htf_bof');assert.match(h.history(),/HTF BOF（恐慌或走弱 1次）/);
+  h.click('trade-exit',id);h.confirm('UNKNOWN');assert.equal(h.saved().sections.intraday.state.records[0].id,id);
+  assert.deepEqual(h.errors,[]);
 });

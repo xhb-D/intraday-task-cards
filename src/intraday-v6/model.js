@@ -1,5 +1,5 @@
 import {
-  ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, CREATABLE_SETUPS, isSetupAllowed,
+  ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, CREATABLE_SETUPS, isSetupAllowed as isV5SetupAllowed,
   recordInitialStop as v5RecordInitialStop, correctInitialStop as v5CorrectInitialStop,
   recordBofToPb as v5RecordBofToPb, revertBofToPb as v5RevertBofToPb
 } from '../model.js';
@@ -7,6 +7,10 @@ import { activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionFo
 import { assertV6State, SCHEMA_VERSION, safeTime, own, fail, singleRecordV5View } from './validation.js';
 export { assertV6State, SCHEMA_VERSION } from './validation.js';
 export { effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, researchSetupClass } from '../model.js';
+
+// Only V6 can create the new identity. Reuse the unchanged context gate.
+export const isSetupAllowed = (direction, structure3m, type) =>
+  own(CREATABLE_SETUPS, type) && isV5SetupAllowed(direction, structure3m, type === 'mtf_bof' ? 'htf_bof' : type);
 
 export function createWorkspace(time = Date.now()) {
   if (!safeTime(time)) fail('V6_TIME_INVALID', 'time');

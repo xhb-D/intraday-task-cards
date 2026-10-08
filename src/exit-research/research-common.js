@@ -17,12 +17,15 @@ export function epochMillis(time) {
   return Date.UTC(+year, +month - 1, +day, +hour, +minute, +second, +ms) - parsed.offsetMinutes * 60000;
 }
 export function assertOpportunityRecord(record) {
-  // Reuse the frozen V5 validator, including complete Manual Event semantics.
+  // Reuse frozen V5 event validation via a detached type-only compatibility view.
+  // Matching and research output still receive the original mtf_bof record.
   const state = createWorkspace(0);
-  state.records = [clone(record)];
+  const validationRecord = clone(record);
+  if (validationRecord?.type === 'mtf_bof') validationRecord.type = 'htf_bof';
+  state.records = [validationRecord];
   if (record?.endedAt === null && state.cards[record.symbol]) {
     state.cards[record.symbol].direction = record.direction;
-    state.cards[record.symbol].opportunity = clone(record);
+    state.cards[record.symbol].opportunity = validationRecord;
   }
   try { assertState(state); } catch { fail('INVALID_OPPORTUNITY_RECORD', 'record'); }
 }

@@ -8,14 +8,14 @@ export function ready(symbol = 'GC', direction = 'long') {
   v6.changeDirection(state, symbol, direction, T + 1);
   return state;
 }
-export function addTrade(state, type = 'htf_bof', at = T + 10, symbol = 'GC') {
+export function addTrade(state, type = 'mtf_bof', at = T + 10, symbol = 'GC') {
   const { opportunity } = v6.chooseSetup(state, symbol, type, at);
   v6.markEntered(state, opportunity.id, at + 1, true);
   return opportunity;
 }
 export function pair() {
   const state = ready();
-  const a = addTrade(state, 'htf_bof', T + 10), b = addTrade(state, 'htf_bof', T + 20);
+  const a = addTrade(state, 'mtf_bof', T + 10), b = addTrade(state, 'mtf_bof', T + 20);
   return { state, a, b };
 }
 export function v5Active(stage = 'position', symbol = 'GC') {

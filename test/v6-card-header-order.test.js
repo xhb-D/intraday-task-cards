@@ -45,10 +45,10 @@ for (const direction of ['long', 'short']) {
       const state = v6.createWorkspace(T);
       v6.changeStructure(state, 'GC', direction === 'long' ? 'bullish' : 'bearish');
       v6.changeDirection(state, 'GC', direction, T + 1);
-      const { opportunity } = v6.chooseSetup(state, 'GC', 'htf_bof', T + 2);
+      const { opportunity } = v6.chooseSetup(state, 'GC', 'mtf_bof', T + 2);
       if (lifecycle === 'position') {
         v6.markEntered(state, opportunity.id, T + 3, true);
-        const second = v6.chooseSetup(state, 'GC', 'htf_bof', T + 4).opportunity;
+        const second = v6.chooseSetup(state, 'GC', 'mtf_bof', T + 4).opportunity;
         v6.markEntered(state, second.id, T + 5, true);
       }
       const before = structuredClone(state), html = captureUi.renderCard(state, 'GC');

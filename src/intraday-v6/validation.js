@@ -34,6 +34,9 @@ export function assertJsonData(value, path = 'state', ancestors = new Set()) {
 export function singleRecordV5View(record) {
   const state = createV5Workspace(0);
   const { exitCapture, ...businessRecord } = structuredClone(record);
+  // Projection is solely for frozen lifecycle/event validation and writers.
+  // Never persist or return this type as V6 truth; the original record stays mtf_bof.
+  if (record.type === 'mtf_bof') businessRecord.type = 'htf_bof';
   state.records = [businessRecord];
   if (record.endedAt === null) {
     state.cards[record.symbol].direction = record.direction;
@@ -50,7 +53,7 @@ function assertTimeline(record, path) {
   if (position.length !== (record.enteredAt === null ? 0 : 1) || position.length && position[0].start !== record.enteredAt) fail('V6_TIMELINE_INVALID', path);
   for (const stage of record.stages) if (stage.end !== null && stage.end < stage.start) fail('V6_TIMELINE_INVALID', path);
   if (record.endedAt !== null && record.stages.at(-1).end !== record.endedAt) fail('V6_TIMELINE_INVALID', path);
-  if (own(SETUPS, record.type) && record.stages[0].start !== record.registeredAt) fail('V6_TIMELINE_INVALID', path);
+  if ((own(SETUPS, record.type) || record.type === 'mtf_bof') && record.stages[0].start !== record.registeredAt) fail('V6_TIMELINE_INVALID', path);
 }
 
 const recordKeys = ['id', 'symbol', 'direction', 'type', 'zone', 'createdAt', 'registeredAt', 'biasAtRegistration', 'structure3mAtRegistration',
