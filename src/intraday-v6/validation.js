@@ -1,4 +1,4 @@
-import { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, SETUPS, assertState as assertV5State, createWorkspace as createV5Workspace } from '../model.js';
+import { ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, DIRECTIONS, SETUPS, assertState as assertV5State, createWorkspace as createV5Workspace } from '../model.js';
 import { effectiveDirectionForSymbol } from './queries.js';
 
 export const SCHEMA_VERSION = 6;
@@ -37,6 +37,9 @@ export function singleRecordV5View(record) {
   // Projection is solely for frozen lifecycle/event validation and writers.
   // Never persist or return this type as V6 truth; the original record stays mtf_bof.
   if (record.type === 'mtf_bof') businessRecord.type = 'htf_bof';
+  // Neutral sentinel ONLY in this detached V5 validation view, not a semantic mapping.
+  // V6 validates the actual snapshot enum below; writers copy back manualEvents only.
+  if (own(HTF_STRUCTURES_V2, record.structure3mAtRegistration)) businessRecord.structure3mAtRegistration = 'range';
   state.records = [businessRecord];
   if (record.endedAt === null) {
     state.cards[record.symbol].direction = record.direction;
@@ -69,7 +72,7 @@ export function assertV6State(state) {
   for (const symbol of ORDER) {
     const card = state.cards[symbol];
     if (!exact(card, ['symbol', 'bias', 'structure3m', 'needsStructureReview', 'direction', 'idleSince']) || card.symbol !== symbol ||
-        !own(BIASES, card.bias) || !own(STRUCTURES_3M, card.structure3m) || card.needsStructureReview !== false ||
+        !own(BIASES, card.bias) || (!own(STRUCTURES_3M, card.structure3m) && !own(HTF_STRUCTURES_V2, card.structure3m)) || card.needsStructureReview !== false ||
         !own(DIRECTIONS, card.direction) || !safeTime(card.idleSince)) fail('V6_CARD_INVALID', `cards.${symbol}`);
   }
   const ids = new Set(), groups = new Map();
@@ -78,6 +81,7 @@ export function assertV6State(state) {
     if (!record || typeof record !== 'object' || Array.isArray(record) || !recordKeys.every(key => own(record, key)) || forbiddenRecordKeys.some(key => own(record, key))) fail('V6_RECORD_INVALID', path);
     if (typeof record.id !== 'string' || !record.id.trim() || ids.has(record.id) || !ORDER.includes(record.symbol)) fail('V6_RECORD_INVALID', path);
     ids.add(record.id);
+    if (!own(STRUCTURES_3M, record.structure3mAtRegistration) && !own(HTF_STRUCTURES_V2, record.structure3mAtRegistration)) fail('V6_RECORD_INVALID', `${path}.structure3mAtRegistration`);
     try { assertV5State(singleRecordV5View(record)); }
     catch (cause) { throw Object.assign(new Error('V6 记录不符合既有生命周期/事件语义', { cause }), { code: 'V6_RECORD_INVALID', path }); }
     assertTimeline(record, path);

@@ -4,7 +4,7 @@ export const T = 1_750_000_000_000;
 export const clone = state => structuredClone(state);
 export function ready(symbol = 'GC', direction = 'long') {
   const state = v6.createWorkspace(T);
-  v6.changeStructure(state, symbol, 'bullish');
+  v6.changeStructure(state, symbol, 'trend_pullback_stronger');
   v6.changeDirection(state, symbol, direction, T + 1);
   return state;
 }

@@ -1,5 +1,5 @@
 import { initExitResearchWorkbench } from './exit-research/ui/controller.js';
-import { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, SETUP_LABELS, STAGES, copy, effectiveInitialStop } from './model.js';
+import { ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, DIRECTIONS, SETUP_LABELS, STAGES, copy, effectiveInitialStop } from './model.js';
 import { intradayV6 } from './intraday-v6/index.js';
 import { captureUi } from './capture-ui.js';
 import { makeEnvelope, exportMarkdown, dateKey, timeText, fullTime, captureRecordProgress, captureMigrationMessage } from './capture-persistence.js';
@@ -272,7 +272,7 @@ function handleAction(button) {
   if (action === 'bof-to-pb') { if (intradayV6.recordBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：PB`,symbol,record.id); return; }
   if (action === 'bof-revert') { if (intradayV6.revertBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：BOF`,symbol,record.id); return; }
   if (action === 'bias') { if (intradayV6.changeBias(state,symbol,value).changed) mutate(`${symbol} 当前偏见：${BIASES[value]}`,symbol); return; }
-  if (action === 'structure') { if (intradayV6.changeStructure(state,symbol,value).changed) mutate(`${symbol} 市场结构：${STRUCTURES_3M[value]}`,symbol); return; }
+  if (action === 'structure') { if (intradayV6.changeStructure(state,symbol,value).changed) mutate(`${symbol} HTF结构：${HTF_STRUCTURES_V2[value] || STRUCTURES_3M[value]}`,symbol); return; }
   if (action === 'direction') { if (intradayV6.changeDirection(state,symbol,value,now()).changed) mutate(`${symbol} 当前${DIRECTIONS[value]}`,symbol); return; }
   if (action === 'setup') { if (intradayV6.chooseSetup(state,symbol,value,now()).changed) mutate(`${symbol} 新机会已登记`,symbol); return; }
   if (action === 'stage') { if (intradayV6.setOpportunityStage(state,record.id,value,now()).changed) mutate(`${symbol} 新机会已切换到${STAGES[value]}`,symbol,record.id); return; }

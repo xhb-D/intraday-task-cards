@@ -5,6 +5,8 @@ export const LEGACY_SCHEMA_VERSION = 3;
 export const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' });
 export const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
 export const VISIBLE_STRUCTURES_3M = Object.freeze({ bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
+// V6 classification; kept separate so frozen V5 validation and historical meanings stay unchanged.
+export const HTF_STRUCTURES_V2 = Object.freeze({ trend_pullback_stronger: '趋势（回调变强）', trend_pullback_weaker: '趋势（回调变弱）', htf_range_v2: '震荡' });
 export const DIRECTIONS = Object.freeze({ long: '做多', short: '做空', none: '暂无交易方向' });
 export const SETUPS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF（恐慌或走弱 1次）' });
 // V6 creation is separate from frozen V5 readable types. Historical labels remain unchanged.

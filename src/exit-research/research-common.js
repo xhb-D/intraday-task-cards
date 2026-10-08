@@ -1,6 +1,6 @@
 import { parseTradovateTime } from './time.js';
 import { validationError } from './csv.js';
-import { assertState, createWorkspace } from '../model.js';
+import { assertState, createWorkspace, HTF_STRUCTURES_V2 } from '../model.js';
 
 export const clone = value => structuredClone(value);
 export const compareText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
@@ -17,11 +17,13 @@ export function epochMillis(time) {
   return Date.UTC(+year, +month - 1, +day, +hour, +minute, +second, +ms) - parsed.offsetMinutes * 60000;
 }
 export function assertOpportunityRecord(record) {
-  // Reuse frozen V5 event validation via a detached type-only compatibility view.
+  // Reuse frozen V5 event validation via a detached compatibility view.
   // Matching and research output still receive the original mtf_bof record.
   const state = createWorkspace(0);
   const validationRecord = clone(record);
   if (validationRecord?.type === 'mtf_bof') validationRecord.type = 'htf_bof';
+  // Read-only V5 validation sentinel; research receives the untouched V6 snapshot.
+  if (validationRecord && Object.hasOwn(HTF_STRUCTURES_V2, validationRecord.structure3mAtRegistration)) validationRecord.structure3mAtRegistration = 'range';
   state.records = [validationRecord];
   if (record?.endedAt === null && state.cards[record.symbol]) {
     state.cards[record.symbol].direction = record.direction;

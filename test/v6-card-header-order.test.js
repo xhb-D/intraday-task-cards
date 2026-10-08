@@ -10,7 +10,7 @@ for (const symbol of ['GC', 'CL', 'ES']) {
     test(`V6 card header ${symbol}/${lifecycle}: HTF structure then bias then direction, exact labels and no state changes`, () => {
       const state = v6.createWorkspace(T);
       if (lifecycle !== 'none') {
-        v6.changeStructure(state, symbol, 'bullish');
+        v6.changeStructure(state, symbol, 'trend_pullback_stronger');
         v6.changeDirection(state, symbol, 'long', T + 1);
         const { opportunity } = v6.chooseSetup(state, symbol, 'mtf_pb', T + 2);
         if (lifecycle === 'signal') v6.setOpportunityStage(state, opportunity.id, 'signal', T + 3);
@@ -22,7 +22,7 @@ for (const symbol of ['GC', 'CL', 'ES']) {
       assert.equal((controls.match(/class="field-label"/g) || []).length, 3);
       assert.match(controls, /structure-field[^]*?HTF结构[^]*?bias-field[^]*?当前偏见[^]*?direction-field[^]*?交易方向 /);
       assert.ok(controls.includes('field-label">HTF结构（HTF波段动能&amp; 新的未测试优质缺口）</span>'));
-      assert.ok(controls.includes('field-label">当前偏见（TPO字母轨迹&amp;尾部）</span>'));
+      assert.ok(controls.includes('field-label">当前偏见（价格对HVN拒绝or接受）</span>'));
       assert.ok(controls.includes('交易方向 <span class="direction-note">偏见方向&gt;HTF方向&gt;MTF方向</span>'));
       assert.ok(controls.includes(`aria-label="${symbol} HTF结构"`));
       assert.doesNotMatch(controls, /市场结构（MTF chanlun）|MTF结构处于HTF|市场结构不明确时|HTF方向&gt;缺口方向&gt;MTF方向/);
@@ -43,7 +43,7 @@ for (const direction of ['long', 'short']) {
   for (const lifecycle of ['wait', 'position']) {
     test(`V6 header context ${direction}/${lifecycle}: direction tone, Setup and independent records preserved`, () => {
       const state = v6.createWorkspace(T);
-      v6.changeStructure(state, 'GC', direction === 'long' ? 'bullish' : 'bearish');
+      v6.changeStructure(state, 'GC', 'trend_pullback_stronger');
       v6.changeDirection(state, 'GC', direction, T + 1);
       const { opportunity } = v6.chooseSetup(state, 'GC', 'mtf_bof', T + 2);
       if (lifecycle === 'position') {
@@ -65,6 +65,6 @@ test('V6 header context collapsed card: new headings remain together inside hidd
   const html = captureUi.renderCard(state, 'GC', { collapsed: true });
   assert.match(html, /class="card-controls" hidden><section class="classifier structure-field"/);
   assert.ok(html.includes('aria-expanded="false"'));
-  assert.ok(html.includes('当前偏见（TPO字母轨迹&amp;尾部）'));
+  assert.ok(html.includes('当前偏见（价格对HVN拒绝or接受）'));
   assert.deepEqual(state, before);
 });

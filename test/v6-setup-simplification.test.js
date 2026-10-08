@@ -89,7 +89,7 @@ test('Setup assets: CSS and bundle use the same new version to avoid a cached th
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const cssVersion=html.match(/refinement\.css\?v=([^"\s]+)/)?.[1];
   const bundleVersion=html.match(/dist\/app\.bundle\.js\?v=([^"\s]+)/)?.[1];
-  assert.equal(cssVersion,'v6-mtf-bof-setup-hotfix-20261008');assert.equal(bundleVersion,cssVersion);
+  assert.equal(cssVersion,'v6-htf-structure-v2-hotfix-20261008');assert.equal(bundleVersion,cssVersion);
   assert.doesNotMatch(html,/选择 MTF PB、MTF BOF/);
   assert.ok(html.includes('选择 MTF PB 或 MTF BOF（做多等收敛 做空等扫高）后'));
   assert.doesNotMatch(html,/选择 MTF PB 或 HTF BOF/);

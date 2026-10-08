@@ -1166,6 +1166,8 @@ const LEGACY_SCHEMA_VERSION = 3;
 const BIASES = Object.freeze({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' });
 const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
 const VISIBLE_STRUCTURES_3M = Object.freeze({ bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
+// V6 classification; kept separate so frozen V5 validation and historical meanings stay unchanged.
+const HTF_STRUCTURES_V2 = Object.freeze({ trend_pullback_stronger: '趋势（回调变强）', trend_pullback_weaker: '趋势（回调变弱）', htf_range_v2: '震荡' });
 const DIRECTIONS = Object.freeze({ long: '做多', short: '做空', none: '暂无交易方向' });
 const SETUPS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF（恐慌或走弱 1次）' });
 // V6 creation is separate from frozen V5 readable types. Historical labels remain unchanged.
@@ -1734,7 +1736,7 @@ function reportDiagnostic(error, context) {
 
 
 const intradayV6 = (() => {
-const v6Modules = {'src/model.js': {ORDER,SCHEMA_VERSION,V4_SCHEMA_VERSION,LEGACY_SCHEMA_VERSION,BIASES,STRUCTURES_3M,VISIBLE_STRUCTURES_3M,DIRECTIONS,SETUPS,CREATABLE_SETUPS,LEGACY_SETUPS,SETUP_LABELS,STAGES,RESULTS,ATTENTION,copy,stateOf,hasRecord,setupLabel,isDirectionAllowed,isSetupAllowed,holdingConflictWarning,recordSnapshot,createWorkspace,changeBias,changeDirection,changeStructure,chooseSetup,setStage,markEntered,endOpportunity,markExited,deleteRecord,recordProgress,instruction,assertState,assertV4State,assertLegacyState,migrateV3Workspace,migrateV4Workspace,migrateWorkspace,researchSetupClass,effectiveInitialStop,effectiveBofToPbEvent,derivedManagementState,formatStopPrice,recordInitialStop,correctInitialStop,recordBofToPb,revertBofToPb}};
+const v6Modules = {'src/model.js': {ORDER,SCHEMA_VERSION,V4_SCHEMA_VERSION,LEGACY_SCHEMA_VERSION,BIASES,STRUCTURES_3M,VISIBLE_STRUCTURES_3M,HTF_STRUCTURES_V2,DIRECTIONS,SETUPS,CREATABLE_SETUPS,LEGACY_SETUPS,SETUP_LABELS,STAGES,RESULTS,ATTENTION,copy,stateOf,hasRecord,setupLabel,isDirectionAllowed,isSetupAllowed,holdingConflictWarning,recordSnapshot,createWorkspace,changeBias,changeDirection,changeStructure,chooseSetup,setStage,markEntered,endOpportunity,markExited,deleteRecord,recordProgress,instruction,assertState,assertV4State,assertLegacyState,migrateV3Workspace,migrateV4Workspace,migrateWorkspace,researchSetupClass,effectiveInitialStop,effectiveBofToPbEvent,derivedManagementState,formatStopPrice,recordInitialStop,correctInitialStop,recordBofToPb,revertBofToPb}};
 v6Modules["src/intraday-v6/queries.js"] = (() => {
 const { ORDER } = v6Modules["src/model.js"];
 function assertSymbol(symbol) {
@@ -1771,7 +1773,7 @@ function recordLifecycleState(record) {
 return {assertSymbol,activeOpportunityForSymbol,activeTradesForSymbol,effectiveDirectionForSymbol,recordLifecycleState};
 })();
 v6Modules["src/intraday-v6/validation.js"] = (() => {
-const { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, SETUPS, assertState: assertV5State, createWorkspace: createV5Workspace } = v6Modules["src/model.js"];
+const { ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, DIRECTIONS, SETUPS, assertState: assertV5State, createWorkspace: createV5Workspace } = v6Modules["src/model.js"];
 const { effectiveDirectionForSymbol } = v6Modules["src/intraday-v6/queries.js"];
 const SCHEMA_VERSION = 6;
 const safeTime = value => Number.isSafeInteger(value) && value >= 0;
@@ -1809,6 +1811,9 @@ function singleRecordV5View(record) {
   // Projection is solely for frozen lifecycle/event validation and writers.
   // Never persist or return this type as V6 truth; the original record stays mtf_bof.
   if (record.type === 'mtf_bof') businessRecord.type = 'htf_bof';
+  // Neutral sentinel ONLY in this detached V5 validation view, not a semantic mapping.
+  // V6 validates the actual snapshot enum below; writers copy back manualEvents only.
+  if (own(HTF_STRUCTURES_V2, record.structure3mAtRegistration)) businessRecord.structure3mAtRegistration = 'range';
   state.records = [businessRecord];
   if (record.endedAt === null) {
     state.cards[record.symbol].direction = record.direction;
@@ -1841,7 +1846,7 @@ function assertV6State(state) {
   for (const symbol of ORDER) {
     const card = state.cards[symbol];
     if (!exact(card, ['symbol', 'bias', 'structure3m', 'needsStructureReview', 'direction', 'idleSince']) || card.symbol !== symbol ||
-        !own(BIASES, card.bias) || !own(STRUCTURES_3M, card.structure3m) || card.needsStructureReview !== false ||
+        !own(BIASES, card.bias) || (!own(STRUCTURES_3M, card.structure3m) && !own(HTF_STRUCTURES_V2, card.structure3m)) || card.needsStructureReview !== false ||
         !own(DIRECTIONS, card.direction) || !safeTime(card.idleSince)) fail('V6_CARD_INVALID', `cards.${symbol}`);
   }
   const ids = new Set(), groups = new Map();
@@ -1850,6 +1855,7 @@ function assertV6State(state) {
     if (!record || typeof record !== 'object' || Array.isArray(record) || !recordKeys.every(key => own(record, key)) || forbiddenRecordKeys.some(key => own(record, key))) fail('V6_RECORD_INVALID', path);
     if (typeof record.id !== 'string' || !record.id.trim() || ids.has(record.id) || !ORDER.includes(record.symbol)) fail('V6_RECORD_INVALID', path);
     ids.add(record.id);
+    if (!own(STRUCTURES_3M, record.structure3mAtRegistration) && !own(HTF_STRUCTURES_V2, record.structure3mAtRegistration)) fail('V6_RECORD_INVALID', `${path}.structure3mAtRegistration`);
     try { assertV5State(singleRecordV5View(record)); }
     catch (cause) { throw Object.assign(new Error('V6 记录不符合既有生命周期/事件语义', { cause }), { code: 'V6_RECORD_INVALID', path }); }
     assertTimeline(record, path);
@@ -1886,13 +1892,13 @@ function assertV6State(state) {
 return {SCHEMA_VERSION,safeTime,own,fail,assertJsonData,singleRecordV5View,assertV6State};
 })();
 v6Modules["src/intraday-v6/model.js"] = (() => {
-const { ORDER, BIASES, STRUCTURES_3M, DIRECTIONS, CREATABLE_SETUPS, isSetupAllowed: isV5SetupAllowed, recordInitialStop: v5RecordInitialStop, correctInitialStop: v5CorrectInitialStop, recordBofToPb: v5RecordBofToPb, revertBofToPb: v5RevertBofToPb } = v6Modules["src/model.js"];
+const { ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, DIRECTIONS, CREATABLE_SETUPS, recordInitialStop: v5RecordInitialStop, correctInitialStop: v5CorrectInitialStop, recordBofToPb: v5RecordBofToPb, revertBofToPb: v5RevertBofToPb } = v6Modules["src/model.js"];
 const { activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, assertSymbol } = v6Modules["src/intraday-v6/queries.js"];
 const { assertV6State, SCHEMA_VERSION, safeTime, own, fail, singleRecordV5View } = v6Modules["src/intraday-v6/validation.js"];
 const { effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, researchSetupClass } = v6Modules["src/model.js"];
-// Only V6 can create the new identity. Reuse the unchanged context gate.
+// New registration requires explicit V2 classification; legacy records remain readable.
 const isSetupAllowed = (direction, structure3m, type) =>
-  own(CREATABLE_SETUPS, type) && isV5SetupAllowed(direction, structure3m, type === 'mtf_bof' ? 'htf_bof' : type);
+  own(CREATABLE_SETUPS, type) && ['long', 'short'].includes(direction) && own(HTF_STRUCTURES_V2, structure3m);
 
 function createWorkspace(time = Date.now()) {
   if (!safeTime(time)) fail('V6_TIME_INVALID', 'time');
@@ -1951,7 +1957,7 @@ function changeBias(state, symbol, bias) {
 }
 function changeStructure(state, symbol, structure3m) {
   return transact(state, next => {
-    if (!own(STRUCTURES_3M, structure3m)) fail('V6_STRUCTURE_INVALID', 'structure3m');
+    if (!own(STRUCTURES_3M, structure3m) && !own(HTF_STRUCTURES_V2, structure3m)) fail('V6_STRUCTURE_INVALID', 'structure3m');
     const card = cardFor(next, symbol); if (card.structure3m === structure3m) return { changed: false, reason: 'same' };
     card.structure3m = structure3m; return { changed: true };
   });
@@ -2187,7 +2193,7 @@ function exportMarkdown(state, scope = 'today', now = Date.now()) {
   const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。新机会选择即登记，HTML 入场与退出仅为人工确认时间；单笔退出或全部平仓分别结束目标交易。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 市场结构 | 进展／结果 | Research Capture |', '| --- | --- | --- | --- | --- | --- | --- | --- |'];
   for (const record of rows) {
     const direction = DIRECTIONS[record.direction] || (record.direction === 'long' ? '做多' : '做空');
-    const structure = ({ unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' })[record.structure3mAtRegistration] || record.structure3mAtRegistration;
+    const structure = ({ ...HTF_STRUCTURES_V2, unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' })[record.structure3mAtRegistration] || record.structure3mAtRegistration;
     lines.push(`| ${fullTime(record.registeredAt)} | ${record.symbol} | ${direction} | ${setupLabel(record.type)} | ${cell(record.zone ?? '—')} | 偏见：${({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' })[record.biasAtRegistration]}<br>市场结构：${structure} | ${captureRecordProgress(record)} | ${researchSummary(record)} |`);
   }
   if (!rows.length) lines.push('', '本范围内尚无已登记且仍保留的记录。');
@@ -2535,7 +2541,7 @@ const captureUi = (() => {
   function renderCard(state, symbol, { collapsed = false, stopEditors = new Map() } = {}) {
     const card = state.cards[symbol], trades = intradayV6.activeTradesForSymbol(state,symbol), opportunity = intradayV6.activeOpportunityForSymbol(state,symbol), direction = intradayV6.effectiveDirectionForSymbol(state,symbol);
     const locked = trades.length > 0 || opportunity !== null;
-    const background = `<div class="card-controls"${collapsed ? ' hidden' : ''}><section class="classifier structure-field"><span class="field-label">HTF结构（HTF波段动能&amp; 新的未测试优质缺口）</span><div class="segment structure-segment" role="group" aria-label="${symbol} HTF结构">${Object.entries(VISIBLE_STRUCTURES_3M).map(([k,v]) => option(symbol,'structure',k,v,k===card.structure3m)).join('')}</div></section><section class="classifier bias-field"><span class="field-label">当前偏见（TPO字母轨迹&amp;尾部）</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([k,v]) => option(symbol,'bias',k,v,k===card.bias)).join('')}</div></section><section class="direction-field"><span class="field-label">交易方向 <span class="direction-note">偏见方向&gt;HTF方向&gt;MTF方向</span></span>${locked ? `<div class="readonly" data-tone="${tone(direction)}">${DIRECTIONS[direction]} · ${trades.length ? '跟随当前持仓' : '当前机会锁定'}</div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([k,v]) => option(symbol,'direction',k,v,k===card.direction,!isDirectionAllowed(card.bias,k))).join('')}</div>`}</section></div>`;
+    const background = `<div class="card-controls"${collapsed ? ' hidden' : ''}><section class="classifier structure-field"><span class="field-label">HTF结构（HTF波段动能&amp; 新的未测试优质缺口）</span><div class="segment structure-segment" role="group" aria-label="${symbol} HTF结构">${Object.entries(HTF_STRUCTURES_V2).map(([k,v]) => option(symbol,'structure',k,v,k===card.structure3m)).join('')}</div>${Object.hasOwn(VISIBLE_STRUCTURES_3M,card.structure3m) ? `<p class="migration-note structure-legacy-note">旧分类：${VISIBLE_STRUCTURES_3M[card.structure3m]}；请重新确认 HTF结构后登记新机会（不影响已有交易）</p>` : ''}</section><section class="classifier bias-field"><span class="field-label">当前偏见（价格对HVN拒绝or接受）</span><div class="segment" role="group" aria-label="${symbol} 当前偏见">${Object.entries(BIASES).map(([k,v]) => option(symbol,'bias',k,v,k===card.bias)).join('')}</div></section><section class="direction-field"><span class="field-label">交易方向 <span class="direction-note">偏见方向&gt;HTF方向&gt;MTF方向</span></span>${locked ? `<div class="readonly" data-tone="${tone(direction)}">${DIRECTIONS[direction]} · ${trades.length ? '跟随当前持仓' : '当前机会锁定'}</div>` : `<div class="segment" role="group" aria-label="${symbol} 交易方向">${Object.entries(DIRECTIONS).map(([k,v]) => option(symbol,'direction',k,v,k===card.direction,!isDirectionAllowed(card.bias,k))).join('')}</div>`}</section></div>`;
     const holdings = `<section class="active-trades" aria-label="${symbol} 当前持仓"><div class="capture-section-heading"><h3>当前持仓 · ${trades.length} 笔</h3>${trades.length ? action(symbol,'flatten','全部已平仓',null,null,'flatten') : ''}</div>${trades.length ? trades.map(record => renderTrade(record,stopEditors)).join('') : '<p class="holdings-empty">暂无持仓</p>'}</section>`;
     const status = opportunity?.attention ?? 'none';
     const setups = `<div class="segment setup-segment" role="group" aria-label="${symbol} 新交易机会">${Object.entries(CREATABLE_SETUPS).map(([k,v]) => option(symbol,'setup',k,v,opportunity?.type===k,!intradayV6.isSetupAllowed(direction,card.structure3m,k))).join('')}</div>`;
@@ -3698,7 +3704,7 @@ function initChimeView({ summaryHost, settingsHost, onSlotChange, onPreferenceCh
 
 
 const __exitResearchModules = (() => {
-const erModuleRegistry = {'src/model.js': {ORDER, SCHEMA_VERSION, V4_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, DIRECTIONS, SETUPS, CREATABLE_SETUPS, LEGACY_SETUPS, SETUP_LABELS, STAGES, RESULTS, ATTENTION, copy, stateOf, hasRecord, setupLabel, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, recordSnapshot, createWorkspace, changeBias, changeDirection, changeStructure, chooseSetup, setStage, markEntered, endOpportunity, markExited, deleteRecord, recordProgress, instruction, assertState, assertV4State, assertLegacyState, migrateV3Workspace, migrateV4Workspace, migrateWorkspace, researchSetupClass, effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, formatStopPrice, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb}};
+const erModuleRegistry = {'src/model.js': {ORDER, SCHEMA_VERSION, V4_SCHEMA_VERSION, LEGACY_SCHEMA_VERSION, BIASES, STRUCTURES_3M, VISIBLE_STRUCTURES_3M, HTF_STRUCTURES_V2, DIRECTIONS, SETUPS, CREATABLE_SETUPS, LEGACY_SETUPS, SETUP_LABELS, STAGES, RESULTS, ATTENTION, copy, stateOf, hasRecord, setupLabel, isDirectionAllowed, isSetupAllowed, holdingConflictWarning, recordSnapshot, createWorkspace, changeBias, changeDirection, changeStructure, chooseSetup, setStage, markEntered, endOpportunity, markExited, deleteRecord, recordProgress, instruction, assertState, assertV4State, assertLegacyState, migrateV3Workspace, migrateV4Workspace, migrateWorkspace, researchSetupClass, effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, formatStopPrice, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb}};
 erModuleRegistry["src/exit-research/csv.js"] = (() => {
 // Strict comma-separated text parser. No IO, coercion, recovery or partial results.
 function validationError(code, sourceRowNumber, field) {
@@ -3944,7 +3950,7 @@ return {DEFAULT_CONTEXT_MARKET_V1, PRICE_SOURCE_MODES, MARKET_TIMEFRAMES, DETAIL
 erModuleRegistry["src/exit-research/research-common.js"] = (() => {
 const { parseTradovateTime } = erModuleRegistry["src/exit-research/time.js"];
 const { validationError } = erModuleRegistry["src/exit-research/csv.js"];
-const { assertState, createWorkspace } = erModuleRegistry["src/model.js"];
+const { assertState, createWorkspace, HTF_STRUCTURES_V2 } = erModuleRegistry["src/model.js"];
 const clone = value => structuredClone(value);
 const compareText = (a, b) => a < b ? -1 : a > b ? 1 : 0;
 const uniqueSorted = values => [...new Set(values)].sort(compareText);
@@ -3960,11 +3966,13 @@ function epochMillis(time) {
   return Date.UTC(+year, +month - 1, +day, +hour, +minute, +second, +ms) - parsed.offsetMinutes * 60000;
 }
 function assertOpportunityRecord(record) {
-  // Reuse frozen V5 event validation via a detached type-only compatibility view.
+  // Reuse frozen V5 event validation via a detached compatibility view.
   // Matching and research output still receive the original mtf_bof record.
   const state = createWorkspace(0);
   const validationRecord = clone(record);
   if (validationRecord?.type === 'mtf_bof') validationRecord.type = 'htf_bof';
+  // Read-only V5 validation sentinel; research receives the untouched V6 snapshot.
+  if (validationRecord && Object.hasOwn(HTF_STRUCTURES_V2, validationRecord.structure3mAtRegistration)) validationRecord.structure3mAtRegistration = 'range';
   state.records = [validationRecord];
   if (record?.endedAt === null && state.cards[record.symbol]) {
     state.cards[record.symbol].direction = record.direction;
@@ -5802,7 +5810,7 @@ function handleAction(button) {
   if (action === 'bof-to-pb') { if (intradayV6.recordBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：PB`,symbol,record.id); return; }
   if (action === 'bof-revert') { if (intradayV6.revertBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：BOF`,symbol,record.id); return; }
   if (action === 'bias') { if (intradayV6.changeBias(state,symbol,value).changed) mutate(`${symbol} 当前偏见：${BIASES[value]}`,symbol); return; }
-  if (action === 'structure') { if (intradayV6.changeStructure(state,symbol,value).changed) mutate(`${symbol} 市场结构：${STRUCTURES_3M[value]}`,symbol); return; }
+  if (action === 'structure') { if (intradayV6.changeStructure(state,symbol,value).changed) mutate(`${symbol} HTF结构：${HTF_STRUCTURES_V2[value] || STRUCTURES_3M[value]}`,symbol); return; }
   if (action === 'direction') { if (intradayV6.changeDirection(state,symbol,value,now()).changed) mutate(`${symbol} 当前${DIRECTIONS[value]}`,symbol); return; }
   if (action === 'setup') { if (intradayV6.chooseSetup(state,symbol,value,now()).changed) mutate(`${symbol} 新机会已登记`,symbol); return; }
   if (action === 'stage') { if (intradayV6.setOpportunityStage(state,record.id,value,now()).changed) mutate(`${symbol} 新机会已切换到${STAGES[value]}`,symbol,record.id); return; }

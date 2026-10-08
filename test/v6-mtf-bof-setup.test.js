@@ -86,6 +86,7 @@ test('MTF BOF lifecycle: same Setup creates independent trades; per-record stop/
 });
 test('MTF BOF and legacy BOF coexist: new opportunity never renames old active trade or its events',()=>{
   const s=migrateV5ToV6(historical('htf_bof'),{migratedAt:T+100}).state,old=structuredClone(s.records[0]);
+  v6.changeStructure(s,'GC','trend_pullback_stronger');
   const r=v6.chooseSetup(s,'GC','mtf_bof',T+101).opportunity;v6.markEntered(s,r.id,T+102,true);
   assert.deepEqual(s.records[0],old);assert.equal(s.records[1].type,'mtf_bof');assert.equal(v6.derivedManagementState(r),'BOF');
 });
@@ -113,7 +114,7 @@ test('MTF BOF UI semantics: selected, inactive and disabled use existing neutral
 test('MTF BOF UI protects accepted header order and direction priority on all three cards',()=>{
   const s=ready();
   for(const symbol of ['GC','CL','ES']){
-    const html=captureUi.renderCard(s,symbol),structure=html.indexOf('HTF结构（HTF波段动能&amp; 新的未测试优质缺口）'),bias=html.indexOf('当前偏见（TPO字母轨迹&amp;尾部）'),direction=html.indexOf('交易方向 <span');
+    const html=captureUi.renderCard(s,symbol),structure=html.indexOf('HTF结构（HTF波段动能&amp; 新的未测试优质缺口）'),bias=html.indexOf('当前偏见（价格对HVN拒绝or接受）'),direction=html.indexOf('交易方向 <span');
     assert.ok(structure>=0&&structure<bias&&bias<direction);assert.ok(html.includes('偏见方向&gt;HTF方向&gt;MTF方向'));
     assert.ok(html.includes(NEW_LABEL));assert.doesNotMatch(html,/data-action="setup"[^>]*data-value="htf_bof"/);
   }

@@ -102,7 +102,7 @@ test('V6 Q boundary: flatten rejects before the later position stage start; A is
 });
 
 test('V6 R: flatten leaves pending C and unrelated CL trade completely unchanged', () => {
-  const { state } = pair(); m.changeStructure(state,'CL','range'); m.changeDirection(state,'CL','short',T+25);
+  const { state } = pair(); m.changeStructure(state,'CL','htf_range_v2'); m.changeDirection(state,'CL','short',T+25);
   const cl=addTrade(state,'mtf_bof',T+26,'CL'), c=m.chooseSetup(state,'GC','mtf_pb',T+30).opportunity;
   const cBefore=clone(c), clBefore=clone(cl); m.markAllTradesExited(state,'GC',T+40,true);
   assert.deepEqual(c,cBefore); assert.deepEqual(cl,clBefore);
@@ -128,10 +128,10 @@ test('V6 direction is also locked by pending alone and unlocks only after pendin
 
 test('V6 T: context updates leave old snapshots intact; B freezes new Bias/Structure', () => {
   const state=ready(); m.changeBias(state,'GC','bullish'); const a=addTrade(state), before=clone(a);
-  m.changeBias(state,'GC','bearish'); m.changeStructure(state,'GC','range');
+  m.changeBias(state,'GC','bearish'); m.changeStructure(state,'GC','htf_range_v2');
   const b=m.chooseSetup(state,'GC','mtf_pb',T+20).opportunity;
-  assert.deepEqual(a,before); assert.equal(a.structure3mAtRegistration,'bullish'); assert.equal(a.biasAtRegistration,'bullish');
-  assert.equal(b.structure3mAtRegistration,'range'); assert.equal(b.biasAtRegistration,'bearish'); assert.equal(b.direction,'long');
+  assert.deepEqual(a,before); assert.equal(a.structure3mAtRegistration,'trend_pullback_stronger'); assert.equal(a.biasAtRegistration,'bullish');
+  assert.equal(b.structure3mAtRegistration,'htf_range_v2'); assert.equal(b.biasAtRegistration,'bearish'); assert.equal(b.direction,'long');
 });
 
 for (const [label,action] of [
@@ -250,7 +250,7 @@ test('V6 invalid configuration/stage/entry commands are atomic and successful no
     ()=>m.setOpportunityStage(state,pending.id,'position',T+20),()=>m.markEntered(state,pending.id,T+1,true),
     ()=>m.markEntered(state,'missing',T+20,true)]) rejectsUnchanged(state,action);
   const before=clone(state); assert.equal(m.changeBias(state,'GC','neutral').changed,false);
-  assert.equal(m.changeStructure(state,'GC','bullish').changed,false); assert.equal(m.chooseSetup(state,'GC','mtf_pb',T+20).changed,false);
+  assert.equal(m.changeStructure(state,'GC','trend_pullback_stronger').changed,false); assert.equal(m.chooseSetup(state,'GC','mtf_pb',T+20).changed,false);
   assert.deepEqual(state,before);
 });
 

@@ -115,6 +115,7 @@ test('M2 production lifecycle: same Setup entry twice retains record IDs and bac
 
 test('M2 full backup: recovery audit, flatten groups, complete manual chains and multi-active reload all survive',()=>{
   const legacy=v5Active();legacy.records=[];const state=v6.migrateV5ToV6(legacy,{migratedAt:T+100}).state;
+  v6.changeStructure(state,'GC','trend_pullback_stronger');
   addTrade(state,'mtf_bof',T+10);v6.markAllTradesExited(state,'GC',T+30,true);
   const a=addTrade(state,'mtf_bof',T+40),b=addTrade(state,'mtf_bof',T+50);
   v6.recordInitialStop(state,a.id,90,T+60);v6.correctInitialStop(state,a.id,89,T+61);v6.recordBofToPb(state,a.id,T+62);v6.revertBofToPb(state,a.id,T+63);v6.recordInitialStop(state,b.id,95,T+64);v6.chooseSetup(state,'GC','mtf_pb',T+70);
@@ -153,4 +154,14 @@ test('MTF BOF production bundle: old HTF BOF history and active lifecycle keep t
   assert.equal(h.saved().sections.intraday.state.records[0].type,'htf_bof');assert.match(h.history(),/HTF BOF（恐慌或走弱 1次）/);
   h.click('trade-exit',id);h.confirm('UNKNOWN');assert.equal(h.saved().sections.intraday.state.records[0].id,id);
   assert.deepEqual(h.errors,[]);
+});
+
+test('HTF V2 production UI: explicit selection saves exact enum and new snapshot without touching Risk/Chime or pending legacy fact',()=>{
+  const s=v6.migrateV5ToV6(v5Active('wait'),{migratedAt:T+100}).state,h=bundleHarness(s),before=h.saved();
+  h.click('structure',null,'trend_pullback_weaker');const next=h.saved();
+  assert.equal(next.sections.intraday.state.cards.GC.structure3m,'trend_pullback_weaker');
+  assert.deepEqual(next.sections.intraday.state.records,before.sections.intraday.state.records);
+  assert.deepEqual(next.sections.riskManager,before.sections.riskManager);assert.deepEqual(next.sections.chime,before.sections.chime);
+  assert.equal(next.schemaVersion,2);h.click('entry',s.records[0].id);h.confirm();h.click('setup',null,'mtf_bof');
+  assert.equal(h.saved().sections.intraday.state.records.at(-1).structure3mAtRegistration,'trend_pullback_weaker');assert.deepEqual(h.errors,[]);
 });

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import * as v5 from '../src/model.js';
 import { migrateEnvelope } from '../src/persistence.js';
-import { assertV6State, effectiveInitialStop, derivedManagementState, chooseSetup, markEntered } from '../src/intraday-v6/model.js';
+import { assertV6State, effectiveInitialStop, derivedManagementState, chooseSetup, markEntered, changeStructure } from '../src/intraday-v6/model.js';
 import { activeTradesForSymbol, activeOpportunityForSymbol } from '../src/intraday-v6/queries.js';
 import { migrateV5ToV6 } from '../src/intraday-v6/migration.js';
 import { goldenFixtures } from './fixtures/compatibility/golden-fixtures.js';
@@ -149,9 +149,11 @@ test('V6 migration candidate rejects a reversed timeline accepted by the older v
   v5.assertState(old);blockedUnchanged(old,{migratedAt:T+100},'V6_MIGRATION_CANDIDATE_INVALID');
 });
 
-test('V6 migration output immediately supports additional independent entry with recovered ID intact',()=>{
+test('V6 migration output supports additional independent entry after explicit V2 structure confirmation with recovered ID intact',()=>{
   const old=v5Active();v5.deleteRecord(old,old.cards.GC.opportunity.id);
   const {state}=migrateV5ToV6(old,{migratedAt:T+100});const a=state.records[0];
+  const before=structuredClone(state);assert.equal(chooseSetup(state,'GC','mtf_pb',T+109).changed,false);assert.deepEqual(state,before);
+  changeStructure(state,'GC','trend_pullback_stronger');
   const b=chooseSetup(state,'GC','mtf_pb',T+110).opportunity;markEntered(state,b.id,T+111,true);
   assert.deepEqual(activeTradesForSymbol(state,'GC').map(r=>r.id),[a.id,b.id]);assert.equal(state.records[0],a);assertV6State(state);
 });

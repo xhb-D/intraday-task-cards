@@ -5,7 +5,7 @@ import * as v6 from '../src/intraday-v6/model.js';
 import { captureUi } from '../src/capture-ui.js';
 const T=1750000000000;
 const choices=(html,action)=>[...html.matchAll(/<button\b([^>]*)>/g)].map(m=>m[1]).filter(a=>a.includes(`data-action="${action}"`));
-for(const structure of ['bullish','range','bearish'])test(`V6 structure ${structure}: all choices neutral, only current selected`,()=>{
+for(const structure of ['trend_pullback_stronger','trend_pullback_weaker','htf_range_v2'])test(`V6 structure ${structure}: all choices neutral, only current selected`,()=>{
   const state=v6.createWorkspace(T);v6.changeStructure(state,'GC',structure);
   const before=structuredClone(state),buttons=choices(captureUi.renderCard(state,'GC'),'structure');
   assert.equal(buttons.length,3);
