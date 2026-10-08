@@ -115,6 +115,11 @@ body{background:var(--bg-page);color:var(--text-primary)}
 .risk-actions{border-color:var(--border-secondary)}
 .risk-button.primary{background:var(--theme-accent);border-color:var(--theme-accent);color:var(--on-accent)}
 .risk-button:hover:not(:disabled){background:color-mix(in srgb,var(--theme-accent) 12%,var(--bg-surface-secondary));border-color:var(--theme-accent)}
+/* Only the delete-confirmation form has a note immediately followed by its error region.
+   Other Risk dialogs (including editor Delete, Cancel and Save) keep their existing styles. */
+.risk-dialog-body:has(> .risk-dialog-note + .risk-form-error) > .risk-dialog-actions > .risk-button.danger{color:#fff;background:#542e30;border-color:#a75e5b;opacity:1}
+.risk-dialog-body:has(> .risk-dialog-note + .risk-form-error) > .risk-dialog-actions > .risk-button.danger:hover:not(:disabled){background:#6b3336}
+.risk-dialog-body:has(> .risk-dialog-note + .risk-form-error) > .risk-dialog-actions > .risk-button.danger:disabled{background:#744b4d;cursor:not-allowed}
 .risk-dialog-note,.risk-field,.risk-field small,.risk-empty{color:var(--text-secondary)}
 .risk-form-error,.risk-feedback[data-kind=error]{color:var(--danger)}
 .risk-feedback[data-kind=success]{color:var(--success)}

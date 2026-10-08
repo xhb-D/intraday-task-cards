@@ -1,0 +1,23 @@
+<!doctype html>
+<html data-theme="light"><meta charset="utf-8">
+<title>Risk deletion contrast · synthetic CSS state audit</title>
+<link rel="stylesheet" href="../../styles.css">
+<link rel="stylesheet" href="../../banner.css">
+<link rel="stylesheet" href="../../refinement.css">
+<link rel="stylesheet" href="../../risk-dashboard.css">
+<link rel="stylesheet" href="../../appearance.css">
+<dialog class="risk-dialog"><form class="risk-dialog-body" method="dialog">
+<h2>删除账户 · synthetic 对比度检查</h2>
+<p class="risk-dialog-note">确定删除「SYNTHETIC STYLE ONLY」吗？此操作会移除此账户及其本地余额历史，无法直接撤销。</p>
+<p class="risk-form-error"></p>
+<div class="risk-dialog-actions"><button type="button" class="risk-button">取消</button><button id="confirm" type="button" class="risk-button danger">确认删除</button></div>
+<p>仅检查 CSS；此页无账户、无存储、无删除操作。</p>
+<div><button id="light" type="button">Light</button><button id="dark" type="button">Dark</button><button id="disable" type="button">Disable confirm</button><button id="enable" type="button">Enable confirm</button></div>
+<button type="button" class="risk-button primary">保存账户样式对照</button>
+</form></dialog>
+<script>
+document.querySelector('dialog').showModal();
+for(const mode of ['light','dark']) document.querySelector('#'+mode).onclick=()=>document.documentElement.dataset.theme=mode;
+document.querySelector('#disable').onclick=()=>document.querySelector('#confirm').disabled=true;
+document.querySelector('#enable').onclick=()=>document.querySelector('#confirm').disabled=false;
+</script></html>
