@@ -168,3 +168,9 @@
 .capture-card .context-title{font-size:13px;line-height:18px;font-weight:650;color:var(--text-primary)}
 .capture-card .context-note{font-size:11px;line-height:16px;font-weight:400;color:var(--text-secondary);white-space:normal;overflow-wrap:break-word}
 #history + #risk-dashboard-host{margin:14px 0 12px}
+
+/* Hidden commodity management follows the visible cards, before history. */
+.hidden-commodities{min-width:0;margin:14px 0;padding:11px 13px;border:1px solid var(--border-primary);border-radius:10px;background:var(--bg-surface);color:var(--text-primary)}
+.hidden-commodities[hidden]{display:none}
+.hidden-commodities h3{margin:0;font-size:14px;line-height:20px}
+.hidden-commodities button:focus-visible{outline:2px solid var(--theme-accent);outline-offset:2px}

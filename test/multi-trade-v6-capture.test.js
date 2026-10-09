@@ -177,3 +177,28 @@ test('Home layout production: hide/collapse and per-trade management leave synth
   assert.equal(after.sections.intraday.state.records[0].researchCapture.manualEvents.at(-1).type,'BOF_TO_PB_RECORDED');
   const reloaded=bundleHarness(undefined,{raw:h.raw()});assert.deepEqual(reloaded.saved().sections,after.sections);assert.deepEqual(h.errors,[]);assert.deepEqual(reloaded.errors,[]);
 });
+
+for (const count of [0,1,2,3]) test(`Home hidden footer/${count}: single lower list, toggle/restore/reload preserve canonical data`,()=>{
+  const {state,a}=pair();v6.recordInitialStop(state,a.id,90,T+30);
+  const h=bundleHarness(state),raw=h.raw(),symbols=['GC','CL','ES'].slice(0,count);
+  const header=h.document.querySelector('#commodity-dashboard'),footer=h.document.querySelector('#hidden-commodities');
+  const action=(host,action,symbol)=>host.listeners.click({detail:1,target:{closest:()=>({dataset:{action,symbol}})}});
+  assert.equal(footer.hidden,true);assert.equal(footer.innerHTML,'');
+  for(const symbol of symbols)h.click('hide-card',null,null,symbol);
+  assert.doesNotMatch(header.innerHTML,/commodity-dashboard-list|data-action="restore-card"/);
+  assert.equal(footer.hidden,count===0);
+  if(count){
+    assert.equal((footer.innerHTML.match(/commodity-dashboard-list/g)||[]).length,1);
+    assert.equal((footer.innerHTML.match(/data-action="restore-card"/g)||[]).length,count);
+    assert.match(footer.innerHTML,new RegExp(`已隐藏的商品（${count}）`));
+    action(header,'toggle-commodity-manager');assert.equal(footer.hidden,true);assert.equal(footer.innerHTML,'');
+    const collapsed=bundleHarness(undefined,{backing:h.storage});assert.equal(collapsed.document.querySelector('#hidden-commodities').hidden,true);
+    action(header,'toggle-commodity-manager');assert.equal(footer.hidden,false);
+    const expanded=bundleHarness(undefined,{backing:h.storage});assert.equal(expanded.document.querySelector('#hidden-commodities').innerHTML,footer.innerHTML);
+    assert.equal(expanded.raw(),raw);
+    if(count===3)assert.doesNotMatch(h.html(),/<article/);
+    for(const symbol of symbols){action(footer,'restore-card',symbol);assert.match(h.html(),new RegExp(`data-symbol="${symbol}"`));assert.equal(h.raw(),raw);}
+    assert.equal(footer.hidden,true);assert.equal(footer.innerHTML,'');
+  }
+  assert.equal(h.raw(),raw);assert.deepEqual(h.errors,[]);
+});

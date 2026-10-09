@@ -46,3 +46,7 @@
 .chime-home-preferences .chime-field select{min-width:0;max-width:100%;min-height:30px;padding:4px 6px;font-size:11px}
 .chime-field select,.chime-field input{min-width:0;max-width:100%}
 @media(max-width:620px){.chime-clock{font-size:clamp(14px,3.85vw,17px);letter-spacing:0}.chime-runtime,.chime-prompt,.chime-count,.chime-empty,.chime-message{overflow-wrap:anywhere}}
+
+/* Existing period controls stay together at the bottom of the home panel. */
+.chime-period-footer{display:grid;gap:6px;min-width:0;max-width:100%}
+.chime-period-footer [hidden]{display:none}

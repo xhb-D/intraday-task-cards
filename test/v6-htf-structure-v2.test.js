@@ -27,7 +27,7 @@ test('HTF V2 UI: three exact choices in order; precise headings and no legacy cr
     assert.deepEqual(buttons.map(m=>m[1]),keys);assert.deepEqual(buttons.map(m=>m[2]),labels);
     assert.ok(html.indexOf('HTF波段动能&amp;新的未测试优质缺口')<html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）'));
     assert.ok(html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）')<html.indexOf('交易方向 <span'));
-    assert.ok(html.includes('偏见方向&gt;HTF方向&gt;MTF方向'));
+    assert.ok(html.includes('小偏见方向&gt;大偏见方向'));
   }
 });
 for(const key of keys)for(const type of ['mtf_pb','mtf_bof'])for(const direction of ['long','short'])test(`HTF V2 ${key}/${type}/${direction}: explicit selection, immutable snapshot, lifecycle, JSON and Markdown`,()=>{

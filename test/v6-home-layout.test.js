@@ -20,7 +20,7 @@ for(const symbol of ['GC','CL','ES'])for(const lifecycle of ['none','wait','sign
   const before=structuredClone(state),output=captureUi.renderCard(state,symbol);
   assert.ok(output.includes(big));assert.ok(output.includes(small));
   assert.ok(output.indexOf(big)<output.indexOf(small));assert.ok(output.indexOf(small)<output.indexOf('交易方向 <span'));
-  assert.ok(output.includes('偏见方向&gt;HTF方向&gt;MTF方向'));assert.ok(output.includes(`aria-label="${symbol} 大偏见"`));assert.ok(output.includes(`aria-label="${symbol} 小偏见"`));
+  assert.ok(output.includes('小偏见方向&gt;大偏见方向'));assert.ok(output.includes(`aria-label="${symbol} 大偏见"`));assert.ok(output.includes(`aria-label="${symbol} 小偏见"`));
   assert.equal((output.match(/data-action="structure"/g)||[]).length,3);assert.equal((output.match(/data-action="bias"/g)||[]).length,3);assert.equal((output.match(/data-action="setup"/g)||[]).length,2);
   assert.equal(state.cards[symbol].structure3m,beforeSetup);assert.deepEqual(state,before);
 });
@@ -42,4 +42,20 @@ test('Home layout CSS: shared title hierarchy and natural wrapping; standalone C
   const riskCss=readFileSync(new URL('../risk-dashboard.css',import.meta.url),'utf8');
   assert.match(riskCss,/\.risk-dashboard\{display:grid;grid-template-columns:minmax\(260px,\.92fr\) minmax\(0,2\.08fr\)/);
   assert.match(riskCss,/\.risk-rail\{[^}]*overflow-x:auto/);assert.match(riskCss,/@media\(max-width:820px\)[^]*?\.risk-mobile-account\{display:grid/);
+});
+
+test('Home footer DOM: title, visible cards, unique hidden mount, history, Risk follow in order',()=>{
+  const ids=['commodity-dashboard','cards','hidden-commodities','history','risk-dashboard-host'];
+  const positions=ids.map(id=>html.indexOf(`id="${id}"`));
+  assert.ok(positions.every((p,i)=>p>=0&&(i===0||p>positions[i-1])));
+  assert.equal((html.match(/id="hidden-commodities"/g)||[]).length,1);
+  assert.match(html,/<section id="hidden-commodities"[^>]* hidden><\/section>/);
+  assert.match(css,/\.hidden-commodities\[hidden\]\{display:none\}/);
+});
+test('Home direction note: exact new priority on all three cards; prior guidance absent',()=>{
+  for(const symbol of ['GC','CL','ES']){
+    const output=captureUi.renderCard(ready(symbol),symbol);
+    assert.match(output,/交易方向 <span class="direction-note">小偏见方向&gt;大偏见方向<\/span>/);
+    assert.doesNotMatch(output,/偏见方向&gt;HTF方向&gt;MTF方向/);
+  }
 });

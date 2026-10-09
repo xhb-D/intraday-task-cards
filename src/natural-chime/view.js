@@ -62,7 +62,9 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   const settingsLink = node('a', 'chime-link', '报时设置 →'); settingsLink.href = '#/chime';
   append(actions, startButton, pauseButton, previewButton, settingsLink);
   const message = node('p', 'chime-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite'); message.dataset.chimeMessage = 'true';
-  append(summary, clock, runtimeStatus, tags, empty, count, preferences, actions, message);
+  const periodFooter = node('div', 'chime-period-footer');
+  append(periodFooter, count, tags, empty);
+  append(summary, clock, runtimeStatus, preferences, actions, message, periodFooter);
   summaryHost.replaceChildren(summary);
 
   const settings = node('section', 'chime-settings'); settings.setAttribute('aria-labelledby', 'chime-settings-title');

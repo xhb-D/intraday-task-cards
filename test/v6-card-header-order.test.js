@@ -23,7 +23,7 @@ for (const symbol of ['GC', 'CL', 'ES']) {
       assert.match(controls, /structure-field[^]*?大偏见[^]*?bias-field[^]*?小偏见[^]*?direction-field[^]*?交易方向 /);
       assert.ok(controls.includes('context-note">HTF波段动能&amp;新的未测试优质缺口</span>'));
       assert.ok(controls.includes('context-note">价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）</span>'));
-      assert.ok(controls.includes('交易方向 <span class="direction-note">偏见方向&gt;HTF方向&gt;MTF方向</span>'));
+      assert.ok(controls.includes('交易方向 <span class="direction-note">小偏见方向&gt;大偏见方向</span>'));
       assert.ok(controls.includes(`aria-label="${symbol} 大偏见"`));
       assert.doesNotMatch(controls, /市场结构（MTF chanlun）|MTF结构处于HTF|市场结构不明确时|HTF方向&gt;缺口方向&gt;MTF方向/);
       assert.ok(html.indexOf(controls) < html.indexOf('class="active-trades"'));
@@ -35,7 +35,7 @@ for (const symbol of ['GC', 'CL', 'ES']) {
 test('V6 header bundle: updated labels are included without old production wording', () => {
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
   assert.ok(bundle.includes('context-note">HTF波段动能&amp;新的未测试优质缺口</span>'));
-  assert.ok(bundle.includes('交易方向 <span class="direction-note">偏见方向&gt;HTF方向&gt;MTF方向</span>'));
+  assert.ok(bundle.includes('交易方向 <span class="direction-note">小偏见方向&gt;大偏见方向</span>'));
   assert.doesNotMatch(bundle, /市场结构（MTF chanlun）|MTF结构处于HTF波段内部|HTF方向&gt;缺口方向&gt;MTF方向/);
 });
 

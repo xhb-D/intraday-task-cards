@@ -23,6 +23,7 @@ import { createNativeHelperBackend } from './natural-chime/native-backend.js';
 
 const cardsEl = document.querySelector('#cards');
 const commodityDashboardEl = document.querySelector('#commodity-dashboard');
+const hiddenCommoditiesEl = document.querySelector('#hidden-commodities');
 const historyBody = document.querySelector('#history-body');
 const dialog = document.querySelector('#confirm-dialog');
 const dataDialog = document.querySelector('#data-dialog');
@@ -193,7 +194,9 @@ function renderCommodityDashboard() {
   const expanded = hiddenSymbols.length > 0 && commodityPreferences.managerExpanded;
   const managerLabel = expanded ? '收起隐藏商品列表' : '展开隐藏商品列表';
   const hiddenRows = expanded ? `<div class="commodity-dashboard-list">${hiddenSymbols.map(symbol => `<div class="commodity-dashboard-row"><strong>${symbol}</strong><span>已隐藏，状态仍保留</span><button type="button" data-action="restore-card" data-symbol="${symbol}">恢复显示</button></div>`).join('')}</div>` : '';
-  commodityDashboardEl.innerHTML = `<div class="commodity-dashboard-summary"><h2 id="commodity-dashboard-title">商品看板</h2><div class="commodity-dashboard-actions"><span>已隐藏商品 ${hiddenSymbols.length}</span>${hiddenSymbols.length ? `<button type="button" data-action="toggle-commodity-manager" aria-expanded="${expanded}" aria-label="${managerLabel}">${expanded ? '收起' : '展开'}</button>` : ''}</div></div>${hiddenRows}`;
+  commodityDashboardEl.innerHTML = `<div class="commodity-dashboard-summary"><h2 id="commodity-dashboard-title">商品看板</h2><div class="commodity-dashboard-actions"><span>已隐藏商品 ${hiddenSymbols.length}</span>${hiddenSymbols.length ? `<button type="button" data-action="toggle-commodity-manager" aria-expanded="${expanded}" aria-controls="hidden-commodities" aria-label="${managerLabel}">${expanded ? '收起' : '展开'}</button>` : ''}</div></div>`;
+  hiddenCommoditiesEl.hidden = !expanded;
+  hiddenCommoditiesEl.innerHTML = expanded ? `<h3 id="hidden-commodities-title">已隐藏的商品（${hiddenSymbols.length}）</h3>${hiddenRows}` : '';
 }
 function recordsForScope() {
   const day = dateKey(now()); return state.records.filter(record => historyScope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
@@ -337,7 +340,7 @@ async function previewChime() {
 cardsEl.addEventListener('submit', event => { const form = event.target.closest('[data-stop-form]'); if (!form) return; event.preventDefault(); safe(() => submitInitialStop(form), { phase: 'research_capture', relevantSymbol: form.dataset.stopForm }); });
 cardsEl.addEventListener('input', event => { const input = event.target.closest('[data-stop-input]'); if (!input) return; const opportunity = state.records.find(record => record.id === input.dataset.stopInput); if (opportunity && !writeLocked() && !corruption) stopEditors.set(opportunity.id, { draft: input.value, error: '' }); });
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
-commodityDashboardEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); });
+[commodityDashboardEl, hiddenCommoditiesEl].forEach(host => host.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); }));
 historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (intradayV6.deleteRecord(state, button.dataset.delete).changed) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
 document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => safe(() => finishConfirmation(true), { phase: 'confirmation' })); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });

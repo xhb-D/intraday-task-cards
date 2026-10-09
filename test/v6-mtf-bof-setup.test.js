@@ -115,7 +115,7 @@ test('MTF BOF UI protects accepted header order and direction priority on all th
   const s=ready();
   for(const symbol of ['GC','CL','ES']){
     const html=captureUi.renderCard(s,symbol),structure=html.indexOf('HTF波段动能&amp;新的未测试优质缺口'),bias=html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）'),direction=html.indexOf('交易方向 <span');
-    assert.ok(structure>=0&&structure<bias&&bias<direction);assert.ok(html.includes('偏见方向&gt;HTF方向&gt;MTF方向'));
+    assert.ok(structure>=0&&structure<bias&&bias<direction);assert.ok(html.includes('小偏见方向&gt;大偏见方向'));
     assert.ok(html.includes(NEW_LABEL));assert.doesNotMatch(html,/data-action="setup"[^>]*data-value="htf_bof"/);
   }
 });

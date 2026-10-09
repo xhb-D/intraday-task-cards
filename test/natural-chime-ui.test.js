@@ -269,3 +269,48 @@ test('Homepage owns the live status and settings contains only cycle configurati
     view.destroy();
   } finally { globalThis.document = priorDocument; }
 });
+
+for (const mode of ['browser', 'native']) test(`Home chime footer/${mode}: count and existing slots follow preferences, actions and runtime messages`, () => {
+  const priorDocument = globalThis.document;
+  globalThis.document = { createElement: tag => new FakeElement(tag) };
+  try {
+    const summaryHost = new FakeElement(), settingsHost = new FakeElement();
+    let current = defaultChime(), view; const changed = [];
+    view = initChimeView({ summaryHost, settingsHost, mode, getVoices: () => [], onSlotChange: (id, next) => { changed.push(id); current = next; view.render(current, {}); return true; } });
+    const summary = summaryHost.children[0], footer = summary.children.at(-1);
+    assert.equal(footer.className, 'chime-period-footer');
+    assert.deepEqual(footer.children.map(e => e.className), ['chime-count', 'chime-tags', 'chime-empty']);
+    for (const cls of ['chime-home-preferences', 'chime-actions', 'chime-message']) {
+      assert.ok(summary.children.some(e => e.className === cls));
+      assert.ok(summary.children.findIndex(e => e.className === cls) < summary.children.indexOf(footer));
+    }
+    for (const count of [0, 1, 4, 5]) {
+      current = defaultChime();
+      current.slots.forEach((slot, i) => Object.assign(slot, { enabled: i < count, preset: ['3','5','15','30','custom'][i], minutes: i === 4 ? 17 : 5 }));
+      const before = structuredClone(current); view.render(current, {});
+      assert.equal(footer.children[0].textContent, `已设置报时 ${count}/5`);
+      assert.equal(footer.children[1].children.length, count);
+      assert.equal(footer.children[1].hidden, count === 0); assert.equal(footer.children[2].hidden, count !== 0);
+      assert.deepEqual(footer.children[1].children.map(tag => tag.children[0].textContent), ['3 分钟','5 分钟','15 分钟','30 分钟','17 分钟'].slice(0,count));
+      assert.deepEqual(current, before);
+    }
+    for (const tag of [...footer.children[1].children]) tag.children[1].click();
+    assert.deepEqual(changed, ['slot-1','slot-2','slot-3','slot-4','slot-5']);
+    assert.ok(current.slots.every(slot => slot.paused));
+    for (const tag of [...footer.children[1].children]) tag.children[1].click();
+    assert.ok(current.slots.every(slot => !slot.paused));
+    view.render(current, { message: '后台助手测试提示' });
+    const message = find(summary, e => e.dataset.chimeMessage === 'true');
+    assert.match(message.textContent, mode === 'native' ? /后台助手模式/ : /后台助手测试提示/);
+    if (mode === 'native') {
+      view.render(current, { connectionState: 'DISCONNECTED', runtimeState: 'UNKNOWN', configState: 'MISMATCH' });
+      assert.match(message.textContent, /不会自动切换浏览器报时/);
+      assert.match(message.textContent, /网页与助手配置不同/);
+      assert.ok(summary.children.indexOf(message) < summary.children.indexOf(footer));
+    }
+    view.showMessage('状态测试提示');
+    assert.equal(find(summary, e => e.dataset.chimeRuntime === 'true').textContent, '状态测试提示');
+    assert.equal(summary.children.at(-1), footer);
+    view.destroy();
+  } finally { globalThis.document = priorDocument; }
+});
