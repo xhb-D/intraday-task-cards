@@ -29,7 +29,7 @@ function legacy(stage='closed') {
 test('V6 Setup creation UI: exactly two buttons, legacy choice absent, exact new BOF label',()=>{
   const s=ready(), before=structuredClone(s), buttons=setupButtons(captureUi.renderCard(s,'GC'));
   assert.deepEqual(Object.keys(old.CREATABLE_SETUPS),['mtf_pb','mtf_bof']);
-  assert.equal(buttons.length,2);assert.deepEqual(buttons.map(b=>b[2]),['MTF PB','MTF BOF（做多等收敛 做空等扫高）']);
+  assert.equal(buttons.length,2);assert.deepEqual(buttons.map(b=>b[2]),['MTF PB（仓位合适看5M，不合适1M+rsi）','MTF BOF（做多等收敛 做空等扫高）']);
   assert.ok(buttons.every(b=>!b[1].includes('htf_pb')));assert.deepEqual(s,before);
 });
 for(const type of ['mtf_pb','mtf_bof'])test(`V6 Setup ${type}: normal production creation and entry`,()=>{
@@ -80,16 +80,16 @@ test('Legacy htf_pb: existing Exit Research fixture still matches, computes metr
   }
   assert.deepEqual(outputs[0],outputs[1]);
 });
-test('V6 two Setup layout: narrow PB and wide single-line BOF without third slot',()=>{
+test('V6 two Setup layout: two stretched columns with natural wrapping without third slot',()=>{
   const css=readFileSync(new URL('../refinement.css',import.meta.url),'utf8');
-  assert.match(css,/\.capture-card \.setup-segment\{grid-template-columns:minmax\(0,1fr\) minmax\(0,3fr\)/);
-  assert.match(css,/\.capture-card \.setup-segment \.option\{[^}]*white-space:nowrap/);
+  assert.match(css,/\.capture-card \.setup-segment\{grid-template-columns:minmax\(0,9fr\) minmax\(0,11fr\)/);
+  assert.match(css,/\.capture-card \.setup-segment \.option\{[^}]*white-space:normal/);
 });
 test('Setup assets: CSS and bundle use the same new version to avoid a cached three-column layout',()=>{
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const cssVersion=html.match(/refinement\.css\?v=([^"\s]+)/)?.[1];
   const bundleVersion=html.match(/dist\/app\.bundle\.js\?v=([^"\s]+)/)?.[1];
-  assert.equal(cssVersion,'risk-delete-confirm-contrast-20261008');assert.equal(bundleVersion,cssVersion);
+  assert.equal(cssVersion,'v6-setup-label-hotfix-20261009');assert.equal(bundleVersion,cssVersion);
   assert.doesNotMatch(html,/选择 MTF PB、MTF BOF/);
   assert.ok(html.includes('选择 MTF PB 或 MTF BOF（做多等收敛 做空等扫高）后'));
   assert.doesNotMatch(html,/选择 MTF PB 或 HTF BOF/);
