@@ -12,7 +12,7 @@ test('Module navigation: header title is home entry; centralized nav is absent; 
 });
 test('Module navigation: research entry is outside summary, visible with closed history; original Risk/Chime entries reused',()=>{
   const region=html.match(/<section class="history-module"[^]*?<\/details><\/section>/)[0];
-  assert.match(region,/class="history-module-nav"><a class="module-link" href="#\/exit-research">进入 Exit Research →<\/a>/);
+  assert.match(region,/class="history-module-nav"><a class="module-link" href="#\/exit-research" aria-label="进入 Exit Research"><span class="module-link-full">进入 Exit Research →<\/span><span class="module-link-short" aria-hidden="true">研究 →<\/span><\/a>/);
   assert.doesNotMatch(region.match(/<summary>[^]*?<\/summary>/)[0],/<a\b/);
   assert.ok(region.indexOf('history-module-nav')<region.indexOf('<details'));
   assert.match(risk,/entry\.href = '#\/risk'; entry\.textContent = '进入 Trading Risk Manager →'/);
@@ -35,6 +35,20 @@ test('Compact Chime: desktop groups and mobile wrapping retain complete warnings
   assert.match(view,/当前后台运行状态未知；不会自动切换浏览器报时/);
   assert.match(view,/网页与助手配置不同；点击开始报时同步/);
   assert.match(view,/HTTPS 证书将在30天内到期/);
-  assert.match(layout,/\.history-module-nav\{position:static;justify-content:flex-end/);
+  assert.match(layout,/\.history-module-nav\{position:absolute;top:0;right:13px;min-height:40px\}/);
   assert.match(read('appearance.css'),/\.module-return:focus-visible\{outline:2px solid var\(--theme-accent\)/);
+});
+
+
+test('Mobile history research: shared themed border contains independent short entry; desktop label and placement retained',()=>{
+  const mobile=layout.slice(layout.indexOf('@media(max-width:620px)',layout.indexOf('/* Local module navigation')));
+  assert.match(mobile,/\.history-module\{margin-top:12px;border:1px solid var\(--border-primary\);border-radius:9px;background:var\(--bg-surface\);box-shadow:var\(--shadow-card\)\}/);
+  assert.match(mobile,/\.history-module \.history\{margin-top:0;border:0;background:transparent;box-shadow:none\}/);
+  assert.match(mobile,/\.history-module \.module-link-full\{display:none\}/);
+  assert.match(mobile,/\.history-module \.module-link-short\{display:inline\}/);
+  assert.match(mobile,/\.history-module \.history summary\{padding-right:65px;flex-wrap:wrap;gap:4px\}/);
+  const desktop=layout.slice(0,layout.indexOf('@media(max-width:620px)',layout.indexOf('/* Local module navigation')));
+  assert.match(desktop,/\.history-module-nav\{position:absolute;top:0;right:13px;min-height:40px;display:flex;align-items:center;z-index:1\}/);
+  assert.match(desktop,/\.history-module \.module-link-short\{display:none\}/);
+  assert.equal((html.match(/aria-label="进入 Exit Research"/g)||[]).length,1);
 });

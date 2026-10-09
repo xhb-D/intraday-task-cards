@@ -179,12 +179,17 @@
 .history-module{position:relative;min-width:0}
 .history-module-nav{position:absolute;top:0;right:13px;min-height:40px;display:flex;align-items:center;z-index:1}
 .history-module .history summary{padding-right:180px}
+.history-module .module-link-short{display:none}
 @media(max-width:620px){
   .page-head{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px}
   .page-head>div{min-width:0}.page-head h1{font-size:18px;line-height:25px}
   .page-head .stamp{max-width:180px}.page-head .stamp p{font-size:10px;white-space:nowrap}
-  .history-module-nav{position:static;justify-content:flex-end;min-height:28px;padding-right:4px}
-  .history-module .history summary{padding-right:13px;flex-wrap:wrap;gap:4px}
+  .history-module{margin-top:12px;border:1px solid var(--border-primary);border-radius:9px;background:var(--bg-surface);box-shadow:var(--shadow-card)}
+  .history-module .history{margin-top:0;border:0;background:transparent;box-shadow:none}
+  .history-module-nav{position:absolute;top:0;right:13px;min-height:40px}
+  .history-module .module-link-full{display:none}
+  .history-module .module-link-short{display:inline}
+  .history-module .history summary{padding-right:65px;flex-wrap:wrap;gap:4px}
 }
 /* Keep save/backup tools compact without restoring a centralized nav row. */
 .page-head .stamp{display:grid;grid-template-columns:auto auto;align-items:center;column-gap:10px;row-gap:5px}

@@ -6,14 +6,14 @@
   <meta name="description" content="GC、CL、ES 独立任务卡；只在本地保存，手动记录，不读取行情或发送订单。">
   <meta http-equiv="Content-Security-Policy" content="default-src 'self' file:; script-src 'self' file:; style-src 'self' file:; img-src data:; font-src 'none'; connect-src https://127.0.0.1:17839 https://localhost:17839; form-action 'none'; base-uri 'none'">
   <title>日内交易状态卡 · GC / CL / ES · V6</title>
-  <script src="appearance-bootstrap.js?v=v6-chime-compact-module-nav-20261009"></script>
-  <link rel="stylesheet" href="styles.css?v=v6-chime-compact-module-nav-20261009">
-  <link rel="stylesheet" href="banner.css?v=v6-chime-compact-module-nav-20261009">
-  <link rel="stylesheet" href="refinement.css?v=v6-chime-compact-module-nav-20261009">
-  <link rel="stylesheet" href="risk-dashboard.css?v=v6-chime-compact-module-nav-20261009">
-  <link rel="stylesheet" href="appearance.css?v=v6-chime-compact-module-nav-20261009">
-  <link rel="stylesheet" href="natural-chime.css?v=v6-chime-compact-module-nav-20261009">
-  <link rel="stylesheet" href="exit-research.css?v=v6-chime-compact-module-nav-20261009">
+  <script src="appearance-bootstrap.js?v=v6-mobile-history-research-20261010"></script>
+  <link rel="stylesheet" href="styles.css?v=v6-mobile-history-research-20261010">
+  <link rel="stylesheet" href="banner.css?v=v6-mobile-history-research-20261010">
+  <link rel="stylesheet" href="refinement.css?v=v6-mobile-history-research-20261010">
+  <link rel="stylesheet" href="risk-dashboard.css?v=v6-mobile-history-research-20261010">
+  <link rel="stylesheet" href="appearance.css?v=v6-mobile-history-research-20261010">
+  <link rel="stylesheet" href="natural-chime.css?v=v6-mobile-history-research-20261010">
+  <link rel="stylesheet" href="exit-research.css?v=v6-mobile-history-research-20261010">
 </head>
 <body>
   <main class="shell">
@@ -31,7 +31,7 @@
     <section id="commodity-dashboard" class="commodity-dashboard" aria-labelledby="commodity-dashboard-title"></section>
     <section id="cards" class="cards" aria-label="GC、CL、ES 独立任务卡"></section>
     <section id="hidden-commodities" class="hidden-commodities" aria-labelledby="hidden-commodities-title" hidden></section>
-    <section class="history-module" aria-label="今日机会记录与研究入口"><div class="history-module-nav"><a class="module-link" href="#/exit-research">进入 Exit Research →</a></div>
+    <section class="history-module" aria-label="今日机会记录与研究入口"><div class="history-module-nav"><a class="module-link" href="#/exit-research" aria-label="进入 Exit Research"><span class="module-link-full">进入 Exit Research →</span><span class="module-link-short" aria-hidden="true">研究 →</span></a></div>
     <details class="history" id="history"><summary><span class="chevron" aria-hidden="true"></span>今日机会记录 <span id="history-count">0 条 · 今日及未结束</span></summary>
       <div class="history-body"><p>选择机会即立即登记；旧记录保留原关键位置，新记录显示「—」。未结束记录不能删除；已结束记录可删除。</p>
         <div class="history-tools"><button type="button" data-scope="today" aria-pressed="true">今日及未结束</button><button type="button" data-scope="all" aria-pressed="false">全部记录</button></div>
@@ -48,6 +48,6 @@
   <dialog id="confirm-dialog" class="dialog" aria-labelledby="dialog-title"><h2 id="dialog-title"></h2><p id="dialog-message"></p><p id="dialog-warning" class="warning" hidden></p><fieldset id="exit-reasons" hidden><legend>退出原因</legend><label><input type="radio" name="exit-kind" value="STOP_EXIT"> 止损退出</label><label><input type="radio" name="exit-kind" value="OTHER_EXIT"> 其他退出</label><label><input id="exit-unknown" type="radio" name="exit-kind" value="UNKNOWN" checked> 暂不确定</label></fieldset><div class="dialog-actions"><button id="dialog-cancel" type="button" autofocus>取消</button><button id="dialog-confirm" class="primary" type="button">确认</button></div></dialog>
   <dialog id="data-dialog" class="dialog data-dialog"><h2>导出与本地备份</h2><p>完整备份包含状态卡、风险管理器、报时设置和外观偏好；仅接受当前统一格式或风险管理器备份。</p><div class="data-grid"><button id="export-today" type="button"><b>今日 Markdown</b><span>今日及未结束的已登记机会</span></button><button id="export-all" type="button"><b>全部 Markdown</b><span>全部仍保留的机会记录</span></button><button id="export-json" type="button"><b>完整备份 JSON</b><span>保存状态卡、风险管理器、报时设置和外观</span></button><button id="export-risk-json" type="button"><b>风险管理器 JSON</b><span>仅导出账户与风险记录</span></button><button id="import-json" type="button"><b>导入 JSON 备份</b><span>预览影响范围后确认；8 MB 上限</span></button></div><button id="export-raw" class="link raw-export" type="button" hidden>导出原始统一存档（用于排查异常）</button><button id="export-chime-raw" class="link raw-export" type="button" hidden>导出原始旧报时设置（用于排查异常）</button><input id="import-file" type="file" accept=".json,application/json" hidden><p id="data-feedback" class="feedback" role="status"></p><p class="caution">不支持旧版独立日内状态卡备份。恢复完成后，请对照真实交易平台核对当前任务与持仓。</p><div class="dialog-actions"><button id="data-close" type="button">关闭</button></div></dialog>
   <div id="announcer" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
-  <script src="dist/app.bundle.js?v=v6-chime-compact-module-nav-20261009"></script>
+  <script src="dist/app.bundle.js?v=v6-mobile-history-research-20261010"></script>
 </body>
 </html>
