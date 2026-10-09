@@ -28,7 +28,7 @@ test('Home layout DOM: unique Risk mount follows history inside home; Chime alon
   assert.equal((html.match(/id="risk-dashboard-host"/g)||[]).length,1);assert.equal((html.match(/id="chime-summary-host"/g)||[]).length,1);
   const home=html.match(/<section data-route-view="home">([^]*?)<section data-route-view="exit-research"/)[1];
   assert.match(home,/<div id="home-top-region" class="home-top-region"><div id="chime-summary-host"><\/div><\/div>/);
-  assert.match(home,/<\/details>\s*<div id="risk-dashboard-host"><\/div><\/section>\s*$/);
+  assert.match(home,/<\/details><\/section>\s*<div id="risk-dashboard-host"><\/div><\/section>\s*$/);
   const positions=['chime-summary-host','commodity-dashboard','id="cards"','id="history"','risk-dashboard-host'].map(id=>home.indexOf(id));
   assert.ok(positions.every((p,i)=>p>=0&&(i===0||p>positions[i-1])));
   assert.match(html,/<section data-route-view="risk" hidden><div id="risk-full-host">[^]*?<div id="risk-manager-host"><\/div>/);

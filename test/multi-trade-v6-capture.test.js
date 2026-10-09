@@ -22,17 +22,19 @@ function memory(raw = null, hook = () => {}) {
   const data = new Map(raw === null ? [] : [[UNIFIED_KEY,raw]]);
   return { data, getItem(key) { return hook('get',key,data.get(key) ?? null,data) ?? data.get(key) ?? null; }, setItem(key,value) { hook('set',key,value,data); data.set(key,String(value)); }, removeItem(key) { data.delete(key); } };
 }
-function bundleHarness(state = v6.createWorkspace(0), { raw, backing, quota = false } = {}) {
+function bundleHarness(state = v6.createWorkspace(0), { raw, backing, quota = false, routeHash } = {}) {
   const storage = backing || memory(raw ?? JSON.stringify(makeUnified(makeEnvelope(state,T+100))));
   const elements = new Map(), listeners = new Map(), errors = [];
   const element = () => ({ hidden:true,disabled:false,inert:false,textContent:'',innerHTML:'',value:'',dataset:{},options:[],children:[],style:{setProperty(){}},classList:{add(){},toggle(){}}, listeners:{},addEventListener(type,fn){this.listeners[type]=fn;},querySelector(){return element();},querySelectorAll(){return [];},setAttribute(){},add(child){this.options.push(child);},appendChild(child){this.children.push(child);return child;},append(...nodes){this.children.push(...nodes);},replaceChildren(...nodes){this.children=nodes;},focus(){},showModal(){this.open=true;},close(){this.open=false;} });
-  const document = { querySelector(selector){if(!elements.has(selector))elements.set(selector,element());return elements.get(selector);},getElementById(id){return this.querySelector('#'+id);},querySelectorAll(){return [];},createElement:element };
+  const routeViews = ['home','risk','exit-research','chime','error'].map(routeView => ({dataset:{routeView},hidden:true}));
+  const document = { querySelector(selector){if(!elements.has(selector))elements.set(selector,element());return elements.get(selector);},getElementById(id){return this.querySelector('#'+id);},querySelectorAll(selector){return selector==='[data-route-view]' ? routeViews : [];},createElement:element };
   const context = { document,localStorage:storage,window:{addEventListener(type,fn){listeners.set(type,[...(listeners.get(type)||[]),fn]);}},console:{error(...args){errors.push(args);}},setInterval(){return 1;},clearInterval(){},setTimeout(){return 1;},clearTimeout(){},Option:function(text,value){return {text,value};},Blob,URL:{createObjectURL:()=>'',revokeObjectURL(){}},TextEncoder,Intl,Date };
+  if (routeHash !== undefined) context.location={hash:routeHash,search:''};
   vm.runInNewContext('function structuredClone(value) { return JSON.parse(JSON.stringify(value)); }\n'+readFileSync(new URL('../dist/app.bundle.js',import.meta.url),'utf8'),context);
   const click = (action,id=null,value=null,symbol='GC') => document.querySelector('#cards').listeners.click({detail:1,target:{closest:()=>({disabled:false,dataset:{action,opportunityId:id,value,symbol}})}});
   const submit = (id,value) => document.querySelector('#cards').listeners.submit({target:{closest:()=>({dataset:{stopForm:id},querySelector:()=>({value})})},preventDefault(){}});
   const confirm = kind => { document.querySelector('input[name="exit-kind"]:checked').value=kind; document.querySelector('#dialog-confirm').listeners.click(); };
-  return {storage,document,errors,click,submit,confirm,cancel:()=>document.querySelector('#dialog-cancel').listeners.click(),saved:()=>JSON.parse(storage.getItem(UNIFIED_KEY)),html:()=>document.querySelector('#cards').innerHTML,history:()=>document.querySelector('#history-body').innerHTML,raw:()=>storage.getItem(UNIFIED_KEY)};
+  return {storage,document,errors,click,submit,confirm,routeViews,navigate(hash){context.location.hash=hash;for(const handler of listeners.get('hashchange')||[])handler();},cancel:()=>document.querySelector('#dialog-cancel').listeners.click(),saved:()=>JSON.parse(storage.getItem(UNIFIED_KEY)),html:()=>document.querySelector('#cards').innerHTML,history:()=>document.querySelector('#history-body').innerHTML,raw:()=>storage.getItem(UNIFIED_KEY)};
 }
 
 test('M2 production: frozen M1 artifacts retain exact bytes and old UI assertions',()=>{
@@ -201,4 +203,18 @@ for (const count of [0,1,2,3]) test(`Home hidden footer/${count}: single lower l
     assert.equal(footer.hidden,true);assert.equal(footer.innerHTML,'');
   }
   assert.equal(h.raw(),raw);assert.deepEqual(h.errors,[]);
+});
+
+
+test('Module navigation production: hash routes and returns preserve Unified, Research settings and current view state',()=>{
+  const {state,a}=pair();v6.recordInitialStop(state,a.id,90,T+30);v6.chooseSetup(state,'GC','mtf_pb',T+31);
+  const h=bundleHarness(state,{routeHash:'#/home'}),before=h.raw();
+  h.storage.setItem('exit-research:v1',JSON.stringify(createWorkbenchStore()));
+  const research=h.storage.getItem('exit-research:v1');
+  for(const hash of ['#/risk','#/home','#/exit-research','#/home','#/chime','#/home','#/unknown','#/home']){
+    h.navigate(hash);const active=hash==='#/unknown'?'error':hash.slice(2);
+    assert.deepEqual(h.routeViews.filter(view=>!view.hidden).map(view=>view.dataset.routeView),[active]);
+    assert.equal(h.raw(),before);assert.equal(h.storage.getItem('exit-research:v1'),research);
+  }
+  assert.deepEqual(h.errors,[]);assert.match(h.html(),/当前持仓 · 2 笔/);
 });

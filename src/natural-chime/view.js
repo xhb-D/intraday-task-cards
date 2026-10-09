@@ -40,7 +40,9 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   const setupButton = makeButton('安装和连接说明', 'setup');
   const setupHelp = node('p', 'chime-message', '本机个人版需先安装后台助手并完成 Personal HTTPS 信任设置，再选择后台助手报时；连接后点击开始报时。助手重启后保持暂停；断连请检查登录服务和证书状态。'); setupHelp.hidden = true;
   setupButton.addEventListener('click', () => { setupHelp.hidden = !setupHelp.hidden; });
-  append(summary, controlLabel('本机报时方式', modeSelect), modeHint, setupButton, setupHelp);
+  const modeRow = node('div', 'chime-mode-row');
+  append(modeRow, controlLabel('本机报时方式', modeSelect, 'chime-mode-label'), modeHint, setupButton);
+  append(summary, modeRow, setupHelp);
   const clock = node('time', 'chime-clock', '北京时间 --:--:--'); clock.dataset.chimeClock = 'true';
   const runtimeStatus = node('p', 'chime-runtime', '全局已暂停'); runtimeStatus.dataset.chimeRuntime = 'true'; runtimeStatus.setAttribute('role', 'status'); runtimeStatus.setAttribute('aria-live', 'polite');
   const tags = node('div', 'chime-tags'); tags.dataset.chimeTags = 'true'; tags.setAttribute('role', 'list');
@@ -64,7 +66,9 @@ export function initChimeView({ summaryHost, settingsHost, onSlotChange, onPrefe
   const message = node('p', 'chime-message'); message.setAttribute('role', 'status'); message.setAttribute('aria-live', 'polite'); message.dataset.chimeMessage = 'true';
   const periodFooter = node('div', 'chime-period-footer');
   append(periodFooter, count, tags, empty);
-  append(summary, clock, runtimeStatus, preferences, actions, message, periodFooter);
+  const clockRow = node('div', 'chime-clock-row');
+  append(clockRow, clock, runtimeStatus);
+  append(summary, clockRow, preferences, actions, message, periodFooter);
   summaryHost.replaceChildren(summary);
 
   const settings = node('section', 'chime-settings'); settings.setAttribute('aria-labelledby', 'chime-settings-title');

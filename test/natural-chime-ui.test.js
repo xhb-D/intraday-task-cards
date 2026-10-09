@@ -314,3 +314,21 @@ for (const mode of ['browser', 'native']) test(`Home chime footer/${mode}: count
     view.destroy();
   } finally { globalThis.document = priorDocument; }
 });
+
+for(const mode of ['browser','native'])test(`Compact Chime ${mode}: original controls grouped once, help and actions remain operable`,()=>{
+  const priorDocument=globalThis.document;globalThis.document={createElement:tag=>new FakeElement(tag)};
+  try{
+    const summaryHost=new FakeElement(),settingsHost=new FakeElement();let starts=0,previews=0;
+    const view=initChimeView({summaryHost,settingsHost,mode,getVoices:()=>[],onStart:()=>starts++,onPreview:()=>previews++});
+    const summary=summaryHost.children[0],modeRow=find(summary,e=>e.className==='chime-mode-row'),clockRow=find(summary,e=>e.className==='chime-clock-row');
+    assert.equal(summary.children[0],modeRow);assert.equal(modeRow.children[0].textContent.includes('本机报时方式'),true);
+    assert.equal(modeRow.children[0].children[0].value,mode);
+    assert.deepEqual(clockRow.children.map(e=>e.className),['chime-clock','chime-runtime']);
+    const help=summary.children[1];assert.equal(help.hidden,true);modeRow.children[2].click();assert.equal(help.hidden,false);modeRow.children[2].click();assert.equal(help.hidden,true);
+    const actions=find(summary,e=>e.className==='chime-actions');
+    assert.equal(actions.children.at(-1).href,'#/chime');
+    view.render(defaultChime(),mode==='native'?{connectionState:'CONNECTED',runtimeState:'PAUSED',configState:'IN_SYNC'}:{visible:true,runIntent:'paused'});
+    actions.children[0].click();actions.children[2].click();assert.equal(starts,1);assert.equal(previews,1);
+    assert.equal(summary.children.at(-1).className,'chime-period-footer');view.destroy();
+  }finally{globalThis.document=priorDocument;}
+});
