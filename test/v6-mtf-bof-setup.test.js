@@ -112,7 +112,7 @@ test('Historical MTF BOF UI is readable while only independent new Setup control
 test('MTF BOF UI protects accepted header order and direction priority on all three cards',()=>{
   const s=ready();
   for(const symbol of ['GC','CL','ES']){
-    const html=captureUi.renderCard(s,symbol),structure=html.indexOf('HTF波段动能&amp;新的未测试优质缺口'),bias=html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）'),direction=html.indexOf('交易方向 <span');
+    const html=captureUi.renderCard(s,symbol),structure=html.indexOf('确定持仓预期（关注波段动能&amp;未测试优质缺口）'),bias=html.indexOf('结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）'),direction=html.indexOf('交易方向 <span');
     assert.ok(structure>=0&&structure<bias&&bias<direction);assert.ok(html.includes('小偏见方向&gt;大偏见方向'));
     assert.ok(html.includes('SPB（观察结构背离、rsi、PD array）'));assert.doesNotMatch(html,/data-action="setup"[^>]*data-value="htf_bof"/);
   }

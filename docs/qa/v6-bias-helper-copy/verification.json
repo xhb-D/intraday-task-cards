@@ -1,0 +1,79 @@
+{
+  "status": "PASS",
+  "reviewStatus": "WAITING_CHAT_HUMAN_REVIEW",
+  "verifiedAt": "2026-10-11T14:58:23.608662+00:00",
+  "base": "00aa5971a9f51c941b06c5b883e3966113fa2072",
+  "branch": "codex/v6-bias-helper-copy",
+  "tests": {
+    "command": "npm test",
+    "passed": 1175,
+    "failed": 0,
+    "skipped": 0,
+    "total": 1175
+  },
+  "build": {
+    "command": "npm run build",
+    "status": "PASS"
+  },
+  "bundleSyntax": {
+    "command": "node --check dist/app.bundle.js",
+    "status": "PASS"
+  },
+  "qaScriptSyntax": {
+    "command": "node --check scripts/qa-v6-bias-helper-copy.mjs",
+    "status": "PASS"
+  },
+  "diffCheck": {
+    "command": "git diff --check",
+    "status": "PASS"
+  },
+  "browser": {
+    "version": "154.0.8037.99",
+    "widths": [
+      1440,
+      1024,
+      390,
+      375,
+      320
+    ],
+    "themes": [
+      "light",
+      "dark"
+    ],
+    "scenarios": 20,
+    "screenshots": 14,
+    "symbols": [
+      "GC",
+      "CL",
+      "ES"
+    ],
+    "normalAndLegacyAtEverySizeAndTheme": true,
+    "consoleErrorsOrWarnings": [],
+    "bigNoteLines": 1,
+    "smallNoteLines": 2,
+    "fontSize": "11px",
+    "lineHeight": "16px",
+    "fontWeight": "400",
+    "buttonGap": "6px",
+    "noClippingNoHorizontalOverflow": true,
+    "buttonsMatchBase": true,
+    "canonicalRawUnchanged": true
+  },
+  "visualInspection": [
+    "1440-light.png",
+    "1440-dark.png",
+    "320-light.png",
+    "320-dark.png",
+    "320-dark-legacy.png"
+  ],
+  "productChange": "Exactly two helper text replacements; CSS and logic unchanged",
+  "dataScope": "Synthetic fixtures in temporary Chrome contexts only",
+  "push": false,
+  "merge": false,
+  "deploy": false,
+  "sha256": {
+    "src/capture-ui.js": "7dc7b65caf098f842ce1722533d122b7528d408f87288318f37b49406b130983",
+    "dist/app.bundle.js": "9b379d3f3f685b5f44f4f74ee4aa9237d8440cfcee2b49d76d27f84d3833bdb7",
+    "scripts/qa-v6-bias-helper-copy.mjs": "e2432970e4c0f25582d478990524d956c3d06e3068e7d33643545109b95a562d"
+  }
+}

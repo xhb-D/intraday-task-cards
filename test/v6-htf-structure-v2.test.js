@@ -25,8 +25,8 @@ test('HTF V2 UI: three exact choices in order; precise headings and no legacy cr
     const html=captureUi.renderCard(v6.createWorkspace(T),symbol),section=html.match(/<section class="classifier structure-field">([^]*?)<\/section>/)[1];
     const buttons=[...section.matchAll(/<button[^>]*data-action="structure"[^>]*data-value="([^"]+)"[^>]*>([^]*?)<\/button>/g)];
     assert.deepEqual(buttons.map(m=>m[1]),Object.keys(v5.HTF_STRUCTURES_V3));assert.deepEqual(buttons.map(m=>m[2]),Object.values(v5.HTF_STRUCTURES_V3).map(s=>s.replace(/&/g,'&amp;')));
-    assert.ok(html.indexOf('HTF波段动能&amp;新的未测试优质缺口')<html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）'));
-    assert.ok(html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）')<html.indexOf('交易方向 <span'));
+    assert.ok(html.indexOf('确定持仓预期（关注波段动能&amp;未测试优质缺口）')<html.indexOf('结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）'));
+    assert.ok(html.indexOf('结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）')<html.indexOf('交易方向 <span'));
     assert.ok(html.includes('小偏见方向&gt;大偏见方向'));
   }
 });

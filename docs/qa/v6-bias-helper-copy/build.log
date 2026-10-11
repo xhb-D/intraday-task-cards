@@ -1,0 +1,2 @@
+> intraday-task-cards-v1@1.0.0 build
+> node scripts/build.mjs

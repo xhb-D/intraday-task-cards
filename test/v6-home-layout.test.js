@@ -8,8 +8,8 @@ import { ready, T } from './fixtures/intraday-v6.js';
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const css=readFileSync(new URL('../refinement.css',import.meta.url),'utf8');
 const chimeCss=readFileSync(new URL('../natural-chime.css',import.meta.url),'utf8');
-const big='<span class="field-label context-heading"><strong class="context-title">大偏见</strong><span class="context-note">HTF波段动能&amp;新的未测试优质缺口</span></span>';
-const small='<span class="field-label context-heading"><strong class="context-title">小偏见</strong><span class="context-note">价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）</span></span>';
+const big='<span class="field-label context-heading"><strong class="context-title">大偏见</strong><span class="context-note">确定持仓预期（关注波段动能&amp;未测试优质缺口）</span></span>';
+const small='<span class="field-label context-heading"><strong class="context-title">小偏见</strong><span class="context-note">结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）</span></span>';
 for(const symbol of ['GC','CL','ES'])for(const lifecycle of ['none','wait','signal','position'])test(`Home layout ${symbol}/${lifecycle}: exact two-level big/small bias headings, direction order, no canonical mutation`,()=>{
   const state=ready(symbol),beforeSetup=state.cards[symbol].structure3m;
   if(lifecycle!=='none'){
