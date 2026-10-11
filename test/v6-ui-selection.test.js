@@ -31,9 +31,9 @@ function assertSelection(html, action, value, count) {
 for (const stage of ['wait', 'signal']) {
   test(`V6 home selection: ${stage} alone has selected class and pressed state`, () => {
     const state = v6.createWorkspace(T);
-    v6.changeStructure(state, 'GC', 'trend_pullback_stronger');
+    v6.changeStructure(state, 'GC', 'breakout_strong_pullback_weak');
     v6.changeDirection(state, 'GC', 'long', T + 1);
-    const { opportunity } = v6.chooseSetup(state, 'GC', 'mtf_pb', T + 2);
+    const { opportunity } = v6.chooseSetup(state, 'GC', 'spb', T + 2);
     if (stage === 'signal') v6.setOpportunityStage(state, opportunity.id, stage, T + 3);
     assertSelection(render(state), 'stage', stage, 2);
   });
@@ -52,9 +52,9 @@ test('V6 home title: exact replacement note remains inline within direction labe
 });
 test('V6 home readonly direction: title note preserved without restoring editable choices', () => {
   const state = v6.createWorkspace(T);
-  v6.changeStructure(state, 'GC', 'trend_pullback_stronger');
+  v6.changeStructure(state, 'GC', 'breakout_strong_pullback_weak');
   v6.changeDirection(state, 'GC', 'long', T + 1);
-  v6.chooseSetup(state, 'GC', 'mtf_pb', T + 2);
+  v6.chooseSetup(state, 'GC', 'spb', T + 2);
   const html = render(state);
   assert.ok(html.includes(note));
   assert.equal(buttons(html, 'direction').length, 0);

@@ -26,19 +26,19 @@ function legacy(stage='closed') {
   if(stage==='closed')old.markExited(s,'GC',T+8,true);
   old.assertState(s);return s;
 }
-test('V6 Setup creation UI: exactly two buttons, legacy choice absent, exact new BOF label',()=>{
+test('V6 Setup creation UI: exactly three independent buttons and full new labels',()=>{
   const s=ready(), before=structuredClone(s), buttons=setupButtons(captureUi.renderCard(s,'GC'));
-  assert.deepEqual(Object.keys(old.CREATABLE_SETUPS),['mtf_pb','mtf_bof']);
-  assert.equal(buttons.length,2);assert.deepEqual(buttons.map(b=>b[2]),['MTF PB（仓位合适看5M，不合适1M+rsi）','MTF BOF（做多等收敛 做空等扫高）']);
+  assert.deepEqual(Object.keys(old.CREATABLE_SETUPS),['spb','cpb','bof']);
+  assert.equal(buttons.length,3);assert.deepEqual(buttons.map(b=>b[2]),Object.values(old.CREATABLE_SETUPS));
   assert.ok(buttons.every(b=>!b[1].includes('htf_pb')));assert.deepEqual(s,before);
 });
-for(const type of ['mtf_pb','mtf_bof'])test(`V6 Setup ${type}: normal production creation and entry`,()=>{
+for(const type of ['spb','cpb','bof'])test(`V6 Setup ${type}: normal production creation and entry`,()=>{
   const s=ready(), r=v6.chooseSetup(s,'GC',type,T+3).opportunity;
   assert.equal(r.type,type);assert.equal(s.records.length,1);v6.markEntered(s,r.id,T+4,true);v6.assertV6State(s);
 });
 for(const context of ['empty','pending','position'])test(`V6 legacy htf_pb creation rejected atomically with ${context}`,()=>{
   const s=ready();
-  if(context!=='empty'){const r=v6.chooseSetup(s,'GC','mtf_pb',T+3).opportunity;if(context==='position')v6.markEntered(s,r.id,T+4,true);}
+  if(context!=='empty'){const r=v6.chooseSetup(s,'GC','spb',T+3).opportunity;if(context==='position')v6.markEntered(s,r.id,T+4,true);}
   const before=structuredClone(s);
   assert.throws(()=>v6.chooseSetup(s,'GC','htf_pb',T+10),{code:'V6_SETUP_INVALID',path:'type'});
   assert.deepEqual(s,before);v6.assertV6State(s);
@@ -80,17 +80,17 @@ test('Legacy htf_pb: existing Exit Research fixture still matches, computes metr
   }
   assert.deepEqual(outputs[0],outputs[1]);
 });
-test('V6 two Setup layout: two stretched columns with natural wrapping without third slot',()=>{
+test('V6 Setup V2 layout: three equal columns with full natural wrapping',()=>{
   const css=readFileSync(new URL('../refinement.css',import.meta.url),'utf8');
-  assert.match(css,/\.capture-card \.setup-segment\{grid-template-columns:minmax\(0,9fr\) minmax\(0,11fr\)/);
+  assert.match(css,/\.capture-card \.setup-segment\{grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(css,/\.capture-card \.setup-segment \.option\{[^}]*white-space:normal/);
 });
-test('Setup assets: CSS and bundle use the same new version to avoid a cached three-column layout',()=>{
+test('Setup assets: CSS and bundle use the same new version to avoid stale Setup layouts',()=>{
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const cssVersion=html.match(/refinement\.css\?v=([^"\s]+)/)?.[1];
   const bundleVersion=html.match(/dist\/app\.bundle\.js\?v=([^"\s]+)/)?.[1];
-  assert.equal(cssVersion,'v6-mobile-history-research-20261010');assert.equal(bundleVersion,cssVersion);
+  assert.equal(cssVersion,'v6-setup-expectations-20261011');assert.equal(bundleVersion,cssVersion);
   assert.doesNotMatch(html,/选择 MTF PB、MTF BOF/);
-  assert.ok(html.includes('选择 MTF PB 或 MTF BOF（做多等收敛 做空等扫高）后'));
+  assert.ok(html.includes('选择 SPB、CPB 或 BOF 后'));
   assert.doesNotMatch(html,/选择 MTF PB 或 HTF BOF/);
 });

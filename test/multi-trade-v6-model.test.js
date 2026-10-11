@@ -13,8 +13,8 @@ function rejectsUnchanged(state, action, code) {
   assert.deepEqual(state, before); m.assertV6State(state);
 }
 
-test('V6 A: PB opportunity enters using the same canonical record, ID and object', () => {
-  const state = ready(), { opportunity } = m.chooseSetup(state, 'GC', 'mtf_pb', T + 10);
+test('V6 A: SPB opportunity enters using the same canonical record, ID and object', () => {
+  const state = ready(), { opportunity } = m.chooseSetup(state, 'GC', 'spb', T + 10);
   assert.equal(q.recordLifecycleState(opportunity), 'wait');
   const id = opportunity.id, count = state.records.length;
   m.setOpportunityStage(state, id, 'signal', T + 11);
@@ -26,10 +26,10 @@ test('V6 A: PB opportunity enters using the same canonical record, ID and object
   assert.deepEqual(opportunity.stages, [{ state:'wait',start:T+10,end:T+11 }, { state:'signal',start:T+11,end:T+12 }, { state:'position',start:T+12,end:null }]);
 });
 
-test('V6 B/C: held A permits same-direction PB wait and entry B; A remains unchanged', () => {
+test('V6 B/C: held A permits same-direction SPB wait and entry B; A remains unchanged', () => {
   const state = ready(), a = addTrade(state), before = clone(a);
   state.cards.GC.direction = 'short'; // Card is a preference, not an override of active truth.
-  const { opportunity: b } = m.chooseSetup(state, 'GC', 'mtf_pb', T + 20);
+  const { opportunity: b } = m.chooseSetup(state, 'GC', 'spb', T + 20);
   assert.equal(b.direction, 'long'); assert.equal(q.activeOpportunityForSymbol(state, 'GC'), b);
   assert.equal(q.effectiveDirectionForSymbol(state, 'GC'), 'long');
   m.markEntered(state, b.id, T + 21, true);
@@ -74,7 +74,7 @@ test('V6 I: A BOF→PB and revert are independent of BOF B and do not replace or
 });
 
 test('V6 J / independent audit: JSON reload restores A+B+C wait without any card opportunity/cache', () => {
-  const { state,a,b } = pair(), { opportunity:c } = m.chooseSetup(state,'GC','mtf_pb',T+30);
+  const { state,a,b } = pair(), { opportunity:c } = m.chooseSetup(state,'GC','spb',T+30);
   for (const card of Object.values(state.cards)) {
     assert.deepEqual(Object.keys(card).sort(),['symbol','bias','structure3m','needsStructureReview','direction','idleSince'].sort());
     assert.equal(Object.hasOwn(card,'opportunity'),false); assert.equal(Object.hasOwn(card,'activeTrades'),false);
@@ -87,7 +87,7 @@ test('V6 J / independent audit: JSON reload restores A+B+C wait without any card
 });
 
 for (const kind of ['trade','opportunity']) test(`V6 O/P: ${kind} ordinary deletion rejects with unchanged state/revision`, () => {
-  const state = ready(), r = kind==='trade' ? addTrade(state) : m.chooseSetup(state,'GC','mtf_pb',T+10).opportunity;
+  const state = ready(), r = kind==='trade' ? addTrade(state) : m.chooseSetup(state,'GC','spb',T+10).opportunity;
   rejectsUnchanged(state,()=>m.deleteRecord(state,r.id),'V6_ACTIVE_RECORD_DELETE_FORBIDDEN');
 });
 
@@ -103,7 +103,7 @@ test('V6 Q boundary: flatten rejects before the later position stage start; A is
 
 test('V6 R: flatten leaves pending C and unrelated CL trade completely unchanged', () => {
   const { state } = pair(); m.changeStructure(state,'CL','htf_range_v2'); m.changeDirection(state,'CL','short',T+25);
-  const cl=addTrade(state,'mtf_bof',T+26,'CL'), c=m.chooseSetup(state,'GC','mtf_pb',T+30).opportunity;
+  const cl=addTrade(state,'mtf_bof',T+26,'CL'), c=m.chooseSetup(state,'GC','spb',T+30).opportunity;
   const cBefore=clone(c), clBefore=clone(cl); m.markAllTradesExited(state,'GC',T+40,true);
   assert.deepEqual(c,cBefore); assert.deepEqual(cl,clBefore);
   assert.equal(q.activeOpportunityForSymbol(state,'GC'),c);
@@ -114,12 +114,12 @@ test('V6 S: active LONG blocks ordinary SHORT change even when confirmed; new Se
   const state=ready(), a=addTrade(state), before=clone(state);
   assert.deepEqual(m.changeDirection(state,'GC','short',T+20,true),{changed:false,reason:'holding'});
   assert.deepEqual(state,before);
-  const b=m.chooseSetup(state,'GC','mtf_pb',T+20).opportunity;
+  const b=m.chooseSetup(state,'GC','spb',T+20).opportunity;
   assert.equal(b.direction,a.direction); m.assertV6State(state);
 });
 
 test('V6 direction is also locked by pending alone and unlocks only after pending ends', () => {
-  const state=ready(), pending=m.chooseSetup(state,'GC','mtf_pb',T+10).opportunity, before=clone(state);
+  const state=ready(), pending=m.chooseSetup(state,'GC','spb',T+10).opportunity, before=clone(state);
   assert.deepEqual(m.changeDirection(state,'GC','short',T+11,true),{changed:false,reason:'pending'});
   assert.deepEqual(state,before);
   m.endOpportunity(state,pending.id,'canceled',T+12);
@@ -129,8 +129,8 @@ test('V6 direction is also locked by pending alone and unlocks only after pendin
 test('V6 T: context updates leave old snapshots intact; B freezes new Bias/Structure', () => {
   const state=ready(); m.changeBias(state,'GC','bullish'); const a=addTrade(state), before=clone(a);
   m.changeBias(state,'GC','bearish'); m.changeStructure(state,'GC','htf_range_v2');
-  const b=m.chooseSetup(state,'GC','mtf_pb',T+20).opportunity;
-  assert.deepEqual(a,before); assert.equal(a.structure3mAtRegistration,'trend_pullback_stronger'); assert.equal(a.biasAtRegistration,'bullish');
+  const b=m.chooseSetup(state,'GC','spb',T+20).opportunity;
+  assert.deepEqual(a,before); assert.equal(a.structure3mAtRegistration,'breakout_strong_pullback_weak'); assert.equal(a.biasAtRegistration,'bullish');
   assert.equal(b.structure3mAtRegistration,'htf_range_v2'); assert.equal(b.biasAtRegistration,'bearish'); assert.equal(b.direction,'long');
 });
 
@@ -168,7 +168,7 @@ test('V6 full manual event log survives both single exit and JSON reload', () =>
 });
 
 test('V6 confirmations require explicit true, and empty flatten / same stage are no-ops', () => {
-  const state=ready(), pending=m.chooseSetup(state,'GC','mtf_pb',T+10).opportunity;
+  const state=ready(), pending=m.chooseSetup(state,'GC','spb',T+10).opportunity;
   let before=clone(state); assert.equal(m.markEntered(state,pending.id,T+11).needsConfirmation,true); assert.deepEqual(state,before);
   assert.equal(m.setOpportunityStage(state,pending.id,'wait',T+11).changed,false); assert.deepEqual(state,before);
   m.markEntered(state,pending.id,T+11,true); before=clone(state);
@@ -189,12 +189,12 @@ test('V6 ID operations cannot affect the wrong stage or reuse an ended trade', (
 });
 
 test('V6 pending Setup replacement/end preflights time and never changes existing A', () => {
-  const state=ready(), a=addTrade(state), savedA=clone(a), pending=m.chooseSetup(state,'GC','mtf_pb',T+20).opportunity;
+  const state=ready(), a=addTrade(state), savedA=clone(a), pending=m.chooseSetup(state,'GC','spb',T+20).opportunity;
   m.setOpportunityStage(state,pending.id,'signal',T+25);
-  rejectsUnchanged(state,()=>m.chooseSetup(state,'GC','mtf_bof',T+24),'V6_TIME_INVALID');
+  rejectsUnchanged(state,()=>m.chooseSetup(state,'GC','cpb',T+24),'V6_TIME_INVALID');
   rejectsUnchanged(state,()=>m.endOpportunity(state,pending.id,'invalid',T+24),'V6_TIME_INVALID');
   rejectsUnchanged(state,()=>m.setOpportunityStage(state,pending.id,'wait',T+24),'V6_TIME_INVALID');
-  const next=m.chooseSetup(state,'GC','mtf_bof',T+26).opportunity;
+  const next=m.chooseSetup(state,'GC','cpb',T+26).opportunity;
   assert.equal(pending.reason,'canceled'); assert.equal(pending.exitCapture,null); assert.notEqual(next.id,pending.id); assert.deepEqual(a,savedA);
 });
 
@@ -235,7 +235,7 @@ test('V6 validation preflight rejects corrupted input before any command can cha
 });
 
 test('V6 capture API rejects pending/ended targets and invalid correction without leaking to another trade', () => {
-  const {state,a}=pair(); const pending=m.chooseSetup(state,'GC','mtf_pb',T+30).opportunity;
+  const {state,a}=pair(); const pending=m.chooseSetup(state,'GC','spb',T+30).opportunity;
   rejectsUnchanged(state,()=>m.recordInitialStop(state,pending.id,3990,T+31),'V6_ACTIVE_TRADE_REQUIRED');
   m.recordInitialStop(state,a.id,3990,T+32);
   rejectsUnchanged(state,()=>m.correctInitialStop(state,a.id,-1,T+33),'V6_CAPTURE_INVALID');
@@ -244,13 +244,13 @@ test('V6 capture API rejects pending/ended targets and invalid correction withou
 });
 
 test('V6 invalid configuration/stage/entry commands are atomic and successful no-ops preserve revision', () => {
-  const state=ready(), pending=m.chooseSetup(state,'GC','mtf_pb',T+10).opportunity;
+  const state=ready(), pending=m.chooseSetup(state,'GC','spb',T+10).opportunity;
   for(const action of [()=>m.changeBias(state,'GC','invalid'),()=>m.changeStructure(state,'GC','invalid'),
     ()=>m.changeDirection(state,'GC','invalid'),()=>m.chooseSetup(state,'GC','invalid',T+20),
     ()=>m.setOpportunityStage(state,pending.id,'position',T+20),()=>m.markEntered(state,pending.id,T+1,true),
     ()=>m.markEntered(state,'missing',T+20,true)]) rejectsUnchanged(state,action);
   const before=clone(state); assert.equal(m.changeBias(state,'GC','neutral').changed,false);
-  assert.equal(m.changeStructure(state,'GC','trend_pullback_stronger').changed,false); assert.equal(m.chooseSetup(state,'GC','mtf_pb',T+20).changed,false);
+  assert.equal(m.changeStructure(state,'GC','breakout_strong_pullback_weak').changed,false); assert.equal(m.chooseSetup(state,'GC','spb',T+20).changed,false);
   assert.deepEqual(state,before);
 });
 

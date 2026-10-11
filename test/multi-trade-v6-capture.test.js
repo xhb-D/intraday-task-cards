@@ -50,7 +50,7 @@ test('M2 production: frozen M1 artifacts retain exact bytes and old UI assertion
 });
 
 test('M2 persistence: only V6 writes, strict reload preserves 2 active plus pending',()=>{
-  const {state}=pair();v6.chooseSetup(state,'GC','mtf_pb',T+30);
+  const {state}=pair();v6.chooseSetup(state,'GC','spb',T+30);
   const value=deserialize(serialize(state,T+40));assert.deepEqual(value.state,state);assert.equal(value.schemaVersion,6);
   const store=memory(),saved=commitUnified(store,makeUnified(makeEnvelope(state,T+40)),{expectedRaw:null});
   const boot=loadUnified(store);assert.deepEqual(boot.state,saved);v6.assertV6State(boot.state.sections.intraday.state);
@@ -85,21 +85,21 @@ for(const failure of ['snapshotQuota','snapshotReadback','canonicalQuota','canon
   const boot=loadUnified(store,{migratedAt:T+200});assert.equal(boot.source,'recovery-required');assert.equal(boot.state,null);assert.equal(store.data.get(UNIFIED_KEY),failure==='CAS'?'external':raw);
 });
 test('M2 import: V5 preview names both versions, V6 multi-record events and exits round-trip',()=>{
-  const {state,a,b}=pair();v6.recordInitialStop(state,a.id,90,T+30);v6.recordBofToPb(state,a.id,T+31);v6.markTradeExited(state,b.id,'STOP_EXIT',T+32,true);v6.chooseSetup(state,'GC','mtf_pb',T+33);
+  const {state,a,b}=pair();v6.recordInitialStop(state,a.id,90,T+30);v6.recordBofToPb(state,a.id,T+31);v6.markTradeExited(state,b.id,'STOP_EXIT',T+32,true);v6.chooseSetup(state,'GC','spb',T+33);
   const unified=makeUnified(makeEnvelope(state,T+34)),preview=normalizeImport(JSON.parse(rawV5(v5Active())),unified);
   assert.match(preview.summary,/旧版数据：V5；将升级为：V6/);
   const full=normalizeImport(JSON.parse(JSON.stringify(unified)),makeUnified());assert.deepEqual(full.state,unified);assert.equal(full.state.sections.intraday.state.records[1].exitCapture.kind,'STOP_EXIT');
   const store=memory(JSON.stringify(unified));commitUnified(store,full.state,{expectedRaw:JSON.stringify(unified),preImport:true});assert.equal(store.getItem(PRE_IMPORT_KEY),JSON.stringify(unified));
 });
 test('M2 Markdown: independent active records, stop events and manual-only timestamps',()=>{const {state,a,b}=pair();v6.recordInitialStop(state,a.id,90,T+30);v6.recordInitialStop(state,b.id,92,T+31);const md=exportMarkdown(state,'all',T+40);assert.equal((md.match(/持仓中/g)||[]).length,2);assert.match(md,/Initial Stop：90/);assert.match(md,/Initial Stop：92/);assert.doesNotMatch(md,/Actual Entry|实际成交时间/);});
-test('M2 direct UI: two trades plus pending, unique per-ID controls and same Setup available',()=>{const {state,a,b}=pair();v6.chooseSetup(state,'GC','mtf_pb',T+30);const html=captureUi.renderCard(state,'GC',{stopEditors:new Map([[a.id,{draft:'90'}],[b.id,{draft:'92'}]])});assert.match(html,/当前持仓 · 2 笔/);assert.match(html,/跟随当前持仓/);assert.equal((html.match(/data-stop-form=/g)||[]).length,2);assert.equal(new Set([...html.matchAll(/ id="([^"]*)"/g)].map(m=>m[1])).size,7);assert.match(html,/新交易机会/);assert.equal((html.match(/data-action="direction"/g)||[]).length,0);assert.match(html,/计划管理/);assert.doesNotMatch(html,/STOP_EXIT|MANUAL_FLATTEN|card.opportunity/);});
+test('M2 direct UI: two trades plus pending, unique per-ID controls and same Setup available',()=>{const {state,a,b}=pair();v6.chooseSetup(state,'GC','spb',T+30);const html=captureUi.renderCard(state,'GC',{stopEditors:new Map([[a.id,{draft:'90'}],[b.id,{draft:'92'}]])});assert.match(html,/当前持仓 · 2 笔/);assert.match(html,/跟随当前持仓/);assert.equal((html.match(/data-stop-form=/g)||[]).length,2);assert.equal(new Set([...html.matchAll(/ id="([^"]*)"/g)].map(m=>m[1])).size,7);assert.match(html,/新交易机会/);assert.equal((html.match(/data-action="direction"/g)||[]).length,0);assert.match(html,/SPB（观察结构背离、rsi、PD array）/);assert.doesNotMatch(html,/STOP_EXIT|MANUAL_FLATTEN|card.opportunity/);});
 test('M2 production UI: per-ID stop correction and BOF conversion isolate other trade',()=>{const {state,a,b}=pair(),h=bundleHarness(state);assert.deepEqual(h.errors,[]);h.click('stop-edit',a.id);h.submit(a.id,'90');h.click('stop-edit',b.id);h.submit(b.id,'92');h.click('stop-edit',a.id);h.submit(a.id,'89');h.click('bof-to-pb',a.id);let records=h.saved().sections.intraday.state.records;assert.equal(records[0].researchCapture.manualEvents.length,3);assert.equal(records[1].researchCapture.manualEvents.length,1);assert.equal(records[1].researchCapture.manualEvents[0].payload.stopPrice,92);h.click('bof-revert',a.id);records=h.saved().sections.intraday.state.records;assert.equal(records[0].researchCapture.manualEvents.at(-1).type,'BOF_TO_PB_REVERTED');assert.deepEqual(h.errors,[]);});
 test('M2 production UI: invalid stop and cancel preserve canonical revision and state',()=>{const {state,a}=pair(),h=bundleHarness(state),raw=h.raw();h.click('stop-edit',a.id);h.submit(a.id,'-1');assert.equal(h.raw(),raw);h.click('stop-cancel',a.id);h.click('trade-exit',a.id);h.cancel();assert.equal(h.raw(),raw);});
 test('M2 production UI: single stop exit affects B only, active history cannot delete',()=>{const {state,a,b}=pair(),h=bundleHarness(state);assert.equal((h.history().match(/data-delete/g)||[]).length,0);h.click('trade-exit',b.id);h.confirm('STOP_EXIT');const records=h.saved().sections.intraday.state.records;assert.equal(records[0].endedAt,null);assert.equal(records[1].exitCapture.kind,'STOP_EXIT');assert.equal((h.history().match(/data-delete/g)||[]).length,1);assert.match(h.html(),/当前持仓 · 1 笔/);assert.deepEqual(h.errors,[]);});
-test('M2 production UI: flatten once closes captured trades and leaves pending alive',()=>{const {state}=pair(),pending=v6.chooseSetup(state,'GC','mtf_pb',T+30).opportunity,h=bundleHarness(state),revision=state.revision;h.click('flatten');h.confirm();const next=h.saved().sections.intraday.state;assert.equal(next.revision,revision+1);assert.equal(next.records[0].exitCapture.groupId,next.records[1].exitCapture.groupId);assert.equal(next.records[0].endedAt,next.records[1].endedAt);assert.equal(next.records.find(r=>r.id===pending.id).endedAt,null);assert.match(h.html(),/计划管理/);assert.deepEqual(h.errors,[]);});
-test('M2 two tabs: stale flatten dialog cannot close trade B added in Tab A, even without storage event delivery',()=>{const state=ready();const a=addTrade(state);const storage=memory(JSON.stringify(makeUnified(makeEnvelope(state,T+50)))),tabA=bundleHarness(state,{backing:storage}),tabB=bundleHarness(state,{backing:storage});tabB.click('flatten');tabA.click('setup',null,'mtf_pb');let candidate=tabA.saved().sections.intraday.state.records.at(-1);tabA.click('entry',candidate.id);tabA.confirm();const raw=storage.getItem(UNIFIED_KEY);tabB.confirm();assert.equal(storage.getItem(UNIFIED_KEY),raw);assert.equal(v6.activeTradesForSymbol(JSON.parse(raw).sections.intraday.state,'GC').length,2);assert.equal(tabB.document.querySelector('#cards').inert,true);});
+test('M2 production UI: flatten once closes captured trades and leaves pending alive',()=>{const {state}=pair(),pending=v6.chooseSetup(state,'GC','spb',T+30).opportunity,h=bundleHarness(state),revision=state.revision;h.click('flatten');h.confirm();const next=h.saved().sections.intraday.state;assert.equal(next.revision,revision+1);assert.equal(next.records[0].exitCapture.groupId,next.records[1].exitCapture.groupId);assert.equal(next.records[0].endedAt,next.records[1].endedAt);assert.equal(next.records.find(r=>r.id===pending.id).endedAt,null);assert.match(h.html(),/SPB（观察结构背离、rsi、PD array）/);assert.deepEqual(h.errors,[]);});
+test('M2 two tabs: stale flatten dialog cannot close trade B added in Tab A, even without storage event delivery',()=>{const state=ready();const a=addTrade(state);const storage=memory(JSON.stringify(makeUnified(makeEnvelope(state,T+50)))),tabA=bundleHarness(state,{backing:storage}),tabB=bundleHarness(state,{backing:storage});tabB.click('flatten');tabA.click('setup',null,'spb');let candidate=tabA.saved().sections.intraday.state.records.at(-1);tabA.click('entry',candidate.id);tabA.confirm();const raw=storage.getItem(UNIFIED_KEY);tabB.confirm();assert.equal(storage.getItem(UNIFIED_KEY),raw);assert.equal(v6.activeTradesForSymbol(JSON.parse(raw).sections.intraday.state,'GC').length,2);assert.equal(tabB.document.querySelector('#cards').inert,true);});
 test('M2 production startup: blocked screen exposes raw export and hides fresh-start bypass',()=>{const state=v5Active();state.cards.GC.opportunity.zoneDraft='draft';const raw=rawV5Unchecked(state),h=bundleHarness(undefined,{raw});assert.match(h.html(),/旧版交易数据需要人工检查/);assert.match(h.html(),/导出原始数据/);assert.equal(h.document.querySelector('#start-fresh').hidden,true);assert.equal(h.raw(),raw);assert.deepEqual(h.errors,[]);});
-test('M2 capture adapter: frozen input, overlap conservatively blocked, pending excluded',()=>{const {state}=pair();v6.chooseSetup(state,'GC','mtf_pb',T+30);const before=structuredClone(state),input=captureResearchInput(state);assert.equal(input.blocked.length,2);assert.equal(input.eligible.length,0);assert.deepEqual(state,before);const store=createWorkbenchStore();const model=buildWorkbenchModel({intraday:state,files:{},flatConfirmed:true,store});assert.equal(model.trades.length,2);for(const t of model.trades){assert.notEqual(t.matchingStatus,'MATCHED');assert.equal(t.qualityStatus,'BLOCKED');assert.equal(t.actualEntryTime,null);assert.deepEqual(t.candidates,[]);}assert.deepEqual(state,before);});
+test('M2 capture adapter: frozen input, overlap conservatively blocked, pending excluded',()=>{const {state}=pair();v6.chooseSetup(state,'GC','spb',T+30);const before=structuredClone(state),input=captureResearchInput(state);assert.equal(input.blocked.length,2);assert.equal(input.eligible.length,0);assert.deepEqual(state,before);const store=createWorkbenchStore();const model=buildWorkbenchModel({intraday:state,files:{},flatConfirmed:true,store});assert.equal(model.trades.length,2);for(const t of model.trades){assert.notEqual(t.matchingStatus,'MATCHED');assert.equal(t.qualityStatus,'BLOCKED');assert.equal(t.actualEntryTime,null);assert.deepEqual(t.candidates,[]);}assert.deepEqual(state,before);});
 test('M2 Exit Research: nonoverlapping migrated V6 synthetic preserves frozen matching and canonical state',()=>{const f=workbenchFixture(),v6state=v6.migrateV5ToV6(f.state,{migratedAt:T}).state,before=structuredClone(v6state),store=createWorkbenchStore(),files={fills:parseFillsCsv(f.fills).rows,orders:parseOrdersCsv(f.orders).rows,positions:parsePositionHistoryCsv(f.positions).rows};const old=buildWorkbenchModel({intraday:f.state,files,flatConfirmed:true,store}),next=buildWorkbenchModel({intraday:v6state,files,flatConfirmed:true,store});assert.equal(next.captureVersion,6);assert.deepEqual({...next,captureVersion:5},old);assert.deepEqual(v6state,before);});
 test('M2 Risk/Chime: capture actions change no other unified sections',()=>{const {state,a}=pair(),h=bundleHarness(state),before=h.saved();h.click('bof-to-pb',a.id);h.click('trade-exit',a.id);h.confirm('OTHER_EXIT');const next=h.saved();assert.deepEqual(next.sections.riskManager,before.sections.riskManager);assert.deepEqual(next.sections.chime,before.sections.chime);assert.deepEqual(next.preferences,before.preferences);assert.equal(next.schemaVersion,2);assert.doesNotMatch(JSON.stringify(next),/logicalTrades|marketBundle|fillId|holdingReference/);assert.deepEqual(h.errors,[]);});
 
@@ -112,16 +112,16 @@ test('M2 startup: V3 original rules-upgrade history and audit survive V4 then V5
 });
 test('M2 schema: migration clock required at envelope boundary and V5 writes rejected',()=>{assert.throws(()=>migrateEnvelope(legacyEnvelope(v5Active(),T+100)),e=>e.code==='MIGRATED_AT_REQUIRED');assert.throws(()=>makeEnvelope(v5Active(),T+100));assert.throws(()=>validateUnified(legacyUnified(legacyEnvelope(v5Active(),T+100))));});
 test('M2 confirmation: default single exit UNKNOWN and cancel flatten leaves byte-identical raw',()=>{const {state,a}=pair(),h=bundleHarness(state),raw=h.raw();h.click('flatten');h.cancel();assert.equal(h.raw(),raw);h.click('trade-exit',a.id);h.confirm();assert.equal(h.saved().sections.intraday.state.records[0].exitCapture.kind,'UNKNOWN');assert.deepEqual(h.errors,[]);});
-test('M2 history: forged active delete cannot bypass model gate',()=>{const {state,a}=pair(),h=bundleHarness(state),raw=h.raw();h.document.querySelector('#history-body').listeners.click({detail:1,target:{closest:()=>({dataset:{delete:a.id}})}});assert.equal(h.raw(),raw);assert.equal(h.errors.at(-1)[1].errorCode,'V6_ACTIVE_RECORD_DELETE_FORBIDDEN');});
-test('M2 reload: real production bundle derives two active trades and pending solely from records',()=>{const {state}=pair();v6.chooseSetup(state,'GC','mtf_pb',T+30);const one=bundleHarness(state),two=bundleHarness(undefined,{raw:one.raw()});assert.match(two.html(),/当前持仓 · 2 笔/);assert.match(two.html(),/计划管理：<strong>PB/);assert.equal(Object.hasOwn(two.saved().sections.intraday.state.cards.GC,'opportunity'),false);assert.deepEqual(two.errors,[]);});
-test('M2 production lifecycle: same Setup entry twice retains record IDs and background snapshots',()=>{const h=bundleHarness(ready());h.click('setup',null,'mtf_pb');let a=h.saved().sections.intraday.state.records.at(-1);h.click('entry',a.id);h.confirm();h.click('bias',null,'bullish');h.click('setup',null,'mtf_pb');let b=h.saved().sections.intraday.state.records.at(-1);assert.notEqual(a.id,b.id);h.click('stage',b.id,'signal');h.click('entry',b.id);h.confirm();const state=h.saved().sections.intraday.state;assert.equal(v6.activeTradesForSymbol(state,'GC').length,2);assert.equal(state.records[0].biasAtRegistration,'neutral');assert.equal(state.records[1].biasAtRegistration,'bullish');assert.deepEqual(h.errors,[]);});
+test('M2 history: forged active delete cannot bypass model gate',()=>{const {state,a}=pair(),h=bundleHarness(state),raw=h.raw();h.document.querySelector('#history-body').listeners.click({detail:1,target:{closest:selector=>selector==='[data-delete]'?({dataset:{delete:a.id}}):null}});assert.equal(h.raw(),raw);assert.equal(h.errors.at(-1)[1].errorCode,'V6_ACTIVE_RECORD_DELETE_FORBIDDEN');});
+test('M2 reload: real production bundle derives two active trades and pending solely from records',()=>{const {state}=pair();v6.chooseSetup(state,'GC','spb',T+30);const one=bundleHarness(state),two=bundleHarness(undefined,{raw:one.raw()});assert.match(two.html(),/当前持仓 · 2 笔/);assert.match(two.html(),/SPB（观察结构背离、rsi、PD array）/);assert.equal(Object.hasOwn(two.saved().sections.intraday.state.cards.GC,'opportunity'),false);assert.deepEqual(two.errors,[]);});
+test('M2 production lifecycle: same Setup entry twice retains record IDs and background snapshots',()=>{const h=bundleHarness(ready());h.click('setup',null,'spb');let a=h.saved().sections.intraday.state.records.at(-1);h.click('entry',a.id);h.confirm();h.click('bias',null,'bullish');h.click('setup',null,'spb');let b=h.saved().sections.intraday.state.records.at(-1);assert.notEqual(a.id,b.id);h.click('stage',b.id,'signal');h.click('entry',b.id);h.confirm();const state=h.saved().sections.intraday.state;assert.equal(v6.activeTradesForSymbol(state,'GC').length,2);assert.equal(state.records[0].biasAtRegistration,'neutral');assert.equal(state.records[1].biasAtRegistration,'bullish');assert.deepEqual(h.errors,[]);});
 
 test('M2 full backup: recovery audit, flatten groups, complete manual chains and multi-active reload all survive',()=>{
   const legacy=v5Active();legacy.records=[];const state=v6.migrateV5ToV6(legacy,{migratedAt:T+100}).state;
-  v6.changeStructure(state,'GC','trend_pullback_stronger');
+  v6.changeStructure(state,'GC','breakout_strong_pullback_weak');
   addTrade(state,'mtf_bof',T+10);v6.markAllTradesExited(state,'GC',T+30,true);
   const a=addTrade(state,'mtf_bof',T+40),b=addTrade(state,'mtf_bof',T+50);
-  v6.recordInitialStop(state,a.id,90,T+60);v6.correctInitialStop(state,a.id,89,T+61);v6.recordBofToPb(state,a.id,T+62);v6.revertBofToPb(state,a.id,T+63);v6.recordInitialStop(state,b.id,95,T+64);v6.chooseSetup(state,'GC','mtf_pb',T+70);
+  v6.recordInitialStop(state,a.id,90,T+60);v6.correctInitialStop(state,a.id,89,T+61);v6.recordBofToPb(state,a.id,T+62);v6.revertBofToPb(state,a.id,T+63);v6.recordInitialStop(state,b.id,95,T+64);v6.chooseSetup(state,'GC','spb',T+70);
   const value=makeUnified(makeEnvelope(state,T+80)),restored=normalizeImport(JSON.parse(JSON.stringify(value)),makeUnified()).state;
   assert.deepEqual(restored,value);assert.equal(restored.sections.intraday.state.migrationAudit[0].code,'ACTIVE_RECORD_RECOVERED_FROM_V5_CARD');assert.equal(restored.sections.intraday.state.records[0].exitCapture.groupId,restored.sections.intraday.state.records[1].exitCapture.groupId);
   const store=memory(JSON.stringify(restored)),reloaded=loadUnified(store).state.sections.intraday.state;assert.deepEqual(reloaded,state);assert.equal(v6.activeTradesForSymbol(reloaded,'GC').length,2);assert.ok(v6.activeOpportunityForSymbol(reloaded,'GC'));assert.equal(reloaded.records.find(r=>r.id===a.id).researchCapture.manualEvents.length,4);
@@ -139,15 +139,15 @@ test('V6 simplified Setup: old htf_pb History still renders its original name an
   assert.doesNotMatch(h.html(),/data-action="setup"[^>]*data-value="htf_pb"/);
 });
 
-test('MTF BOF production bundle: new setup persists through entry and history; legacy creation is rejected',()=>{
+test('CPB production bundle: independent identity persists through entry/history; legacy creation rejected',()=>{
   const h=bundleHarness(ready());
   for(const type of ['htf_pb','htf_bof']){const raw=h.raw();h.click('setup',null,type);assert.equal(h.raw(),raw);}
   assert.deepEqual(h.errors.map(e=>e[1].errorCode),['V6_SETUP_INVALID','V6_SETUP_INVALID']);h.errors.length=0;
-  h.click('setup',null,'mtf_bof');let r=h.saved().sections.intraday.state.records.at(-1);
-  assert.equal(r.type,'mtf_bof');assert.match(h.html(),/MTF BOF（做多等收敛 做空等扫高）/);
-  h.click('entry',r.id);h.confirm();assert.equal(h.saved().sections.intraday.state.records.at(-1).type,'mtf_bof');
-  assert.match(h.history(),/MTF BOF（做多等收敛 做空等扫高）/);
-  h.click('setup',null,'mtf_bof');r=h.saved().sections.intraday.state.records.at(-1);h.click('entry',r.id);h.confirm();
+  h.click('setup',null,'cpb');let r=h.saved().sections.intraday.state.records.at(-1);
+  assert.equal(r.type,'cpb');assert.match(h.html(),/CPB（做多等收敛 做空等扫高）/);
+  h.click('entry',r.id);h.confirm();assert.equal(h.saved().sections.intraday.state.records.at(-1).type,'cpb');
+  assert.match(h.history(),/CPB（做多等收敛 做空等扫高）/);
+  h.click('setup',null,'cpb');r=h.saved().sections.intraday.state.records.at(-1);h.click('entry',r.id);h.confirm();
   assert.equal(v6.activeTradesForSymbol(h.saved().sections.intraday.state,'GC').length,2);
   assert.deepEqual(h.errors,[]);
 });
@@ -161,12 +161,12 @@ test('MTF BOF production bundle: old HTF BOF history and active lifecycle keep t
 
 test('HTF V2 production UI: explicit selection saves exact enum and new snapshot without touching Risk/Chime or pending legacy fact',()=>{
   const s=v6.migrateV5ToV6(v5Active('wait'),{migratedAt:T+100}).state,h=bundleHarness(s),before=h.saved();
-  h.click('structure',null,'trend_pullback_weaker');const next=h.saved();
-  assert.equal(next.sections.intraday.state.cards.GC.structure3m,'trend_pullback_weaker');
+  h.click('structure',null,'breakout_weak_pullback_strong');const next=h.saved();
+  assert.equal(next.sections.intraday.state.cards.GC.structure3m,'breakout_weak_pullback_strong');
   assert.deepEqual(next.sections.intraday.state.records,before.sections.intraday.state.records);
   assert.deepEqual(next.sections.riskManager,before.sections.riskManager);assert.deepEqual(next.sections.chime,before.sections.chime);
-  assert.equal(next.schemaVersion,2);h.click('entry',s.records[0].id);h.confirm();h.click('setup',null,'mtf_bof');
-  assert.equal(h.saved().sections.intraday.state.records.at(-1).structure3mAtRegistration,'trend_pullback_weaker');assert.deepEqual(h.errors,[]);
+  assert.equal(next.schemaVersion,2);h.click('entry',s.records[0].id);h.confirm();h.click('setup',null,'cpb');
+  assert.equal(h.saved().sections.intraday.state.records.at(-1).structure3mAtRegistration,'breakout_weak_pullback_strong');assert.deepEqual(h.errors,[]);
 });
 
 
@@ -207,7 +207,7 @@ for (const count of [0,1,2,3]) test(`Home hidden footer/${count}: single lower l
 
 
 test('Module navigation production: hash routes and returns preserve Unified, Research settings and current view state',()=>{
-  const {state,a}=pair();v6.recordInitialStop(state,a.id,90,T+30);v6.chooseSetup(state,'GC','mtf_pb',T+31);
+  const {state,a}=pair();v6.recordInitialStop(state,a.id,90,T+30);v6.chooseSetup(state,'GC','spb',T+31);
   const h=bundleHarness(state,{routeHash:'#/home'}),before=h.raw();
   h.storage.setItem('exit-research:v1',JSON.stringify(createWorkbenchStore()));
   const research=h.storage.getItem('exit-research:v1');

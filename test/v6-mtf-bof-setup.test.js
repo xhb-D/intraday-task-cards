@@ -9,7 +9,7 @@ import { serialize, deserialize, exportMarkdown } from '../src/capture-persisten
 import { createWorkbenchController } from '../src/exit-research/ui/controller.js';
 import { SETUP_LABELS as researchLabels } from '../src/exit-research/ui/labels.js';
 import { workbenchFixture, UI_T, UI_P } from './fixtures/exit-research-ui.js';
-import { ready, T } from './fixtures/intraday-v6.js';
+import { ready, T, historicalPending } from './fixtures/intraday-v6.js';
 
 const NEW_LABEL='MTF BOF（做多等收敛 做空等扫高）';
 function historical(type, stage='position') {
@@ -24,8 +24,8 @@ function historical(type, stage='position') {
   if(stage==='closed')v5.markExited(s,'GC',T+9,true);
   v5.assertState(s);return s;
 }
-test('MTF BOF identity: exactly two creatable types, distinct unchanged legacy labels and BOF classification',()=>{
-  assert.deepEqual(Object.keys(v5.CREATABLE_SETUPS),['mtf_pb','mtf_bof']);
+test('Historical MTF BOF identity: new creation enum is separate; legacy labels/classification unchanged',()=>{
+  assert.deepEqual(Object.keys(v5.CREATABLE_SETUPS),['spb','cpb','bof']);
   assert.equal(v5.SETUP_LABELS.mtf_bof,NEW_LABEL);assert.equal(researchLabels.mtf_bof,NEW_LABEL);
   assert.equal(v5.SETUP_LABELS.htf_bof,'HTF BOF（恐慌或走弱 1次）');
   assert.equal(v5.SETUP_LABELS.htf_pb,'MTF BOF（趋势走弱 1次）');
@@ -33,7 +33,7 @@ test('MTF BOF identity: exactly two creatable types, distinct unchanged legacy l
 });
 for(const type of ['htf_bof','htf_pb'])for(const context of ['empty','pending','holding'])test(`MTF BOF creation gate: ${type} rejected atomically in ${context}`,()=>{
   const s=ready();if(context!=='empty'){
-    const r=v6.chooseSetup(s,'GC','mtf_bof',T+3).opportunity;if(context==='holding')v6.markEntered(s,r.id,T+4,true);
+    const r=historicalPending(s,'GC','mtf_bof',T+3).opportunity;if(context==='holding')v6.markEntered(s,r.id,T+4,true);
   }
   const before=structuredClone(s);assert.throws(()=>v6.chooseSetup(s,'GC',type,T+20),{code:'V6_SETUP_INVALID'});
   assert.deepEqual(s,before);v6.assertV6State(s);
@@ -59,35 +59,35 @@ test('MTF BOF frozen V5 boundary: new type rejected by V5 validator, creation an
   const before=structuredClone(empty);assert.throws(()=>v5.chooseSetup(empty,'GC','mtf_bof',T+3));assert.deepEqual(empty,before);
 });
 test('MTF BOF validation projection: only temporary V5 view maps type, canonical data stays unchanged',()=>{
-  const s=ready(),r=v6.chooseSetup(s,'GC','mtf_bof',T+3).opportunity,before=structuredClone(s),view=singleRecordV5View(r);
+  const s=ready(),r=historicalPending(s,'GC','mtf_bof',T+3).opportunity,before=structuredClone(s),view=singleRecordV5View(r);
   assert.equal(view.records[0].type,'htf_bof');v5.assertState(view);assert.equal(r.type,'mtf_bof');assert.deepEqual(s,before);
 });
 for(const defect of ['unknownType','zone','timeline','manualEvent'])test(`MTF BOF strict V6 validation rejects ${defect} without weakening frozen checks`,()=>{
-  const s=ready(),r=v6.chooseSetup(s,'GC','mtf_bof',T+3).opportunity;v6.markEntered(s,r.id,T+4,true);
+  const s=ready(),r=historicalPending(s,'GC','mtf_bof',T+3).opportunity;v6.markEntered(s,r.id,T+4,true);
   if(defect==='unknownType')r.type='unknown_bof';
   if(defect==='zone')r.zone='legacy-zone';
   if(defect==='timeline')r.registeredAt=T+2;
   if(defect==='manualEvent')r.researchCapture.manualEvents.push({type:'BOF_TO_PB_RECORDED'});
   assert.throws(()=>v6.assertV6State(s));
 });
-test('MTF BOF lifecycle: same Setup creates independent trades; per-record stop/conversion/revert and exit remain isolated',()=>{
-  const s=ready(),a=v6.chooseSetup(s,'GC','mtf_bof',T+3).opportunity;v6.setOpportunityStage(s,a.id,'signal',T+4);
+test('Historical MTF BOF fixtures: independent trades retain lifecycle; per-record stop/conversion/revert and exit remain isolated',()=>{
+  const s=ready(),a=historicalPending(s,'GC','mtf_bof',T+3).opportunity;v6.setOpportunityStage(s,a.id,'signal',T+4);
   assert.ok(captureUi.renderCard(s,'GC').includes(NEW_LABEL));v6.markEntered(s,a.id,T+5,true);
-  const b=v6.chooseSetup(s,'GC','mtf_bof',T+6).opportunity;v6.markEntered(s,b.id,T+7,true);
+  const b=historicalPending(s,'GC','mtf_bof',T+6).opportunity;v6.markEntered(s,b.id,T+7,true);
   v6.recordInitialStop(s,a.id,90,T+8);v6.recordInitialStop(s,b.id,92,T+9);v6.correctInitialStop(s,a.id,89,T+10);
   const bBefore=structuredClone(b);v6.recordBofToPb(s,a.id,T+11);assert.equal(v6.derivedManagementState(a),'PB');assert.equal(v6.derivedManagementState(b),'BOF');
   v6.revertBofToPb(s,a.id,T+12);assert.equal(v6.derivedManagementState(a),'BOF');assert.deepEqual(b,bBefore);
   assert.equal(v6.effectiveInitialStop(a),89);assert.equal(v6.effectiveInitialStop(b),92);
   v6.markTradeExited(s,a.id,'STOP_EXIT',T+13,true);assert.equal(b.endedAt,null);
-  const pending=v6.chooseSetup(s,'GC','mtf_bof',T+14).opportunity;v6.markAllTradesExited(s,'GC',T+15,true);
+  const pending=historicalPending(s,'GC','mtf_bof',T+14).opportunity;v6.markAllTradesExited(s,'GC',T+15,true);
   assert.equal(pending.endedAt,null);assert.equal(b.exitCapture.kind,'MANUAL_FLATTEN');
   assert.ok(s.records.every(r=>r.type==='mtf_bof'));assert.deepEqual(deserialize(serialize(s,T+20)).state,s);
   assert.ok(exportMarkdown(s,'all',T+20).includes(NEW_LABEL));v6.assertV6State(s);
 });
-test('MTF BOF and legacy BOF coexist: new opportunity never renames old active trade or its events',()=>{
+test('Historical MTF BOF and HTF BOF coexist without renaming either trade',()=>{
   const s=migrateV5ToV6(historical('htf_bof'),{migratedAt:T+100}).state,old=structuredClone(s.records[0]);
-  v6.changeStructure(s,'GC','trend_pullback_stronger');
-  const r=v6.chooseSetup(s,'GC','mtf_bof',T+101).opportunity;v6.markEntered(s,r.id,T+102,true);
+  v6.changeStructure(s,'GC','breakout_strong_pullback_weak');
+  const r=historicalPending(s,'GC','mtf_bof',T+101).opportunity;v6.markEntered(s,r.id,T+102,true);
   assert.deepEqual(s.records[0],old);assert.equal(s.records[1].type,'mtf_bof');assert.equal(v6.derivedManagementState(r),'BOF');
 });
 test('MTF BOF Exit Research: original identity preserved, metrics and full BOF replay output unchanged',()=>{
@@ -103,19 +103,17 @@ test('MTF BOF Exit Research: original identity preserved, metrics and full BOF r
   }
   assert.deepEqual(outputs[1],outputs[0]);
 });
-test('MTF BOF UI semantics: selected, inactive and disabled use existing neutral Setup classes',()=>{
-  const s=ready();v6.chooseSetup(s,'GC','mtf_bof',T+3);
-  const html=captureUi.renderCard(s,'GC');
-  assert.match(html,/class="option setup selected"[^>]*data-value="mtf_bof"[^>]*data-tone="neutral"[^>]*aria-pressed="true"/);
-  assert.match(html,/class="option setup"[^>]*data-value="mtf_pb"[^>]*data-tone="neutral"[^>]*aria-pressed="false"/);
+test('Historical MTF BOF UI is readable while only independent new Setup controls exist',()=>{
+  const s=ready();historicalPending(s,'GC','mtf_bof',T+3);const html=captureUi.renderCard(s,'GC');
+  assert.ok(html.includes('SPB（观察结构背离、rsi、PD array）'));assert.doesNotMatch(html,/data-action="setup"[^>]*data-value="mtf_bof"/);
   const idle=captureUi.renderCard(v6.createWorkspace(T),'GC');
-  for(const type of ['mtf_pb','mtf_bof'])assert.match(idle,new RegExp('data-value="'+type+'"[^>]*data-tone="neutral"[^>]*disabled aria-disabled="true"'));
+  for(const type of ['spb','cpb','bof'])assert.match(idle,new RegExp('data-value="'+type+'"[^>]*data-tone="neutral"[^>]*disabled aria-disabled="true"'));
 });
 test('MTF BOF UI protects accepted header order and direction priority on all three cards',()=>{
   const s=ready();
   for(const symbol of ['GC','CL','ES']){
     const html=captureUi.renderCard(s,symbol),structure=html.indexOf('HTF波段动能&amp;新的未测试优质缺口'),bias=html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）'),direction=html.indexOf('交易方向 <span');
     assert.ok(structure>=0&&structure<bias&&bias<direction);assert.ok(html.includes('小偏见方向&gt;大偏见方向'));
-    assert.ok(html.includes(NEW_LABEL));assert.doesNotMatch(html,/data-action="setup"[^>]*data-value="htf_bof"/);
+    assert.ok(html.includes('SPB（观察结构背离、rsi、PD array）'));assert.doesNotMatch(html,/data-action="setup"[^>]*data-value="htf_bof"/);
   }
 });

@@ -7,7 +7,7 @@ const namedImports = () => /^import\s+\{([\s\S]*?)\}\s+from\s+['"]([^'"]+)['"];\
 export async function bundleResearchUi(entry = 'src/exit-research/ui/controller.js') {
   const ordered = [], seen = new Set(), visiting = new Set();
   async function visit(file) {
-    if(file==='src/model.js'||seen.has(file))return;
+    if(file==='src/model.js'||file==='src/intraday-v6/index.js'||seen.has(file))return;
     if(!file.startsWith('src/exit-research/'))throw new Error('RESEARCH_BUNDLE_DEPENDENCY_OUT_OF_SCOPE: '+file);
     if(visiting.has(file))throw new Error('RESEARCH_BUNDLE_CYCLE: '+file);
     visiting.add(file);const source=await readFile(file,'utf8');
@@ -25,5 +25,5 @@ export async function bundleResearchUi(entry = 'src/exit-research/ui/controller.
     if(/^import\s/m.test(body))throw new Error('RESEARCH_BUNDLE_IMPORT_UNSUPPORTED: '+file);
     return `erModuleRegistry[${JSON.stringify(file)}] = (() => {\n${body}\nreturn {${exportedNames(source).join(', ')}};\n})();`;
   });
-  return `const __exitResearchModules = (() => {\nconst erModuleRegistry = {'src/model.js': {${exportedNames(model).join(', ')}}};\n${modules.join('\n')}\nreturn erModuleRegistry;\n})();\nconst { initExitResearchWorkbench } = __exitResearchModules[${JSON.stringify(entry)}];\n`;
+  return `const __exitResearchModules = (() => {\nconst erModuleRegistry = {'src/intraday-v6/index.js': {intradayV6}, 'src/model.js': {${exportedNames(model).join(', ')}}};\n${modules.join('\n')}\nreturn erModuleRegistry;\n})();\nconst { initExitResearchWorkbench } = __exitResearchModules[${JSON.stringify(entry)}];\n`;
 }

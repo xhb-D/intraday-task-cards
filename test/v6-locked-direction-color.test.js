@@ -9,9 +9,9 @@ for (const [direction, tone, label] of [['long', 'bullish', '做多'], ['short',
   for (const stage of ['wait', 'signal', 'position']) {
     test(`V6 locked direction ${direction}/${stage}: semantic tone retained without editable buttons or state mutation`, () => {
       const state = v6.createWorkspace(T);
-      v6.changeStructure(state, 'GC', 'trend_pullback_stronger');
+      v6.changeStructure(state, 'GC', 'breakout_strong_pullback_weak');
       v6.changeDirection(state, 'GC', direction, T + 1);
-      const { opportunity } = v6.chooseSetup(state, 'GC', 'mtf_pb', T + 2);
+      const { opportunity } = v6.chooseSetup(state, 'GC', 'spb', T + 2);
       if (stage !== 'wait') v6.setOpportunityStage(state, opportunity.id, 'signal', T + 3);
       if (stage === 'position') v6.markEntered(state, opportunity.id, T + 4, true);
       const before = structuredClone(state);

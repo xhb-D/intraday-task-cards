@@ -13,7 +13,7 @@ const small='<span class="field-label context-heading"><strong class="context-ti
 for(const symbol of ['GC','CL','ES'])for(const lifecycle of ['none','wait','signal','position'])test(`Home layout ${symbol}/${lifecycle}: exact two-level big/small bias headings, direction order, no canonical mutation`,()=>{
   const state=ready(symbol),beforeSetup=state.cards[symbol].structure3m;
   if(lifecycle!=='none'){
-    const r=v6.chooseSetup(state,symbol,'mtf_bof',T+2).opportunity;
+    const r=v6.chooseSetup(state,symbol,'cpb',T+2).opportunity;
     if(lifecycle==='signal')v6.setOpportunityStage(state,r.id,'signal',T+3);
     if(lifecycle==='position')v6.markEntered(state,r.id,T+4,true);
   }
@@ -21,7 +21,7 @@ for(const symbol of ['GC','CL','ES'])for(const lifecycle of ['none','wait','sign
   assert.ok(output.includes(big));assert.ok(output.includes(small));
   assert.ok(output.indexOf(big)<output.indexOf(small));assert.ok(output.indexOf(small)<output.indexOf('交易方向 <span'));
   assert.ok(output.includes('小偏见方向&gt;大偏见方向'));assert.ok(output.includes(`aria-label="${symbol} 大偏见"`));assert.ok(output.includes(`aria-label="${symbol} 小偏见"`));
-  assert.equal((output.match(/data-action="structure"/g)||[]).length,3);assert.equal((output.match(/data-action="bias"/g)||[]).length,3);assert.equal((output.match(/data-action="setup"/g)||[]).length,2);
+  assert.equal((output.match(/data-action="structure"/g)||[]).length,3);assert.equal((output.match(/data-action="bias"/g)||[]).length,3);assert.equal((output.match(/data-action="setup"/g)||[]).length,3);
   assert.equal(state.cards[symbol].structure3m,beforeSetup);assert.deepEqual(state,before);
 });
 test('Home layout DOM: unique Risk mount follows history inside home; Chime alone retains the top mount',()=>{

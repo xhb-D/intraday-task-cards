@@ -7,16 +7,13 @@ import { SETUP_LABELS, CREATABLE_SETUPS } from '../src/model.js';
 import { serialize, exportMarkdown } from '../src/capture-persistence.js';
 import { T, ready } from './fixtures/intraday-v6.js';
 
-const labels = {
-  mtf_pb: 'MTF PB（仓位合适看5M，不合适1M+rsi）',
-  mtf_bof: 'MTF BOF（做多等收敛 做空等扫高）'
-};
+const labels = CREATABLE_SETUPS;
 const buttons = html => [...html.matchAll(/<button\b([^>]*)>([^]*?)<\/button>/g)]
   .filter(([,attrs]) => attrs.includes('data-action="setup"'));
 
-for (const symbol of ['GC','CL','ES']) test(`Setup reminders ${symbol}: exact labels and unchanged keys on two buttons`, () => {
+for (const symbol of ['GC','CL','ES']) test(`Setup reminders ${symbol}: exact labels and independent keys on three buttons`, () => {
   const state = ready(symbol), html = captureUi.renderCard(state,symbol), list = buttons(html);
-  assert.equal(list.length,2);
+  assert.equal(list.length,3);
   assert.deepEqual(list.map(b => b[2]),Object.values(labels));
   assert.deepEqual(list.map(b => b[1].match(/data-value="([^"]+)"/)[1]),Object.keys(labels));
   assert.ok(list.every(b => !b[1].includes('disabled')));
@@ -43,10 +40,10 @@ for (const type of Object.keys(labels)) for (const stage of ['wait','signal','po
   });
 }
 
-test('Setup reminders are presentation only: canonical and legacy names stay unchanged', () => {
-  assert.deepEqual(Object.keys(CREATABLE_SETUPS),['mtf_pb','mtf_bof']);
+test('Setup V2 identities preserve separate historical names', () => {
+  assert.deepEqual(Object.keys(CREATABLE_SETUPS),['spb','cpb','bof']);
   assert.equal(SETUP_LABELS.mtf_pb,'MTF PB');
-  assert.equal(SETUP_LABELS.mtf_bof,labels.mtf_bof);
+  assert.equal(SETUP_LABELS.mtf_bof,'MTF BOF（做多等收敛 做空等扫高）');
   assert.equal(SETUP_LABELS.htf_bof,'HTF BOF（恐慌或走弱 1次）');
   assert.equal(SETUP_LABELS.htf_pb,'MTF BOF（趋势走弱 1次）');
   const state = v6.createWorkspace(T), html = captureUi.renderCard(state,'GC');
@@ -57,7 +54,7 @@ test('Setup wrapping is card-scoped, equal-height and visible in both appearance
   const css = readFileSync(new URL('../refinement.css',import.meta.url),'utf8');
   const grid = css.match(/\.capture-card \.setup-segment\{([^}]+)\}/)[1];
   const option = css.match(/\.capture-card \.setup-segment \.option\{([^}]+)\}/)[1];
-  assert.match(grid,/grid-template-columns:minmax\(0,9fr\) minmax\(0,11fr\)/);
+  assert.match(grid,/grid-template-columns:repeat\(3,minmax\(0,1fr\)\)/);
   assert.match(grid,/align-items:stretch/);
   assert.match(option,/height:auto/);
   assert.match(option,/white-space:normal/);

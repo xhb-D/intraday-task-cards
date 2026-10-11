@@ -1,5 +1,5 @@
 import { intradayV6 } from './intraday-v6/index.js';
-import { assertLegacyState, assertV4State, copy, DIRECTIONS, HTF_STRUCTURES_V2, LEGACY_SCHEMA_VERSION, V4_SCHEMA_VERSION, SCHEMA_VERSION, migrateWorkspace, setupLabel, recordProgress, effectiveInitialStop, effectiveBofToPbEvent, formatStopPrice } from './model.js';
+import { assertLegacyState, assertV4State, copy, DIRECTIONS, HTF_STRUCTURES_V2, HTF_STRUCTURES_V3, LEGACY_SCHEMA_VERSION, V4_SCHEMA_VERSION, SCHEMA_VERSION, migrateWorkspace, setupLabel, recordProgress, effectiveInitialStop, effectiveBofToPbEvent, formatStopPrice } from './model.js';
 
 export const APP_ID = 'intraday-task-cards';
 export const STORE_KEY = 'intraday-task-cards:v1:state';
@@ -55,10 +55,15 @@ export function exportMarkdown(state, scope = 'today', now = Date.now()) {
   const lines = [`# 日内机会记录 · ${scope === 'all' ? '全部保留记录' : day}`, '', `导出时间：${fullTime(now)}`, '', '> 仅手动任务记录；不读取行情、订单或成交。新机会选择即登记，HTML 入场与退出仅为人工确认时间；单笔退出或全部平仓分别结束目标交易。', '', '| 登记时间 | 品种 | 交易方向 | 机会 | 已确认关键位置 | 登记时偏见 / 市场结构 | 进展／结果 | Research Capture |', '| --- | --- | --- | --- | --- | --- | --- | --- |'];
   for (const record of rows) {
     const direction = DIRECTIONS[record.direction] || (record.direction === 'long' ? '做多' : '做空');
-    const structure = ({ ...HTF_STRUCTURES_V2, unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' })[record.structure3mAtRegistration] || record.structure3mAtRegistration;
+    const structure = ({ ...HTF_STRUCTURES_V2, ...HTF_STRUCTURES_V3, unjudged: '未判断', bullish: '多头', range: '震荡', bearish: '空头' })[record.structure3mAtRegistration] || record.structure3mAtRegistration;
     lines.push(`| ${fullTime(record.registeredAt)} | ${record.symbol} | ${direction} | ${setupLabel(record.type)} | ${cell(record.zone ?? '—')} | 偏见：${({ bullish: '偏多', neutral: '无偏见', bearish: '偏空' })[record.biasAtRegistration]}<br>市场结构：${structure} | ${captureRecordProgress(record)} | ${researchSummary(record)} |`);
   }
   if (!rows.length) lines.push('', '本范围内尚无已登记且仍保留的记录。');
+  for (const record of rows) {
+    const review = intradayV6.manualDecisionReview(record);
+    if (!review.manualEvents.length) continue;
+    lines.push('', `## ${record.symbol} · ${setupLabel(record.type)} · ${cell(record.id)}`, '', 'Manual Decision Truth；补录标记依据 HTML 确认时间，不代表已核对的券商成交时序。', '', '```json', JSON.stringify(review, null, 2), '```');
+  }
   return lines.concat(['', '---', '阶段起止时间和当前任务快照保存在完整 JSON 备份中。']).join('\n');
 }
 export const dateKey = time => { const d = new Date(time); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; };

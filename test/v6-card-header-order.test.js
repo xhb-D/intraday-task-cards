@@ -10,9 +10,9 @@ for (const symbol of ['GC', 'CL', 'ES']) {
     test(`V6 card header ${symbol}/${lifecycle}: HTF structure then bias then direction, exact labels and no state changes`, () => {
       const state = v6.createWorkspace(T);
       if (lifecycle !== 'none') {
-        v6.changeStructure(state, symbol, 'trend_pullback_stronger');
+        v6.changeStructure(state, symbol, 'breakout_strong_pullback_weak');
         v6.changeDirection(state, symbol, 'long', T + 1);
-        const { opportunity } = v6.chooseSetup(state, symbol, 'mtf_pb', T + 2);
+        const { opportunity } = v6.chooseSetup(state, symbol, 'spb', T + 2);
         if (lifecycle === 'signal') v6.setOpportunityStage(state, opportunity.id, 'signal', T + 3);
         if (lifecycle === 'position') v6.markEntered(state, opportunity.id, T + 4, true);
       }
@@ -43,18 +43,18 @@ for (const direction of ['long', 'short']) {
   for (const lifecycle of ['wait', 'position']) {
     test(`V6 header context ${direction}/${lifecycle}: direction tone, Setup and independent records preserved`, () => {
       const state = v6.createWorkspace(T);
-      v6.changeStructure(state, 'GC', 'trend_pullback_stronger');
+      v6.changeStructure(state, 'GC', 'breakout_strong_pullback_weak');
       v6.changeDirection(state, 'GC', direction, T + 1);
-      const { opportunity } = v6.chooseSetup(state, 'GC', 'mtf_bof', T + 2);
+      const { opportunity } = v6.chooseSetup(state, 'GC', 'cpb', T + 2);
       if (lifecycle === 'position') {
         v6.markEntered(state, opportunity.id, T + 3, true);
-        const second = v6.chooseSetup(state, 'GC', 'mtf_bof', T + 4).opportunity;
+        const second = v6.chooseSetup(state, 'GC', 'cpb', T + 4).opportunity;
         v6.markEntered(state, second.id, T + 5, true);
       }
       const before = structuredClone(state), html = captureUi.renderCard(state, 'GC');
       assert.ok(html.includes(`class="readonly" data-tone="${direction === 'long' ? 'bullish' : 'bearish'}"`));
       assert.ok(html.includes(lifecycle === 'wait' ? '当前机会锁定' : '跟随当前持仓'));
-      assert.equal((html.match(/data-action="setup"/g) || []).length, 2);
+      assert.equal((html.match(/data-action="setup"/g) || []).length, 3);
       assert.equal((html.match(/class="research-capture"/g) || []).length, lifecycle === 'position' ? 2 : 0);
       assert.deepEqual(state, before);
     });

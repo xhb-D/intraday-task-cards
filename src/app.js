@@ -1,5 +1,6 @@
+import { initExpectationPanel } from './expectation-panel.js';
 import { initExitResearchWorkbench } from './exit-research/ui/controller.js';
-import { ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, DIRECTIONS, SETUP_LABELS, STAGES, copy, effectiveInitialStop } from './model.js';
+import { ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, HTF_STRUCTURES_V3, DIRECTIONS, SETUP_LABELS, STAGES, copy, effectiveInitialStop } from './model.js';
 import { intradayV6 } from './intraday-v6/index.js';
 import { captureUi } from './capture-ui.js';
 import { makeEnvelope, exportMarkdown, dateKey, timeText, fullTime, captureRecordProgress, captureMigrationMessage } from './capture-persistence.js';
@@ -48,6 +49,7 @@ let storage = null;
 let commodityPreferences = null;
 let unified = null;
 let researchWorkbench = null;
+let expectationPanel = null;
 let dashboardView = null;
 let fullRiskView = null;
 let appearanceView = null;
@@ -97,6 +99,7 @@ function storageStatus() {
   const confirm = document.querySelector('#dialog-confirm');
   const policy = externalConflictPolicy(writeLocked());
   const safeReadOnly = policy.cardsInert || corruption;
+  expectationPanel?.sync();
   document.querySelector('#restore-note').textContent = restoredNotice;
   document.querySelector('#restore-note').hidden = !restoredNotice;
   document.querySelector('#export-raw').hidden = !corruption && !legacyChimeRecovery;
@@ -206,7 +209,7 @@ function renderHistory() {
   document.querySelector('#history-count').textContent = `${records.length} 条 · ${historyScope === 'all' ? '全部保留' : '今日及未结束'}`;
   document.querySelector('#history-empty').hidden = Boolean(records.length); document.querySelector('#history-table').hidden = !records.length;
   document.querySelectorAll('[data-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === historyScope)));
-  historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUP_LABELS[record.type]}</td><td class="position">${escapeHtml(record.zone ?? '—')}</td><td>${captureRecordProgress(record)}</td><td>${record.endedAt === null ? '—' : `<button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button>`}</td></tr>`).join('');
+  historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUP_LABELS[record.type]}</td><td class="position">${escapeHtml(record.zone ?? '—')}</td><td>${captureRecordProgress(record)}</td><td><button type="button" data-expectation-history="${escapeHtml(record.id)}">预期与历史</button> ${record.endedAt === null ? '—' : `<button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button>`}</td></tr>`).join('');
 }
 function renderChime() {
   const chime = unified?.sections?.chime; if (!chime || !chimeView) return;
@@ -223,7 +226,7 @@ function persistChime(next, changedSlotId = null) {
     chimeCoordinator?.settingsChanged(); chimeScheduler?.update(changedSlotId); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); storageStatus(); renderChime(); return true;
   } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); renderChime(); return false; }
 }
-function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = corruption ? '<section class="migration-blocked"><h2>旧版交易数据需要人工检查</h2><p>系统没有自动修改原数据。</p><button type="button" id="blocked-export-raw">导出原始数据</button></section>' : visibleSymbols.map(renderCard).join(''); if (corruption) { cardsEl.inert = false; document.querySelector('#blocked-export-raw')?.addEventListener('click', () => download(lastRaw || '', `原始数据_${dateKey(now())}.json`, 'application/json')); } renderHistory(); storageStatus(); renderChime(); if (globalThis.location?.hash === '#/exit-research') researchWorkbench?.refresh(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
+function renderAll() { return preserveScrollPosition(() => { try { const visibleSymbols = visibleCommoditySymbols(ORDER, commodityPreferences); renderCommodityDashboard(); cardsEl.className = `cards cards--count-${visibleSymbols.length}`; cardsEl.innerHTML = corruption ? '<section class="migration-blocked"><h2>旧版交易数据需要人工检查</h2><p>系统没有自动修改原数据。</p><button type="button" id="blocked-export-raw">导出原始数据</button></section>' : visibleSymbols.map(renderCard).join(''); if (corruption) { cardsEl.inert = false; document.querySelector('#blocked-export-raw')?.addEventListener('click', () => download(lastRaw || '', `原始数据_${dateKey(now())}.json`, 'application/json')); } renderHistory(); storageStatus(); renderChime(); expectationPanel?.sync(); if (globalThis.location?.hash === '#/exit-research') researchWorkbench?.refresh(); } catch (error) { if (!error.code) error.code = 'RENDER_STATE_ERROR'; throw error; } }); }
 function openConfirmation(action, title, message, confirm, warning = '') {
   if (pending) return;
   pending = { ...action, revision: state.revision, storageRaw: lastRaw }; document.querySelector('#dialog-title').textContent = title; document.querySelector('#dialog-message').textContent = message; document.querySelector('#dialog-confirm').textContent = confirm; document.querySelector('#dialog-confirm').disabled = writeLocked() && action.kind !== 'ignore-legacy-chime';
@@ -261,6 +264,9 @@ function finishConfirmation(confirmed) {
 }
 function handleAction(button) {
   const { action, symbol, value, opportunityId } = button.dataset; if (!ORDER.includes(symbol)) return;
+  if (action.startsWith('expectation-')) {
+    expectationPanel?.open(opportunityId, action === 'expectation-update' ? 'update' : action === 'expectation-history' ? 'history' : 'entry', button); return;
+  }
   if (action === 'hide-card') {
     commodityPreferences = setCommodityManagerExpanded(setCommodityHidden(commodityPreferences, symbol, true, ORDER), true, ORDER); saveCommodityPreferences(storage, commodityPreferences, ORDER); renderAll();
     commodityDashboardEl.querySelector('[data-action="toggle-commodity-manager"]')?.focus({ preventScroll: true }); announce(`${symbol} 已隐藏；状态与记录保持不变`); return;
@@ -275,7 +281,7 @@ function handleAction(button) {
   if (action === 'bof-to-pb') { if (intradayV6.recordBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：PB`,symbol,record.id); return; }
   if (action === 'bof-revert') { if (intradayV6.revertBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：BOF`,symbol,record.id); return; }
   if (action === 'bias') { if (intradayV6.changeBias(state,symbol,value).changed) mutate(`${symbol} 当前偏见：${BIASES[value]}`,symbol); return; }
-  if (action === 'structure') { if (intradayV6.changeStructure(state,symbol,value).changed) mutate(`${symbol} HTF结构：${HTF_STRUCTURES_V2[value] || STRUCTURES_3M[value]}`,symbol); return; }
+  if (action === 'structure') { if (intradayV6.changeStructure(state,symbol,value).changed) mutate(`${symbol} HTF结构：${HTF_STRUCTURES_V3[value] || HTF_STRUCTURES_V2[value] || STRUCTURES_3M[value]}`,symbol); return; }
   if (action === 'direction') { if (intradayV6.changeDirection(state,symbol,value,now()).changed) mutate(`${symbol} 当前${DIRECTIONS[value]}`,symbol); return; }
   if (action === 'setup') { if (intradayV6.chooseSetup(state,symbol,value,now()).changed) mutate(`${symbol} 新机会已登记`,symbol); return; }
   if (action === 'stage') { if (intradayV6.setOpportunityStage(state,record.id,value,now()).changed) mutate(`${symbol} 新机会已切换到${STAGES[value]}`,symbol,record.id); return; }
@@ -341,7 +347,7 @@ cardsEl.addEventListener('submit', event => { const form = event.target.closest(
 cardsEl.addEventListener('input', event => { const input = event.target.closest('[data-stop-input]'); if (!input) return; const opportunity = state.records.find(record => record.id === input.dataset.stopInput); if (opportunity && !writeLocked() && !corruption) stopEditors.set(opportunity.id, { draft: input.value, error: '' }); });
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
 [commodityDashboardEl, hiddenCommoditiesEl].forEach(host => host.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); }));
-historyBody.addEventListener('click', event => { const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (intradayV6.deleteRecord(state, button.dataset.delete).changed) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
+historyBody.addEventListener('click', event => { const history = event.target.closest('[data-expectation-history]'); if (history) { expectationPanel?.open(history.dataset.expectationHistory, 'history', history); return; } const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (intradayV6.deleteRecord(state, button.dataset.delete).changed) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
 document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => safe(() => finishConfirmation(true), { phase: 'confirmation' })); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });
 document.querySelector('#data-tools').addEventListener('click', () => { document.querySelector('#data-feedback').textContent = ''; dataDialog.showModal(); }); document.querySelector('#data-close').addEventListener('click', () => dataDialog.close());
@@ -410,7 +416,7 @@ appearanceView = initAppearance(document.querySelector('#appearance-select'), { 
 });
 try { researchWorkbench = initExitResearchWorkbench(document.querySelector('#exit-research-host'), { getIntraday: () => state, storage }); }
 catch (error) { const host = document.querySelector('#exit-research-host'); if (host) host.textContent = 'Exit Research 暂不可用；首页状态卡仍可正常使用。'; reportDiagnostic(error, { phase: 'exit_research_init' }); }
-function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else { const result = applyRoute(document, normalized); if (result.route === 'exit-research') researchWorkbench?.refresh(); else researchWorkbench?.hide(); } }
+function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else { const result = applyRoute(document, normalized); if (result.route === 'exit-research') researchWorkbench?.refresh(); else researchWorkbench?.hide(); expectationPanel?.routeChanged(result.route === 'home'); } }
 window.addEventListener('hashchange', route); route();
 try { dashboardView = initRiskDashboard(document.querySelector('#risk-dashboard-host'), {
   getState: () => unified?.sections.riskManager || { schemaVersion: 2, selectedAccountId: null, accounts: [] },
@@ -427,6 +433,22 @@ try { fullRiskView = initRiskManagerView(document.querySelector('#risk-manager-h
   navigateHome: () => { globalThis.location.hash = '#/home'; },
   commit: nextRisk => { const candidate = copy(unified); candidate.sections.riskManager = copy(nextRisk); const saved = saveUnified(candidate, {}, 'risk_view_commit'); unified = saved; lastRaw = JSON.stringify(saved); state.lastSavedAt = saved.savedAt; dashboardView?.render(); storageStatus(); }
 }); } catch (error) { reportDiagnostic(error, { phase: 'risk_view_init' }); }
+expectationPanel = initExpectationPanel({
+  host: document.querySelector('#expectation-panel-host'), getRecord: id => state.records.find(r => r.id === id), storage,
+  isLocked: () => corruption || writeLocked(),
+  save: ({ id, mode, draft, submissionId, expectedEntryEventId }) => {
+    if (pending || corruption || writeLocked() || !captureDataCurrent()) return { ok:false, message:'存档冲突或当前操作未完成；草稿仍保留。' };
+    const record = state.records.find(r => r.id === id);
+    if (!record || (intradayV6.entryExpectation(record)?.current.id || null) !== expectedEntryEventId) return { ok:false, message:'该笔预期已变化，请核对后重新打开。草稿仍保留。' };
+    const result = mode === 'update' ? intradayV6.updateHoldingExpectation(state,id,draft.status,draft.reason,submissionId,now()) :
+      mode === 'correct' ? intradayV6.correctEntryExpectation(state,id,draft,submissionId,now()) : intradayV6.recordEntryExpectation(state,id,draft,submissionId,now());
+    if (!result.changed && result.reason === 'duplicate') return { ok:true };
+    const saved = persist(); renderAll();
+    if (!saved) return { ok:false, message:'保存失败，草稿仍保留；本次没有显示为已保存。请检查顶部存档提示。' };
+    announce('该笔交易的预期记录已保存'); return { ok:true };
+  }
+});
+expectationPanel.routeChanged((globalThis.location?.hash || '#/home') === '#/home');
 renderAll(); storageStatus(); renderChime();
 if (nativeChimeDevMode) {
   void chimeExecution.refresh();

@@ -1,3 +1,4 @@
+import { decisionReviewCsv } from './capture-adapter.js';
 import { parseTradovateFillsCsv, parseTradovateOrdersCsv, parseTradovatePositionHistoryCsv } from '../tradovate-csv.js';
 import { validateMarketDataBundle } from '../market-data.js';
 import { applyManualMatch, applyManualReject } from '../manual-matches.js';
@@ -83,6 +84,7 @@ export function initExitResearchWorkbench(host, {getIntraday,storage}) {
       message='';const action=el.dataset.erAction;
       if(action==='select')controller.select(el.dataset.opportunity);
       else if(action==='confirm'||action==='reject'){ const t=controller.snapshot().trades.find(t=>t.opportunityId===el.dataset.opportunity); const candidate=t?.candidates[Number(el.dataset.candidate)]; controller.decide(action,el.dataset.opportunity,candidate?.logicalTradeId||t?.logicalTradeId); }
+      else if(action==='decision-export'){const url=URL.createObjectURL(new Blob(['\ufeff'+decisionReviewCsv(getIntraday())],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='Manual_Decision_Truth.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),30000);}
       else if(action==='store-export')downloadResearchJson(controller.store,'Exit_Research_Store_V1.json');
       else if(action==='request-export'){const request=buildMarketRequestExport(controller.snapshot());if(!request.trades.length)throw new Error('MATCHED_RESEARCH_TRADE_REQUIRED');downloadResearchJson(request,'Exit_Research_Market_Request.json');}
       else if(action==='store-confirm'){if(!pendingStore)throw new Error('RESEARCH_IMPORT_NOT_PREVIEWED');controller.importStore(serializeWorkbenchStore(pendingStore));pendingStore=null;message='Research Store 已恢复；Task Card 未修改。';paint();}

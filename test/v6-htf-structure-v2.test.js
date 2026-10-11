@@ -8,7 +8,7 @@ import { captureUi } from '../src/capture-ui.js';
 import { serialize, deserialize, exportMarkdown } from '../src/capture-persistence.js';
 import { createWorkbenchController } from '../src/exit-research/ui/controller.js';
 import { workbenchFixture, UI_T, UI_P } from './fixtures/exit-research-ui.js';
-import { T, v5Active } from './fixtures/intraday-v6.js';
+import { T, v5Active, historicalPending } from './fixtures/intraday-v6.js';
 
 const structures = v5.HTF_STRUCTURES_V2;
 const keys = ['trend_pullback_stronger','trend_pullback_weaker','htf_range_v2'];
@@ -24,14 +24,14 @@ test('HTF V2 UI: three exact choices in order; precise headings and no legacy cr
   for(const symbol of ['GC','CL','ES']){
     const html=captureUi.renderCard(v6.createWorkspace(T),symbol),section=html.match(/<section class="classifier structure-field">([^]*?)<\/section>/)[1];
     const buttons=[...section.matchAll(/<button[^>]*data-action="structure"[^>]*data-value="([^"]+)"[^>]*>([^]*?)<\/button>/g)];
-    assert.deepEqual(buttons.map(m=>m[1]),keys);assert.deepEqual(buttons.map(m=>m[2]),labels);
+    assert.deepEqual(buttons.map(m=>m[1]),Object.keys(v5.HTF_STRUCTURES_V3));assert.deepEqual(buttons.map(m=>m[2]),Object.values(v5.HTF_STRUCTURES_V3).map(s=>s.replace(/&/g,'&amp;')));
     assert.ok(html.indexOf('HTF波段动能&amp;新的未测试优质缺口')<html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）'));
     assert.ok(html.indexOf('价格拒绝（尾部/单打印）&amp;价格接受（弱端点/震荡）')<html.indexOf('交易方向 <span'));
     assert.ok(html.includes('小偏见方向&gt;大偏见方向'));
   }
 });
 for(const key of keys)for(const type of ['mtf_pb','mtf_bof'])for(const direction of ['long','short'])test(`HTF V2 ${key}/${type}/${direction}: explicit selection, immutable snapshot, lifecycle, JSON and Markdown`,()=>{
-  const state=setup(key,direction),r=v6.chooseSetup(state,'GC',type,T+2).opportunity;
+  const state=setup(key,direction),r=historicalPending(state,'GC',type,T+2).opportunity;
   assert.equal(r.structure3mAtRegistration,key);assert.equal(r.type,type);assert.equal(r.direction,direction);
   v6.setOpportunityStage(state,r.id,'signal',T+3);v6.markEntered(state,r.id,T+4,true);
   v6.recordInitialStop(state,r.id,90,T+5);v6.correctInitialStop(state,r.id,89,T+6);
@@ -44,18 +44,18 @@ for(const key of keys)for(const type of ['mtf_pb','mtf_bof'])for(const direction
 });
 for(const legacy of ['unjudged','bullish','range','bearish'])test(`HTF V2 legacy ${legacy}: no automatic interpretation, new registration rejected without mutation`,()=>{
   const state=setup(legacy),before=copy(state),html=captureUi.renderCard(state,'GC');
-  for(const type of ['mtf_pb','mtf_bof'])assert.equal(v6.chooseSetup(state,'GC',type,T+2).changed,false);
+  for(const type of ['spb','cpb','bof'])assert.equal(v6.chooseSetup(state,'GC',type,T+2).changed,false);
   assert.deepEqual(state,before);assert.equal(state.cards.GC.structure3m,legacy);
   if(legacy!=='unjudged')assert.ok(html.includes(`旧分类：${v5.VISIBLE_STRUCTURES_3M[legacy]}`));
   assert.equal((html.match(/class="option structure selected"/g)||[]).length,0);
   assert.deepEqual(deserialize(serialize(state,T+10)).state,state);
-  v6.changeStructure(state,'GC',keys[0]);assert.ok(v6.chooseSetup(state,'GC','mtf_pb',T+3).changed);
+  v6.changeStructure(state,'GC','breakout_strong_pullback_weak');assert.ok(v6.chooseSetup(state,'GC','spb',T+3).changed);
 });
 for(const stage of ['wait','signal','position'])test(`HTF V2 V5 ${stage}: migration preserves legacy fact, current selection leaves record intact, old lifecycle remains operable`,()=>{
   const old=v5Active(stage),before=copy(old),state=migrateV5ToV6(old,{migratedAt:T+100}).state;
   assert.deepEqual(old,before);assert.equal(state.cards.GC.structure3m,'bullish');assert.equal(state.records[0].structure3mAtRegistration,'bullish');
   const r=state.records[0],snapshot=copy(r),card=copy(state.cards.GC),untouched=copy(state);
-  for(const type of ['mtf_pb','mtf_bof'])assert.equal(v6.chooseSetup(state,'GC',type,T+102).changed,false);assert.deepEqual(state,untouched);
+  for(const type of ['spb','cpb','bof'])assert.equal(v6.chooseSetup(state,'GC',type,T+102).changed,false);assert.deepEqual(state,untouched);
   const reloaded=deserialize(serialize(state,T+101)).state;assert.deepEqual(reloaded,state);
   v6.changeStructure(state,'GC',keys[1]);assert.deepEqual(r,snapshot);assert.equal(state.cards.GC.bias,card.bias);assert.equal(state.cards.GC.direction,card.direction);
   if(stage!=='position'){v6.setOpportunityStage(state,r.id,'signal',T+110);v6.markEntered(state,r.id,T+111,true);}
@@ -71,17 +71,17 @@ test('HTF V2 missing active V5 record: recovery audit and original classificatio
 test('HTF V2 new selection preserves old trade and pending snapshot plus events independently',()=>{
   const state=migrateV5ToV6(v5Active(),{migratedAt:T+100}).state;
   v6.recordInitialStop(state,state.records[0].id,90,T+101);const old=copy(state.records[0]);
-  v6.changeStructure(state,'GC',keys[0]);const pending=v6.chooseSetup(state,'GC','mtf_bof',T+102).opportunity,before=copy(state.records);
+  v6.changeStructure(state,'GC',keys[0]);const pending=historicalPending(state,'GC','mtf_bof',T+102).opportunity,before=copy(state.records);
   v6.changeStructure(state,'GC',keys[1]);assert.deepEqual(state.records,before);assert.deepEqual(state.records[0],old);
   v6.markEntered(state,pending.id,T+103,true);assert.equal(pending.structure3mAtRegistration,keys[0]);
 });
 for(const key of keys)test(`HTF V2 ${key}: frozen V5 remains strict; detached validation cannot rewrite canonical snapshot`,()=>{
   const old=v5Active();old.cards.GC.opportunity.structure3mAtRegistration=key;old.records[0].structure3mAtRegistration=key;assert.throws(()=>v5.assertState(old));
-  const state=setup(key),r=v6.chooseSetup(state,'GC','mtf_pb',T+2).opportunity,before=copy(state),view=singleRecordV5View(r);
+  const state=setup(key),r=historicalPending(state,'GC','mtf_pb',T+2).opportunity,before=copy(state),view=singleRecordV5View(r);
   v5.assertState(view);assert.equal(view.records[0].structure3mAtRegistration,'range');assert.deepEqual(state,before);assert.equal(r.structure3mAtRegistration,key);
 });
 test('HTF V2 validation: unknown card/record enum and invalid selection rejected atomically',()=>{
-  const state=setup(keys[0]),r=v6.chooseSetup(state,'GC','mtf_pb',T+2).opportunity,before=copy(state);
+  const state=setup(keys[0]),r=historicalPending(state,'GC','mtf_pb',T+2).opportunity,before=copy(state);
   assert.throws(()=>v6.changeStructure(state,'GC','trend_unknown'),{code:'V6_STRUCTURE_INVALID'});assert.deepEqual(state,before);
   const badCard=copy(state);badCard.cards.GC.structure3m='trend_unknown';assert.throws(()=>v6.assertV6State(badCard),{code:'V6_CARD_INVALID'});
   const badRecord=copy(state);badRecord.records[0].structure3mAtRegistration='trend_unknown';assert.throws(()=>v6.assertV6State(badRecord),{code:'V6_RECORD_INVALID'});assert.equal(r.structure3mAtRegistration,keys[0]);

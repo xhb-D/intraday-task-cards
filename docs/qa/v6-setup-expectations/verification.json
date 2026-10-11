@@ -1,0 +1,90 @@
+{
+  "createdAtUtc": "2026-10-11T09:27:34.342152+00:00",
+  "status": "LOCAL_CANDIDATE_READY_FOR_CHAT_HUMAN_REVIEW",
+  "baseSha": "ef54f29e48d1de7e2f7a87840a6f0aa3cd2df72e",
+  "branch": "codex/v6-setup-expectations-v1",
+  "candidateCommit": "Containing local commit; exact SHA delivered in chat",
+  "automatedTests": {
+    "baseline": 1057,
+    "total": 1114,
+    "passed": 1114,
+    "failed": 0,
+    "skipped": 0,
+    "newDedicatedCases": 53,
+    "expandedExistingMatrixCases": 4,
+    "log": "automated-tests.log"
+  },
+  "checks": {
+    "build": "PASS",
+    "bundleSyntax": "PASS",
+    "browserScriptSyntax": "PASS",
+    "diffCheck": "PASS",
+    "frozenBoundaries": "PASS"
+  },
+  "browser": {
+    "version": "154.0.8037.99",
+    "checks": 26,
+    "screenshots": 30,
+    "unexpectedConsoleErrorsOrWarnings": 0,
+    "expectedInjectedFaultDiagnostics": 4
+  },
+  "compatibility": {
+    "intradaySchemaVersion": 6,
+    "unifiedVersion": 2,
+    "newMigration": false,
+    "oldAppReadingNewData": "FAIL_CLOSED"
+  },
+  "unverified": [
+    "Real iOS/Android OS virtual keyboard and external physical monitor removal; viewport resize/zoom simulations passed.",
+    "Browser toolbar zoom not tested; CSS zoom simulation passed.",
+    "Native macOS Helper was not exercised; existing Web-side regression tests passed."
+  ],
+  "classification": "SPB/CPB/BOF PENDING_HUMAN_REVIEW; formal strategy comparison blocked",
+  "releaseActions": {
+    "push": false,
+    "merge": false,
+    "deploy": false
+  },
+  "productBundleSha256": "515224b9c3e01258e8270d5d247a8fbb07a72fc837ade3665914439d76a0a2b5",
+  "evidenceSha256": {
+    "README.md": "e960ef986001eb47d4b250143f5caf17443dd7495fba2a49a0ab7454c1614b15",
+    "automated-tests.log": "6e66948fcdb9a7efa1c352e1804e64415d369e3070fe2e0f19d338780cde2a42",
+    "build.log": "b8e9bf805e51c5a87bfac256ba1c3cbf21b73257baa3f56a13150a145252238d",
+    "desktop-dark-01-pending-empty.png": "d7946035cf72102403554b64f7e05fcf628b72cbc68a50c2fc7da95be9f0b598",
+    "desktop-dark-02-entry-panel.png": "9260130dc03b4c41b5bcdf4334d043d077d6558fdd752bcebd2315dcb2a48a8a",
+    "desktop-dark-03-pending-saved.png": "ab0d9a98bf22d29d858715c3373180a1a64b36206b95eef872843e2d63e04426",
+    "desktop-dark-04-active-empty.png": "bdfdd77f296bc4564d2983ac2bc430c2eb999d29926a4831514d4e4ecf1831b5",
+    "desktop-dark-05-active-tracking.png": "e24e5de3b71bba3cbc0bc619e2d0db8f6ca86c07d24e6d790ce47fc17c48a5bf",
+    "desktop-dark-06-update-panel.png": "f919fde59cb5bf86c883db9bb52156e5ae5ecb6d712ab347dd8bf2b0062fc0af",
+    "desktop-dark-07-history-panel.png": "99b660facb526a58127948204cd4eb3961c3792e5b1f94350dd20b0c89e2c044",
+    "desktop-dark-08-dragged.png": "e51eab410be81d3dfa90bb168287651ffd294d8e940c96139cbc75a4d94f8d55",
+    "desktop-dark-09-reopened-position.png": "e51eab410be81d3dfa90bb168287651ffd294d8e940c96139cbc75a4d94f8d55",
+    "desktop-dark-10-research-classification-pending.png": "b3c7834a8d347dd7c61a7a8be8a24259ff7a4bd958af67a2110026ab2ec331b8",
+    "desktop-light-01-pending-empty.png": "46ec2c7714d7b81567e90321810cbaeaf7280c8bd9a2fc22ef736324f52f600d",
+    "desktop-light-02-entry-panel.png": "656383547f5e6ce799ca7a29a67e0d490ba3c04de8b1c8b72fb0b2a2b3922b2f",
+    "desktop-light-03-pending-saved.png": "0fdc2ebdd67dfaf1850a38fec6403a31d6ce34a1d1a9fe904bd0e45dee8669de",
+    "desktop-light-04-active-empty.png": "9b23dcbc6c386fed652ea2815381d1fe5d503a9f15c38c0251d94e35a1d8ed01",
+    "desktop-light-05-active-tracking.png": "02ebfcb916ec3cba9b62514a86adb9dabab2d641bdc1bc08b1fd8caba17231ae",
+    "desktop-light-06-update-panel.png": "8f4496b415ef42fd8ec308abbaafc44c3e6d91f710761cf2743307a9ac8e644c",
+    "desktop-light-07-history-panel.png": "2e078c96d5db77e2f954d1dbd486254af4bce079f7d92bcb4677d4d7eb0c09d1",
+    "desktop-light-08-dragged.png": "672a6d35636038c63d71a9785578d557fb89cd69af961dffd901f6d933843d40",
+    "desktop-light-09-reopened-position.png": "672a6d35636038c63d71a9785578d557fb89cd69af961dffd901f6d933843d40",
+    "desktop-light-10-research-classification-pending.png": "bfc93fe59d4784f1b6d3769e8f7451912bbbfdddc853cf9593522b49350ff396",
+    "frozen-boundaries.json": "f3b6d660de3e75c4ae3ecf2619bdc6caa4bcf5b3ce36ac1b3003615bdb3f9c54",
+    "index.html": "6722cb4023b5d7b8ae331d2e3282644ab553af0b9645016ff9cf9775b31adadf",
+    "mobile-dark-320-drawer.png": "64b46d46781a9e4ddd56da028af6ff195fbd597ce7e7fb2063fbd5676fbb3fb7",
+    "mobile-dark-375-drawer.png": "9cbc7dea0bbfad49592671ca317c74d9da19b38fc63b036365cda364e23b651d",
+    "mobile-dark-390-closed-scroll-restored.png": "bfd98a7f003dfeeea760eea06d897364bfa06a63627f20c89523c7c9011c1f81",
+    "mobile-dark-390-drawer.png": "5c059bf00bded8fd2e5ec111c99b836511b34cd99a7af884485ea9f5b885d040",
+    "mobile-dark-390-reduced-viewport-keyboard-simulation.png": "e79556530d732902c38d6f87c2ec7e2a432177b46d9a682c6d9679fa318a79f0",
+    "mobile-light-320-drawer.png": "42ddeeb7377a259a9981310eb5138eaacf3d7d680b2b19e57d0b6443d45370c1",
+    "mobile-light-375-drawer.png": "740839be23e783f1d7c73b2f942de05b765b079f272b0a6801cf8fed0ade0d71",
+    "mobile-light-390-closed-scroll-restored.png": "7b65e9a19c51ed669adae672800a00d81d2938f17032d9e216d6148d14d836bd",
+    "mobile-light-390-drawer.png": "e6b0012c8e2bb4e7997ed1d41cd454afc097b1ff04d6f156a649dc31704b15bc",
+    "mobile-light-390-reduced-viewport-keyboard-simulation.png": "516e7255791bda0268b3c1aacca73d61007e0bf134ef85b0824ccfb50f5c904e",
+    "results.json": "e45babdd6832e13b0049226f8372d25bad2cae7ce4eb43f46cc15304d92a88a3",
+    "synthetic-dark-backup.json": "d156e7bd500fd54fea78d1bd4a3565011ab7023ec4143c3e18173c6e8fda4087",
+    "synthetic-light-backup.json": "5bc0dbf8f7374abe265f5900b499a2ee4053f120d4df47bc7f9ee6981a68ccd9"
+  },
+  "logFormatting": "Trailing whitespace and redundant EOF blank lines removed; all output content retained."
+}

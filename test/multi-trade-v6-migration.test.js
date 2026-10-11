@@ -152,9 +152,9 @@ test('V6 migration candidate rejects a reversed timeline accepted by the older v
 test('V6 migration output supports additional independent entry after explicit V2 structure confirmation with recovered ID intact',()=>{
   const old=v5Active();v5.deleteRecord(old,old.cards.GC.opportunity.id);
   const {state}=migrateV5ToV6(old,{migratedAt:T+100});const a=state.records[0];
-  const before=structuredClone(state);assert.equal(chooseSetup(state,'GC','mtf_pb',T+109).changed,false);assert.deepEqual(state,before);
-  changeStructure(state,'GC','trend_pullback_stronger');
-  const b=chooseSetup(state,'GC','mtf_pb',T+110).opportunity;markEntered(state,b.id,T+111,true);
+  const before=structuredClone(state);assert.equal(chooseSetup(state,'GC','spb',T+109).changed,false);assert.deepEqual(state,before);
+  changeStructure(state,'GC','breakout_strong_pullback_weak');
+  const b=chooseSetup(state,'GC','spb',T+110).opportunity;markEntered(state,b.id,T+111,true);
   assert.deepEqual(activeTradesForSymbol(state,'GC').map(r=>r.id),[a.id,b.id]);assert.equal(state.records[0],a);assertV6State(state);
 });
 

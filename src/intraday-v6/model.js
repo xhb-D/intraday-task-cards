@@ -1,16 +1,18 @@
 import {
-  ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, DIRECTIONS, CREATABLE_SETUPS,
+  ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, HTF_STRUCTURES_V3, DIRECTIONS, CREATABLE_SETUPS,
   recordInitialStop as v5RecordInitialStop, correctInitialStop as v5CorrectInitialStop,
   recordBofToPb as v5RecordBofToPb, revertBofToPb as v5RevertBofToPb
 } from '../model.js';
+import { normalizeExpectationContent, entryExpectation, expectationPayload, HOLDING_EXPECTATION_STATES } from './expectations.js';
+import { effectiveBofToPbEvent } from '../model.js';
 import { activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, assertSymbol } from './queries.js';
 import { assertV6State, SCHEMA_VERSION, safeTime, own, fail, singleRecordV5View } from './validation.js';
 export { assertV6State, SCHEMA_VERSION } from './validation.js';
 export { effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, researchSetupClass } from '../model.js';
 
-// New registration requires explicit V2 classification; legacy records remain readable.
+// New registration requires explicit V3 classification; legacy records remain readable.
 export const isSetupAllowed = (direction, structure3m, type) =>
-  own(CREATABLE_SETUPS, type) && ['long', 'short'].includes(direction) && own(HTF_STRUCTURES_V2, structure3m);
+  own(CREATABLE_SETUPS, type) && ['long', 'short'].includes(direction) && own(HTF_STRUCTURES_V3, structure3m);
 
 export function createWorkspace(time = Date.now()) {
   if (!safeTime(time)) fail('V6_TIME_INVALID', 'time');
@@ -69,7 +71,7 @@ export function changeBias(state, symbol, bias) {
 }
 export function changeStructure(state, symbol, structure3m) {
   return transact(state, next => {
-    if (!own(STRUCTURES_3M, structure3m) && !own(HTF_STRUCTURES_V2, structure3m)) fail('V6_STRUCTURE_INVALID', 'structure3m');
+    if (!own(STRUCTURES_3M, structure3m) && !own(HTF_STRUCTURES_V2, structure3m) && !own(HTF_STRUCTURES_V3, structure3m)) fail('V6_STRUCTURE_INVALID', 'structure3m');
     const card = cardFor(next, symbol); if (card.structure3m === structure3m) return { changed: false, reason: 'same' };
     card.structure3m = structure3m; return { changed: true };
   });
@@ -174,7 +176,14 @@ function capture(state, id, writer, args) {
     let result;
     try { result = writer(view, record.symbol, ...args); }
     catch (cause) { throw Object.assign(new Error(cause.message, { cause }), { code: 'V6_CAPTURE_INVALID', path: `records.${id}.researchCapture` }); }
-    if (result.changed) record.researchCapture = view.cards[record.symbol].opportunity.researchCapture;
+    if (result.changed) {
+      const event = structuredClone(result.event);
+      const sequence = record.researchCapture.eventSequence + 1;
+      event.id = `${record.id}:manual-${sequence}`;
+      if (event.type === 'BOF_TO_PB_REVERTED') event.payload.revertedEventId = effectiveBofToPbEvent(record).id;
+      record.researchCapture.manualEvents.push(event); record.researchCapture.eventSequence = sequence;
+      result.event = structuredClone(event);
+    }
     return result;
   });
 }
@@ -185,8 +194,52 @@ export function correctInitialStop(state, id, stopPrice, time = Date.now()) {
   return capture(state, id, v5CorrectInitialStop, [stopPrice, time]);
 }
 export function recordBofToPb(state, id, time = Date.now()) {
+  if (Object.hasOwn(CREATABLE_SETUPS, state.records.find(r => r.id === id)?.type)) fail('V6_RESEARCH_CLASS_PENDING', 'type');
   return capture(state, id, v5RecordBofToPb, [time]);
 }
 export function revertBofToPb(state, id, time = Date.now()) {
   return capture(state, id, v5RevertBofToPb, [time]);
+}
+
+// All new manual writes share the canonical per-record event sequence and transaction.
+function appendDecision(state, id, type, content, submissionId, recordedAt) {
+  return transact(state, next => {
+    const record = recordFor(next, id);
+    const prior = record.researchCapture.manualEvents.find(e => e.payload?.submissionId === submissionId);
+    if (prior) {
+      const priorContent = type === 'HOLDING_EXPECTATION_UPDATED' ? { status: prior.payload.status, reason: prior.payload.reason } : prior.payload.content;
+      if (prior.type !== type || JSON.stringify(priorContent) !== JSON.stringify(content)) fail('V6_SUBMISSION_CONFLICT', 'submissionId');
+      return { changed: false, reason: 'duplicate', event: structuredClone(prior) };
+    }
+    if (!safeTime(recordedAt) || recordedAt < record.registeredAt || recordedAt < (record.researchCapture.manualEvents.at(-1)?.recordedAt ?? 0)) fail('V6_TIME_INVALID', 'time');
+    const payload = { ...expectationPayload(record, submissionId, recordedAt) };
+    if (type === 'HOLDING_EXPECTATION_UPDATED') {
+      requireTrade(record);
+      if (!Object.hasOwn(HOLDING_EXPECTATION_STATES, content.status) || typeof content.reason !== 'string') fail('V6_EXPECTATION_INVALID', 'status');
+      Object.assign(payload, content);
+    } else {
+      const priorExpectation = entryExpectation(record);
+      if (type === 'ENTRY_EXPECTATION_RECORDED' && priorExpectation) fail('V6_EXPECTATION_ALREADY_RECORDED', 'opportunityId');
+      if (type === 'ENTRY_EXPECTATION_CORRECTED') {
+        if (!priorExpectation) fail('V6_EXPECTATION_REQUIRED', 'opportunityId');
+        Object.assign(payload, { originalEventId: priorExpectation.original.id, previousEventId: priorExpectation.current.id,
+          originalRecordedAt: priorExpectation.original.recordedAt, originalContent: structuredClone(priorExpectation.original.payload.content),
+          previousContent: structuredClone(priorExpectation.current.payload.content) });
+      }
+      payload.content = content;
+    }
+    const sequence = record.researchCapture.eventSequence + 1;
+    const event = { id: `${record.id}:manual-${sequence}`, type, recordedAt, effectiveAt: recordedAt, source: 'manual_intraday', payload };
+    record.researchCapture.manualEvents.push(event); record.researchCapture.eventSequence = sequence;
+    return { changed: true, event: structuredClone(event) };
+  });
+}
+export function recordEntryExpectation(state, id, content, submissionId, recordedAt = Date.now()) {
+  return appendDecision(state, id, 'ENTRY_EXPECTATION_RECORDED', normalizeExpectationContent(content), submissionId, recordedAt);
+}
+export function correctEntryExpectation(state, id, content, submissionId, recordedAt = Date.now()) {
+  return appendDecision(state, id, 'ENTRY_EXPECTATION_CORRECTED', normalizeExpectationContent(content), submissionId, recordedAt);
+}
+export function updateHoldingExpectation(state, id, status, reason, submissionId, recordedAt = Date.now()) {
+  return appendDecision(state, id, 'HOLDING_EXPECTATION_UPDATED', { status, reason: typeof reason === 'string' ? reason.trim() : reason }, submissionId, recordedAt);
 }

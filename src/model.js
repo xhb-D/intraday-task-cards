@@ -7,12 +7,14 @@ export const STRUCTURES_3M = Object.freeze({ unjudged: '未判断', bullish: '�
 export const VISIBLE_STRUCTURES_3M = Object.freeze({ bullish: '多头', range: '震荡（观察拍卖完成）', bearish: '空头' });
 // V6 classification; kept separate so frozen V5 validation and historical meanings stay unchanged.
 export const HTF_STRUCTURES_V2 = Object.freeze({ trend_pullback_stronger: '趋势（回调变强）', trend_pullback_weaker: '趋势（回调变弱）', htf_range_v2: '震荡' });
+export const HTF_STRUCTURES_V3 = Object.freeze({ breakout_strong_pullback_weak: '突破强&回调弱', breakout_weak_pullback_strong: '突破弱&回调强', htf_range_v2: '震荡' });
 export const DIRECTIONS = Object.freeze({ long: '做多', short: '做空', none: '暂无交易方向' });
 export const SETUPS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF（恐慌或走弱 1次）' });
 // V6 creation is separate from frozen V5 readable types. Historical labels remain unchanged.
-export const CREATABLE_SETUPS = Object.freeze({ mtf_pb: SETUPS.mtf_pb, mtf_bof: 'MTF BOF（做多等收敛 做空等扫高）' });
+export const HISTORICAL_V6_SETUPS = Object.freeze({ mtf_bof: 'MTF BOF（做多等收敛 做空等扫高）' });
+export const CREATABLE_SETUPS = Object.freeze({ spb: 'SPB（观察结构背离、rsi、PD array）', cpb: 'CPB（做多等收敛 做空等扫高）', bof: 'BOF（行为是真突破 预期会失败）' });
 export const LEGACY_SETUPS = Object.freeze({ pullback: '趋势回调', range: '区间反转', reversal: '趋势反转' });
-export const SETUP_LABELS = Object.freeze({ ...LEGACY_SETUPS, ...SETUPS, ...CREATABLE_SETUPS });
+export const SETUP_LABELS = Object.freeze({ ...LEGACY_SETUPS, ...SETUPS, ...HISTORICAL_V6_SETUPS, ...CREATABLE_SETUPS });
 export const STAGES = Object.freeze({ none: '无机会', wait: '等待', signal: '找信号', position: '持仓' });
 export const RESULTS = Object.freeze({ invalid: '失效', canceled: '已取消', direction: '方向改变结束', closed: '已平仓', rules_upgrade: '规则升级结束' });
 export const ATTENTION = Object.freeze(['wait', 'signal']);
