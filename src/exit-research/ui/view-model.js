@@ -21,12 +21,12 @@ export function buildWorkbenchModel({ intraday, files, flatConfirmed, store }) {
     const original = records.find(r => r.id === projected.opportunityId);
     const manualEvents = structuredClone(original.researchCapture.manualEvents);
     const t = { ...projected, originalSetup: original.type, researchSetupClass: researchSetupClass(original.type), manualEvents,
-      manualSetupTransitions: manualEvents.filter(e => ['BOF_TO_PB_RECORDED','BOF_TO_PB_REVERTED'].includes(e.type)) };
+      manualSetupTransitions: manualEvents.filter(e => ['BOF_TO_PB_RECORDED','BOF_TO_PB_REVERTED','BOF_MANAGEMENT_SWITCH_RECORDED'].includes(e.type)) };
     const matchingIds = matches.get(t.opportunityId)?.candidateLogicalTradeIds || [];
     const ids=matchingIds.length?matchingIds:t.logicalTradeId?[t.logicalTradeId]:[];
     const settings = store.settings.tradeOverrides[t.opportunityId] || { replayHardEndAt: null, executionTickSize: null };
     const risk = initialRisk(t), converted = t.manualEvents.some(e => e.type === 'BOF_TO_PB_RECORDED');
-    return { ...t, manualDecisionTruth: reviewMap.get(t.opportunityId), researchClassificationStatus: setupClassificationPending(t.originalSetup) ? 'PENDING_HUMAN_REVIEW' : 'EXISTING_CLASSIFICATION', strategyComparisonEligible: !setupClassificationPending(t.originalSetup) && t.qualityStatus !== 'BLOCKED', hasConversion: converted, initialRiskPoints: risk.initialRiskPoints, realizedR: rAtPrice(t, t.actualExitPrice), settings: structuredClone(settings),
+    return { ...t, manualDecisionTruth: reviewMap.get(t.opportunityId), currentManagement: reviewMap.get(t.opportunityId)?.currentManagement || null, researchClassificationStatus: setupClassificationPending(t.originalSetup) ? 'PENDING_HUMAN_REVIEW' : 'EXISTING_CLASSIFICATION', strategyComparisonEligible: !setupClassificationPending(t.originalSetup) && t.qualityStatus !== 'BLOCKED', hasConversion: converted, initialRiskPoints: risk.initialRiskPoints, realizedR: rAtPrice(t, t.actualExitPrice), settings: structuredClone(settings),
       candidates: ids.map(id => logicalMap.get(id)).filter(Boolean).map(c => ({ logicalTradeId: c.logicalTradeId, contract: c.contract, direction: c.direction, entryTime: c.entryStartedAt.normalized, exitTime: c.exitCompletedAt.normalized, entryPrice: c.entryVwap, exitPrice: c.exitVwap, quantity: c.quantity, sourceRows: [...c.sourceRows] })) };
   });
   const p = store.preferences;

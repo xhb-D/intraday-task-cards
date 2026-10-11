@@ -1,0 +1,92 @@
+{
+  "status": "PASS_WITH_DISCLOSED_DEVICE_LIMITATION",
+  "browser": "154.0.8037.99",
+  "origin": "http://127.0.0.1:63098/#/home",
+  "fixture": "synthetic only",
+  "checks": [
+    "light: drag/close/reopen/reload PASS",
+    "light: draft keep/discard, background trade/Chime rerender, A/B isolation PASS",
+    "light: resize/zoom/reclamp/reset PASS",
+    "light: quota failure preserves draft/canonical PASS",
+    "light: actual readback mismatch rollback/draft PASS",
+    "light: real dual-tab CAS/lock PASS",
+    "light: closed history/single exit/flatten PASS",
+    "light: actual JSON download/restore PASS",
+    "light: routes PASS",
+    "dark: drag/close/reopen/reload PASS",
+    "dark: draft keep/discard, background trade/Chime rerender, A/B isolation PASS",
+    "dark: resize/zoom/reclamp/reset PASS",
+    "dark: quota failure preserves draft/canonical PASS",
+    "dark: actual readback mismatch rollback/draft PASS",
+    "dark: real dual-tab CAS/lock PASS",
+    "dark: closed history/single exit/flatten PASS",
+    "dark: actual JSON download/restore PASS",
+    "dark: routes PASS",
+    "light/390: drawer/save/close scroll PASS",
+    "light/390: reduced viewport simulation PASS; real OS virtual keyboard NOT VERIFIED",
+    "light/375: drawer/save/close scroll PASS",
+    "light/320: drawer/save/close scroll PASS",
+    "dark/390: drawer/save/close scroll PASS",
+    "dark/390: reduced viewport simulation PASS; real OS virtual keyboard NOT VERIFIED",
+    "dark/375: drawer/save/close scroll PASS",
+    "dark/320: drawer/save/close scroll PASS"
+  ],
+  "screenshots": [
+    "desktop-light-01-pending-empty.png",
+    "desktop-light-02-entry-panel.png",
+    "desktop-light-03-pending-saved.png",
+    "desktop-light-08-dragged.png",
+    "desktop-light-09-reopened-position.png",
+    "desktop-light-04-active-empty.png",
+    "desktop-light-06-update-panel.png",
+    "desktop-light-07-history-panel.png",
+    "desktop-light-05-active-tracking.png",
+    "desktop-light-10-research-classification-pending.png",
+    "desktop-dark-01-pending-empty.png",
+    "desktop-dark-02-entry-panel.png",
+    "desktop-dark-03-pending-saved.png",
+    "desktop-dark-08-dragged.png",
+    "desktop-dark-09-reopened-position.png",
+    "desktop-dark-04-active-empty.png",
+    "desktop-dark-06-update-panel.png",
+    "desktop-dark-07-history-panel.png",
+    "desktop-dark-05-active-tracking.png",
+    "desktop-dark-10-research-classification-pending.png",
+    "mobile-light-390-drawer.png",
+    "mobile-light-390-closed-scroll-restored.png",
+    "mobile-light-390-reduced-viewport-keyboard-simulation.png",
+    "mobile-light-375-drawer.png",
+    "mobile-light-320-drawer.png",
+    "mobile-dark-390-drawer.png",
+    "mobile-dark-390-closed-scroll-restored.png",
+    "mobile-dark-390-reduced-viewport-keyboard-simulation.png",
+    "mobile-dark-375-drawer.png",
+    "mobile-dark-320-drawer.png"
+  ],
+  "consoleErrorsOrWarnings": [],
+  "expectedFaultDiagnostics": [
+    {
+      "type": "error",
+      "message": "[intraday-task-cards diagnostic] {errorCode: CANONICAL_WRITE_FAILED, phase: unified_storage_write, message: 统一存档写入失败；原始存档已恢复, cause: QA quota, relevantSymbol: null}",
+      "injectedFault": "quota"
+    },
+    {
+      "type": "error",
+      "message": "[intraday-task-cards diagnostic] {errorCode: CANONICAL_WRITE_FAILED, phase: unified_storage_write, message: 统一存档写入失败；原始存档已恢复, cause: 统一存档写后回读不一致, relevantSymbol: null}",
+      "injectedFault": "readback"
+    },
+    {
+      "type": "error",
+      "message": "[intraday-task-cards diagnostic] {errorCode: CANONICAL_WRITE_FAILED, phase: unified_storage_write, message: 统一存档写入失败；原始存档已恢复, cause: QA quota, relevantSymbol: null}",
+      "injectedFault": "quota"
+    },
+    {
+      "type": "error",
+      "message": "[intraday-task-cards diagnostic] {errorCode: CANONICAL_WRITE_FAILED, phase: unified_storage_write, message: 统一存档写入失败；原始存档已恢复, cause: 统一存档写后回读不一致, relevantSymbol: null}",
+      "injectedFault": "readback"
+    }
+  ],
+  "unverified": [
+    "Real iOS/Android OS virtual keyboard and external physical monitor removal; viewport resize/zoom simulations passed."
+  ]
+}

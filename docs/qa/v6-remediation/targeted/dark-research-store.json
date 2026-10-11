@@ -1,0 +1,30 @@
+{
+  "app": "exit-research",
+  "schemaVersion": 1,
+  "sequence": 1,
+  "manualDecisions": [
+    {
+      "id": "manual-match:1",
+      "sequence": 1,
+      "action": "MANUAL_REJECTED",
+      "opportunityId": "op-1-mv3ofoyt",
+      "logicalTradeId": "lt:%5B%22SYNTHETIC-A%22%2C%22MCLZ9%22%2C%22synthetic-fill-entry-20%22%2C%22synthetic-fill-exit-20%22%5D",
+      "executionFingerprint": "{\"logicalTradeId\":\"lt:%5B%22SYNTHETIC-A%22%2C%22MCLZ9%22%2C%22synthetic-fill-entry-20%22%2C%22synthetic-fill-exit-20%22%5D\",\"accountId\":\"SYNTHETIC-A\",\"product\":\"MCL\",\"contract\":\"MCLZ9\",\"direction\":\"LONG\",\"status\":\"closed\",\"quantity\":2,\"exitQuantity\":2,\"remainingQuantity\":0,\"entryVwap\":100,\"exitVwap\":108,\"times\":[2114388000000,2114388000000,2114388900000,2114388900000],\"entryFillIds\":[\"synthetic-fill-entry-20\"],\"exitFillIds\":[\"synthetic-fill-exit-20\"],\"entryOrderIds\":[\"synthetic-order-entry-20\"],\"exitOrderIds\":[\"synthetic-order-exit-20\"],\"flags\":[],\"fills\":[{\"fillId\":\"synthetic-fill-entry-20\",\"orderId\":\"synthetic-order-entry-20\",\"accountId\":\"SYNTHETIC-A\",\"contractId\":\"90000881\",\"contract\":\"MCLZ9\",\"product\":\"MCL\",\"side\":\"buy\",\"quantity\":2,\"price\":100,\"active\":true,\"time\":2114388000000},{\"fillId\":\"synthetic-fill-exit-20\",\"orderId\":\"synthetic-order-exit-20\",\"accountId\":\"SYNTHETIC-A\",\"contractId\":\"90000881\",\"contract\":\"MCLZ9\",\"product\":\"MCL\",\"side\":\"sell\",\"quantity\":2,\"price\":108,\"active\":true,\"time\":2114388900000}]}",
+      "recordedAt": 1791717904083
+    }
+  ],
+  "preferences": {
+    "setup": "SETUP_BOF",
+    "family": "ALL",
+    "quality": "ALL",
+    "selectedOpportunityId": null
+  },
+  "settings": {
+    "tradeOverrides": {
+      "op-1-mv3ofoyt": {
+        "replayHardEndAt": 1791721504083,
+        "executionTickSize": 0.1
+      }
+    }
+  }
+}

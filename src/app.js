@@ -1,3 +1,4 @@
+import { renderHistoryArchive, assertArchiveRetention } from './history-archive.js';
 import { initExpectationPanel } from './expectation-panel.js';
 import { initExitResearchWorkbench } from './exit-research/ui/controller.js';
 import { ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, HTF_STRUCTURES_V3, DIRECTIONS, SETUP_LABELS, STAGES, copy, effectiveInitialStop } from './model.js';
@@ -42,7 +43,8 @@ let legacyChimeRecovery = false;
 let recoveryCanonicalRaw = null;
 let recoveryLegacyRaw = null;
 let restoredNotice = '';
-let historyScope = 'today';
+let archiveQuery = '';
+let managementSubmissionSequence = 0;
 let currentDay = '';
 let collapsedCards = new Set();
 let storage = null;
@@ -118,7 +120,6 @@ function storageStatus() {
   document.querySelector('#chime-summary-host').inert = safeReadOnly;
   document.querySelector('#chime-settings-host').inert = safeReadOnly;
   document.querySelector('#risk-manager-host').inert = safeReadOnly;
-  document.querySelectorAll('[data-delete]').forEach(button => { button.disabled = policy.historyInert || corruption; });
   if (corruption) {
     document.querySelector('#ignore-legacy-chime').hidden = true;
     label.textContent = '旧版数据需检查 · 未覆盖'; message.textContent = `旧版交易数据需要人工检查，系统没有自动修改原数据。${migrationBlockReason}。请导出原始数据后检查。`; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; cardsEl.inert = false; return;
@@ -201,15 +202,11 @@ function renderCommodityDashboard() {
   hiddenCommoditiesEl.hidden = !expanded;
   hiddenCommoditiesEl.innerHTML = expanded ? `<h3 id="hidden-commodities-title">已隐藏的商品（${hiddenSymbols.length}）</h3>${hiddenRows}` : '';
 }
-function recordsForScope() {
-  const day = dateKey(now()); return state.records.filter(record => historyScope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
-}
 function renderHistory() {
-  const records = recordsForScope(); currentDay = dateKey(now());
-  document.querySelector('#history-count').textContent = `${records.length} 条 · ${historyScope === 'all' ? '全部保留' : '今日及未结束'}`;
+  const records = intradayV6.archivedRecords(state,archiveQuery); currentDay = dateKey(now());
+  document.querySelector('#history-count').textContent = `${records.length} 条 · 已结束档案`;
   document.querySelector('#history-empty').hidden = Boolean(records.length); document.querySelector('#history-table').hidden = !records.length;
-  document.querySelectorAll('[data-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === historyScope)));
-  historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUP_LABELS[record.type]}</td><td class="position">${escapeHtml(record.zone ?? '—')}</td><td>${captureRecordProgress(record)}</td><td><button type="button" data-expectation-history="${escapeHtml(record.id)}">预期与历史</button> ${record.endedAt === null ? '—' : `<button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button>`}</td></tr>`).join('');
+  historyBody.innerHTML = renderHistoryArchive(state,archiveQuery);
 }
 function renderChime() {
   const chime = unified?.sections?.chime; if (!chime || !chimeView) return;
@@ -251,8 +248,8 @@ function finishConfirmation(confirmed) {
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.kind !== 'restore' && storage?.getItem && storage.getItem(UNIFIED_KEY) !== action.storageRaw) { externalConflict = true; storageStatus(); announce('存档已被其他页面修改；请刷新后重新确认'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V6。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
-  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(intradayV6.createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; assertArchiveRetention(state,action.unified.sections.intraday.state); const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V6。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(intradayV6.createWorkspace(now()), now()); const candidate = makeUnified(fresh); assertArchiveRetention(state,candidate.sections.intraday.state); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   if (!state.cards[action.symbol]) return;
   if (action.kind === 'entry') { if (intradayV6.markEntered(state, action.opportunityId, now(), true).changed) mutate(`${action.symbol} 已确认入场`, action.symbol, action.opportunityId); }
   if (action.kind === 'trade-exit') { if (intradayV6.markTradeExited(state, action.opportunityId, action.exitKind, now(), true).changed) mutate(`${action.symbol} 该笔已退出；保留方向`, action.symbol, action.opportunityId); }
@@ -275,9 +272,13 @@ function handleAction(button) {
   if (action === 'toggle-collapse') { collapsedCards = toggleCardCollapsed(collapsedCards,symbol); renderAll(); return; }
   if (!captureDataCurrent()) return;
   const record = state.records.find(record => record.id === opportunityId && record.symbol === symbol);
-  if (['stop-edit','stop-cancel','bof-to-pb','bof-revert','entry','stage','end','trade-exit'].includes(action) && !record) return;
+  if (['stop-edit','stop-cancel','bof-to-pb','bof-revert','management-switch','entry','stage','end','trade-exit'].includes(action) && !record) return;
   if (action === 'stop-edit') { stopEditors.set(record.id, { draft: effectiveInitialStop(record) === null ? '' : String(effectiveInitialStop(record)), error: '' }); renderAll(); document.getElementById(`stop-${captureUi.domId(record.id)}`)?.focus({ preventScroll:true }); return; }
   if (action === 'stop-cancel') { stopEditors.delete(record.id); renderAll(); return; }
+  if (action === 'management-switch') {
+    const submissionId = globalThis.crypto?.randomUUID?.() || `management-${now()}-${++managementSubmissionSequence}`;
+    if (intradayV6.switchBofManagement(state,record.id,value,submissionId,now()).changed) mutate(`${symbol} 该笔人工管理：${value}；原始 BOF 不变`,symbol,record.id); return;
+  }
   if (action === 'bof-to-pb') { if (intradayV6.recordBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：PB`,symbol,record.id); return; }
   if (action === 'bof-revert') { if (intradayV6.revertBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：BOF`,symbol,record.id); return; }
   if (action === 'bias') { if (intradayV6.changeBias(state,symbol,value).changed) mutate(`${symbol} 当前偏见：${BIASES[value]}`,symbol); return; }
@@ -347,8 +348,8 @@ cardsEl.addEventListener('submit', event => { const form = event.target.closest(
 cardsEl.addEventListener('input', event => { const input = event.target.closest('[data-stop-input]'); if (!input) return; const opportunity = state.records.find(record => record.id === input.dataset.stopInput); if (opportunity && !writeLocked() && !corruption) stopEditors.set(opportunity.id, { draft: input.value, error: '' }); });
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
 [commodityDashboardEl, hiddenCommoditiesEl].forEach(host => host.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); }));
-historyBody.addEventListener('click', event => { const history = event.target.closest('[data-expectation-history]'); if (history) { expectationPanel?.open(history.dataset.expectationHistory, 'history', history); return; } const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (intradayV6.deleteRecord(state, button.dataset.delete).changed) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
-document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
+historyBody.addEventListener('click', event => { const history = event.target.closest('[data-expectation-history]'); if (history) expectationPanel?.open(history.dataset.expectationHistory, 'history', history); });
+document.querySelector('#archive-query').addEventListener('input', event => { archiveQuery = event.target.value; renderHistory(); });
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => safe(() => finishConfirmation(true), { phase: 'confirmation' })); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });
 document.querySelector('#data-tools').addEventListener('click', () => { document.querySelector('#data-feedback').textContent = ''; dataDialog.showModal(); }); document.querySelector('#data-close').addEventListener('click', () => dataDialog.close());
 document.querySelector('#export-today').addEventListener('click', () => { download(exportMarkdown(state, 'today'), `日内机会_${dateKey(now())}.md`, 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
@@ -359,7 +360,7 @@ document.querySelector('#export-raw').addEventListener('click', () => { download
 document.querySelector('#export-chime-raw').addEventListener('click', () => { download(recoveryLegacyRaw ?? '', `自然周期报时_原始旧设置_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始旧报时设置；本地原数据未修改。'; });
 document.querySelector('#ignore-legacy-chime').addEventListener('click', () => { if (!legacyChimeRecovery) return; openConfirmation({ kind: 'ignore-legacy-chime' }, '忽略无法识别的旧报时设置？', '将保留旧报时键原始内容，并以默认报时设置升级统一存档。状态卡、风险管理器及外观保持原值；此选择不会删除或改写旧键。', '忽略并使用默认值', '只有确认不再迁移旧报时设置时继续。'); });
 document.querySelector('#import-json').addEventListener('click', () => { if (writeLocked()) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
-document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind, migrated: preview.migration?.migrated === true }, '确认导入备份？', `${importSummary(preview.kind, preview.state, preview.migration)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${captureMigrationMessage(error)}。原数据未改变。`; } finally { event.target.value = ''; } });
+document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); assertArchiveRetention(state,preview.state.sections.intraday.state); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind, migrated: preview.migration?.migrated === true }, '确认导入备份？', `${importSummary(preview.kind, preview.state, preview.migration)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.code === 'V6_ARCHIVE_RETENTION_REQUIRED' ? error.message : captureMigrationMessage(error)}。原数据未改变。`; } finally { event.target.value = ''; } });
 document.querySelector('#storage-retry').addEventListener('click', () => { if (!writeLocked()) persist(); });
 document.querySelector('#start-fresh').addEventListener('click', () => { if (!writeLocked()) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
 window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { externalConflict = true; saveError = 'Conflict'; chimeCoordinator?.invalidate('检测到统一存档外部修改；本页报时已停止。'); storageStatus(); renderChime(); } });
@@ -416,7 +417,7 @@ appearanceView = initAppearance(document.querySelector('#appearance-select'), { 
 });
 try { researchWorkbench = initExitResearchWorkbench(document.querySelector('#exit-research-host'), { getIntraday: () => state, storage }); }
 catch (error) { const host = document.querySelector('#exit-research-host'); if (host) host.textContent = 'Exit Research 暂不可用；首页状态卡仍可正常使用。'; reportDiagnostic(error, { phase: 'exit_research_init' }); }
-function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else { const result = applyRoute(document, normalized); if (result.route === 'exit-research') researchWorkbench?.refresh(); else researchWorkbench?.hide(); expectationPanel?.routeChanged(result.route === 'home'); } }
+function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else { const result = applyRoute(document, normalized); if (result.route === 'exit-research') researchWorkbench?.refresh(); else researchWorkbench?.hide(); if (result.route === 'history') renderHistory(); expectationPanel?.routeChanged(['home','history'].includes(result.route)); } }
 window.addEventListener('hashchange', route); route();
 try { dashboardView = initRiskDashboard(document.querySelector('#risk-dashboard-host'), {
   getState: () => unified?.sections.riskManager || { schemaVersion: 2, selectedAccountId: null, accounts: [] },
@@ -448,7 +449,7 @@ expectationPanel = initExpectationPanel({
     announce('该笔交易的预期记录已保存'); return { ok:true };
   }
 });
-expectationPanel.routeChanged((globalThis.location?.hash || '#/home') === '#/home');
+expectationPanel.routeChanged(['#/home','#/history'].includes(globalThis.location?.hash || '#/home'));
 renderAll(); storageStatus(); renderChime();
 if (nativeChimeDevMode) {
   void chimeExecution.refresh();

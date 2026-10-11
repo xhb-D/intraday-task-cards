@@ -1,0 +1,301 @@
+{
+  "base": "ef54f29e48d1de7e2f7a87840a6f0aa3cd2df72e",
+  "originalCandidate": "eb80e9ace0784a40beacef2e870e6e821b026f58",
+  "status": "PASS",
+  "protectedFiles": [
+    {
+      "file": "src/capture-unified.js",
+      "sha256": "520adc1ca92fa048fa9914d621b1595d8e205748a5ce1b99d72e3cc5e6c08019",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/csv.js",
+      "sha256": "64d6b24cccfea9dfe79f554aa552319890543300e0ee366daefef59fd07959cf",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/execution-model.js",
+      "sha256": "3e5a518a94528855788b4c197ddf34eb532d5fa90ddd152102f53a753d97e3b2",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/execution-qa.js",
+      "sha256": "41901d67cf8eb3c359d69e92abcf35ef73b461107f675703f97bd062141c4bca",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/logical-trade.js",
+      "sha256": "feca9f783fbfde3e0165774bea29df84a0aef37bf45e6a5c2b96dc16713ea5f9",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/lookahead-qa.js",
+      "sha256": "2b3646f4687a4511827b2868543c4aacad8e17b2466214c559a4ec4179a05616",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/manual-matches.js",
+      "sha256": "f75309426e046fb40cf5bc9a59d63b8fceb6b9f745c1b335e5f89f45ea308657",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/market-config.js",
+      "sha256": "e59499df6f45e9d173359308d7e98bcc6bafb29115d27d8a1f752861e5182688",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/market-data.js",
+      "sha256": "800514724295d81ac4f11ddf05a242e564e0cb986858931bd4c7871dec39189b",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/market-metrics.js",
+      "sha256": "e2c9291d96fe81f4db900e7b45592ba559bde7792aab12e5eb73960f4c9c6627",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/market-request.js",
+      "sha256": "40880d9993153c85ab441e68955cabfa62f3cb4d218512d69b4b27c248c8e564",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/milestones.js",
+      "sha256": "99f9a6fc5f0b98669498c944af69014bcf0a9c66fc4636e93a3ee27177831ea7",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/path-metrics.js",
+      "sha256": "888f6eafff872d7b61478571065d9e4471f19e7ba5394c7a1f2d3eca58028d67",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/policies-v1.js",
+      "sha256": "9e9119aa9cf208d6f365dccb3a82c37ac55fe9bf760d23e2f7e8156a8818ffe7",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/policy-schema.js",
+      "sha256": "2c95c79d980f484c76177c216f57c0c63ea38e4896542b125eaad403aa5da686",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/protection.js",
+      "sha256": "df6a149e7458e27b4a3c5746952cc13a5a311b6a9d65360c3b81bc5d527b0549",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/r-math.js",
+      "sha256": "f13753ce39509afd914d9abd1f827aab1d69b1499fb14482be7b0d55492df99b",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/reconciliation.js",
+      "sha256": "c01a413dc2c971e82b85a46523634078d519d61f9e31b7f701a6fc572220ab59",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/replay-data.js",
+      "sha256": "f14e20a18db0fbe3731a7deb5ed818e9ab4a7f8a40eb79086c69e75717d8de6e",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/replay-engine.js",
+      "sha256": "64b322ecf03fcf0cf194ec3c937717bb6bfa04149f783cc67177ae5bd2d0cc2b",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/replay-quality.js",
+      "sha256": "7a031f224e862107776b8082771de376bda330b9bec17c8262041a5c3ffec18c",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/replay-request.js",
+      "sha256": "399638696bfb4193fa2e69949e3575e42b465ff9f03f69445d015f40a9511444",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/replay-trace.js",
+      "sha256": "27fcdc85f9ceddcf4bfa3a897b3dbf3e78c0ad8eec1feabcb5ed3dd9ac236e16",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/research-common.js",
+      "sha256": "a215e13637f23c49a770dfd374b6ae3991764b1f995932dd2dc9bcea6142f0ff",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/research-trade.js",
+      "sha256": "d72a8f69d9be32bb98cde952d724c385af96ed7528bf35acd0e3748b6380d866",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/symbol-map.js",
+      "sha256": "cbbcef0687511c5213bbed50bc8b47500558075225840a9851a650f8c30ef62c",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/time.js",
+      "sha256": "e53dede8f63ffcd15175917952627ccddafaa71987b7cc6d9e0c67f1cd7a9512",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/exit-research/tradovate-csv.js",
+      "sha256": "43a47b9933dc4d3be6e844cfa7b1ac88d438d81d1b8b93428cdacdda51732de8",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/holding-reference.js",
+      "sha256": "e461f743f82685e77982fbeeb9fae09aba8574686c468a00755f128a6c9d01d6",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/intraday-v6/migration.js",
+      "sha256": "c2ef4bebb54902e8a290322a4330e09a1dde578ce7b522948884778825321207",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/config-hash.js",
+      "sha256": "86a1bbc1150833638907859346ce34c0a15a2e6ce0162a0b8ec887528f46e2a5",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/coordinator.js",
+      "sha256": "08dbfae326f2ae45608e5f948ec45dc19686f1cf7f089fb2271f5fd0a12d9b65",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/execution-backend.js",
+      "sha256": "5bb1b00a1909a6a45c900a488db86f1398b258710e3e195ff8cb21379060f442",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/model.js",
+      "sha256": "2dc4d6401ee09b26de8db2f8e8a78c043cf488b566da4121990f3427d6155217",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/native-backend.js",
+      "sha256": "c2f4d65b3bad3c1fc48fdba6912748c7da10eeebc5adc74518ca7a622ebf1f92",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/output.js",
+      "sha256": "9fb7b7ee4e75e8f3e106694c067841deb08157d5b318112c232026ba965e7dd0",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/release-mode.js",
+      "sha256": "0d6f149ad691a5fbb53a7fc3f00c110214fb30bf94cc77a6cb3ea1c94974a79c",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/scheduler.js",
+      "sha256": "9999a12e655f27b3336cbda08911724c2424eb7c3af62228fc395ae1f28ec02c",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/time.js",
+      "sha256": "72c80de2f38f47a699dfbc42da509960256ef1c79ef0b59fae2e8411e24d16ab",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/natural-chime/view.js",
+      "sha256": "10ac6cb41810981fcd600440c13ec3730181b22eace57ef0bbfd440ac8ba8278",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/risk-manager/account-service.js",
+      "sha256": "9257296325bc4f7ebcb4e1678c37bfc76c8747a4766cc3be8fc233422356d4f0",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/risk-manager/backup-service.js",
+      "sha256": "ef21de503a40fc3613fcdd803bd2d93988a79850d529a350014d405011eb7a98",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/risk-manager/migration.js",
+      "sha256": "9a87ae741b40318e60db3f600994e0c2cd143ea5644eb2e1b29cf4500c23ef1c",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/risk-manager/risk-engine.js",
+      "sha256": "45ab2bedc86ad3c5403b636c746133b4f45b1686ce15e9a0a6fea30b95011561",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/risk-manager/risk-snapshot.js",
+      "sha256": "49bdcb9047041adbbcd938c6156476b7f51a147744897d076cd7cdad5166005d",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/risk-manager/session-service.js",
+      "sha256": "03620c00f8d3595edf953a6136c39901a768fd60db454151823726b6d46e3359",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/risk-manager/storage/local-storage-adapter.js",
+      "sha256": "fbe745d27a10d5e999b45e941b77ca72c02511bb543ea527143032379cdb1547",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    },
+    {
+      "file": "src/risk-manager/utils.js",
+      "sha256": "c3767fa5c5dac69d02ec2af996c0909bbc5ac50634147d9f4ea74c23a2f64ce7",
+      "baseEqualsOriginalEqualsRemediation": true,
+      "originalManifestHashMatches": true
+    }
+  ],
+  "protectedFileCount": 48,
+  "srcModelCompleteByteIdenticalToOriginal": true,
+  "expectationPanelOutsideHistoryHtmlByteIdenticalToOriginal": true,
+  "panelOutsideHistoryHtmlSha256": "cf10867951370c012d186896539f962d7047e37be7913ca03e3c3f7eb3f730ce",
+  "originalRefinementCssEntirePrefixPreserved": true,
+  "originalUnifiedPersistenceAndMigrationByteIdentical": true
+}

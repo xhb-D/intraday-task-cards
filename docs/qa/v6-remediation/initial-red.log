@@ -1,0 +1,408 @@
+TAP version 13
+# Subtest: F01: ended record cannot be hard-deleted, including its complete manual history
+not ok 1 - F01: ended record cannot be hard-deleted, including its complete manual history
+  ---
+  duration_ms: 7.521208
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:15:1'
+  failureType: 'testCodeFailure'
+  error: 'Missing expected exception.'
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+    code: 'V6_RECORD_DELETE_FORBIDDEN'
+  operator: 'throws'
+  stack: |-
+    unchanged (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:13:71)
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:17:3)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.start (node:internal/test_runner/test:944:17)
+    startSubtestAfterBootstrap (node:internal/test_runner/harness:296:17)
+  ...
+# Subtest: F02: original bof permits one append-only management switch to SPB
+not ok 2 - F02: original bof permits one append-only management switch to SPB
+  ---
+  duration_ms: 0.332166
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:19:35'
+  failureType: 'testCodeFailure'
+  error: 'v.switchBofManagement is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:21:5)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async startSubtestAfterBootstrap (node:internal/test_runner/harness:296:3)
+  ...
+# Subtest: F02: original bof permits one append-only management switch to CPB
+not ok 3 - F02: original bof permits one append-only management switch to CPB
+  ---
+  duration_ms: 0.284375
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:19:35'
+  failureType: 'testCodeFailure'
+  error: 'v.switchBofManagement is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:21:5)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "=1+1"
+not ok 4 - F03: CSV text is safe and original identity recoverable "=1+1"
+  ---
+  duration_ms: 0.562791
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    '=1+1'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '=1+1'
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "+1+1"
+not ok 5 - F03: CSV text is safe and original identity recoverable "+1+1"
+  ---
+  duration_ms: 0.332209
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    '+1+1'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '+1+1'
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "-1+1"
+not ok 6 - F03: CSV text is safe and original identity recoverable "-1+1"
+  ---
+  duration_ms: 0.220542
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    '-1+1'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '-1+1'
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "@SUM(1,1)"
+not ok 7 - F03: CSV text is safe and original identity recoverable "@SUM(1,1)"
+  ---
+  duration_ms: 0.219833
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    '@SUM(1,1)'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '@SUM(1,1)'
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "\\t=1+1"
+not ok 8 - F03: CSV text is safe and original identity recoverable "\\t=1+1"
+  ---
+  duration_ms: 0.395084
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    '\t=1+1'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '\t=1+1'
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "\\r@SUM(1,1)"
+not ok 9 - F03: CSV text is safe and original identity recoverable "\\r@SUM(1,1)"
+  ---
+  duration_ms: 0.3715
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: 'INVALID_LINE_ENDING: row 2, field csv'
+  code: 'INVALID_LINE_ENDING'
+  stack: |-
+    validationError (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/src/exit-research/csv.js:3:24)
+    parseCsv (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/src/exit-research/csv.js:21:60)
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:28:98)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "\\n+1+1"
+not ok 10 - F03: CSV text is safe and original identity recoverable "\\n+1+1"
+  ---
+  duration_ms: 0.3885
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    '\n+1+1'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: |-
+
+    +1+1
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "\\u0000=1+1"
+not ok 11 - F03: CSV text is safe and original identity recoverable "\\u0000=1+1"
+  ---
+  duration_ms: 0.242916
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    '\x00=1+1'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '\x00=1+1'
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "﻿=1+1"
+not ok 12 - F03: CSV text is safe and original identity recoverable "﻿=1+1"
+  ---
+  duration_ms: 0.350333
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    '﻿=1+1'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: '﻿=1+1'
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable " =1+1"
+not ok 13 - F03: CSV text is safe and original identity recoverable " =1+1"
+  ---
+  duration_ms: 0.235292
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    ' =1+1'
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: ' =1+1'
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "'original"
+not ok 14 - F03: CSV text is safe and original identity recoverable "'original"
+  ---
+  duration_ms: 0.206958
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: |-
+    The input was expected to not match the regular expression /^[=+\-@\u0000-\u0020\u007f-\u009f\ufeff']/u. Input:
+
+    "'original"
+
+  code: 'ERR_ASSERTION'
+  name: 'AssertionError'
+  expected:
+  actual: "'original"
+  operator: 'doesNotMatch'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:29:10)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "csv-text:original"
+not ok 15 - F03: CSV text is safe and original identity recoverable "csv-text:original"
+  ---
+  duration_ms: 0.194667
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: 'adapter.decodeDecisionCsvText is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:30:24)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F03: CSV text is safe and original identity recoverable "逗号,\\"换行\\n身份"
+not ok 16 - F03: CSV text is safe and original identity recoverable "逗号,\\"换行\\n身份"
+  ---
+  duration_ms: 0.4405
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:27:163'
+  failureType: 'testCodeFailure'
+  error: 'adapter.decodeDecisionCsvText is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:30:24)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+# Subtest: F04: equal-millisecond facts appear between before/holding/post-close events, without rewriting truth
+not ok 17 - F04: equal-millisecond facts appear between before/holding/post-close events, without rewriting truth
+  ---
+  duration_ms: 1.185458
+  type: 'test'
+  location: '/Users/hongchujun/Documents/ChatGPT/日内交易卡片/test/v6-remediation.test.js:32:1'
+  failureType: 'testCodeFailure'
+  error: 'decisions.manualDecisionTimeline is not a function'
+  code: 'ERR_TEST_FAILURE'
+  name: 'TypeError'
+  stack: |-
+    TestContext.<anonymous> (file:///Users/hongchujun/Documents/ChatGPT/%E6%97%A5%E5%86%85%E4%BA%A4%E6%98%93%E5%8D%A1%E7%89%87/test/v6-remediation.test.js:34:54)
+    Test.runInAsyncScope (node:async_hooks:214:14)
+    Test.run (node:internal/test_runner/test:1047:25)
+    Test.processPendingSubtests (node:internal/test_runner/test:744:18)
+    Test.postRun (node:internal/test_runner/test:1173:19)
+    Test.run (node:internal/test_runner/test:1101:12)
+    async Test.processPendingSubtests (node:internal/test_runner/test:744:7)
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 0
+# fail 17
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 73.88725

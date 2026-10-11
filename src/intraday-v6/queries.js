@@ -1,4 +1,4 @@
-import { ORDER } from '../model.js';
+import { ORDER, SETUP_LABELS } from '../model.js';
 
 export function assertSymbol(symbol) {
   if (!ORDER.includes(symbol)) throw Object.assign(new Error('未知品种'), { code: 'V6_SYMBOL_INVALID', path: 'symbol' });
@@ -29,4 +29,11 @@ export function effectiveDirectionForSymbol(state, symbol) {
 
 export function recordLifecycleState(record) {
   return record.endedAt !== null ? 'ended' : record.enteredAt !== null ? 'position' : record.attention;
+}
+
+export function archivedRecords(state, query = '') {
+  const needle = String(query).trim().toLocaleLowerCase();
+  return state.records.filter(record => record.endedAt !== null && (!needle ||
+    [record.id,record.symbol,record.type,SETUP_LABELS[record.type],record.direction,record.reason,JSON.stringify(record.researchCapture.manualEvents)].join(' ').toLocaleLowerCase().includes(needle)))
+    .sort((a,b) => b.endedAt - a.endedAt || b.registeredAt - a.registeredAt || compareId(a.id,b.id));
 }

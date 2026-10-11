@@ -1,0 +1,608 @@
+{
+  "app": "trading-control-center",
+  "schemaVersion": 2,
+  "savedAt": 1791717907165,
+  "timezone": "Asia/Shanghai",
+  "revision": 3,
+  "sections": {
+    "intraday": {
+      "app": "intraday-task-cards",
+      "schemaVersion": 6,
+      "savedAt": 1791717907164,
+      "state": {
+        "schemaVersion": 6,
+        "sequence": 6,
+        "revision": 34,
+        "lastSavedAt": 1791717906929,
+        "cards": {
+          "GC": {
+            "symbol": "GC",
+            "bias": "neutral",
+            "structure3m": "breakout_strong_pullback_weak",
+            "needsStructureReview": false,
+            "direction": "long",
+            "idleSince": 1791717907163
+          },
+          "CL": {
+            "symbol": "CL",
+            "bias": "neutral",
+            "structure3m": "breakout_strong_pullback_weak",
+            "needsStructureReview": false,
+            "direction": "long",
+            "idleSince": 1791714304037
+          },
+          "ES": {
+            "symbol": "ES",
+            "bias": "neutral",
+            "structure3m": "breakout_strong_pullback_weak",
+            "needsStructureReview": false,
+            "direction": "long",
+            "idleSince": 1791714304037
+          }
+        },
+        "records": [
+          {
+            "id": "op-1-mv3ofoyt",
+            "symbol": "GC",
+            "direction": "long",
+            "type": "bof",
+            "zone": null,
+            "createdAt": 1791714304037,
+            "registeredAt": 1791714304037,
+            "biasAtRegistration": "neutral",
+            "structure3mAtRegistration": "breakout_strong_pullback_weak",
+            "invalidReason": null,
+            "migrationReason": null,
+            "enteredAt": 1791714304037,
+            "endedAt": 1791717907163,
+            "reason": "closed",
+            "attention": "wait",
+            "stageSince": 1791714304037,
+            "stages": [
+              {
+                "state": "wait",
+                "start": 1791714304037,
+                "end": 1791714304037
+              },
+              {
+                "state": "position",
+                "start": 1791714304037,
+                "end": 1791717907163
+              }
+            ],
+            "researchCapture": {
+              "eventSequence": 3,
+              "manualEvents": [
+                {
+                  "id": "op-1-mv3ofoyt:manual-1",
+                  "type": "ENTRY_EXPECTATION_RECORDED",
+                  "recordedAt": 1791714304037,
+                  "effectiveAt": 1791714304037,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-1-mv3ofoyt",
+                    "submissionId": "entry",
+                    "timing": "before_html_entry",
+                    "htmlEnteredAtAtRecording": null,
+                    "htmlEndedAtAtRecording": null,
+                    "content": {
+                      "path": "GC 事前预期",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    }
+                  }
+                },
+                {
+                  "id": "op-1-mv3ofoyt:manual-2",
+                  "type": "INITIAL_STOP_RECORDED",
+                  "recordedAt": 1791714304037,
+                  "effectiveAt": 1791714304037,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "stopPrice": 90
+                  }
+                },
+                {
+                  "id": "op-1-mv3ofoyt:manual-3",
+                  "type": "BOF_MANAGEMENT_SWITCH_RECORDED",
+                  "recordedAt": 1791717906779,
+                  "effectiveAt": 1791717906779,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-1-mv3ofoyt",
+                    "submissionId": "1c9c9ccf-aa61-4526-88ae-33ba9e55af7f",
+                    "timing": "after_html_entry",
+                    "htmlEnteredAtAtRecording": 1791714304037,
+                    "htmlEndedAtAtRecording": null,
+                    "from": "BOF",
+                    "to": "SPB"
+                  }
+                }
+              ]
+            },
+            "exitCapture": {
+              "kind": "UNKNOWN",
+              "groupId": null
+            }
+          },
+          {
+            "id": "op-2-mv3ofoyt",
+            "symbol": "CL",
+            "direction": "long",
+            "type": "bof",
+            "zone": null,
+            "createdAt": 1791714304037,
+            "registeredAt": 1791714304037,
+            "biasAtRegistration": "neutral",
+            "structure3mAtRegistration": "breakout_strong_pullback_weak",
+            "invalidReason": null,
+            "migrationReason": null,
+            "enteredAt": 1791714304037,
+            "endedAt": null,
+            "reason": null,
+            "attention": "wait",
+            "stageSince": 1791714304037,
+            "stages": [
+              {
+                "state": "wait",
+                "start": 1791714304037,
+                "end": 1791714304037
+              },
+              {
+                "state": "position",
+                "start": 1791714304037,
+                "end": null
+              }
+            ],
+            "researchCapture": {
+              "eventSequence": 3,
+              "manualEvents": [
+                {
+                  "id": "op-2-mv3ofoyt:manual-1",
+                  "type": "ENTRY_EXPECTATION_RECORDED",
+                  "recordedAt": 1791714304037,
+                  "effectiveAt": 1791714304037,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-2-mv3ofoyt",
+                    "submissionId": "entry",
+                    "timing": "before_html_entry",
+                    "htmlEnteredAtAtRecording": null,
+                    "htmlEndedAtAtRecording": null,
+                    "content": {
+                      "path": "CL 事前预期",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    }
+                  }
+                },
+                {
+                  "id": "op-2-mv3ofoyt:manual-2",
+                  "type": "INITIAL_STOP_RECORDED",
+                  "recordedAt": 1791714304037,
+                  "effectiveAt": 1791714304037,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "stopPrice": 90
+                  }
+                },
+                {
+                  "id": "op-2-mv3ofoyt:manual-3",
+                  "type": "BOF_MANAGEMENT_SWITCH_RECORDED",
+                  "recordedAt": 1791717906929,
+                  "effectiveAt": 1791717906929,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-2-mv3ofoyt",
+                    "submissionId": "b6cd2f3e-80c3-4221-a36c-a40e3d43b045",
+                    "timing": "after_html_entry",
+                    "htmlEnteredAtAtRecording": 1791714304037,
+                    "htmlEndedAtAtRecording": null,
+                    "from": "BOF",
+                    "to": "CPB"
+                  }
+                }
+              ]
+            },
+            "exitCapture": null
+          },
+          {
+            "id": "op-3-mv3ofoyt",
+            "symbol": "ES",
+            "direction": "long",
+            "type": "spb",
+            "zone": null,
+            "createdAt": 1791714304037,
+            "registeredAt": 1791714304037,
+            "biasAtRegistration": "neutral",
+            "structure3mAtRegistration": "breakout_strong_pullback_weak",
+            "invalidReason": null,
+            "migrationReason": null,
+            "enteredAt": 1791714304037,
+            "endedAt": null,
+            "reason": null,
+            "attention": "wait",
+            "stageSince": 1791714304037,
+            "stages": [
+              {
+                "state": "wait",
+                "start": 1791714304037,
+                "end": 1791714304037
+              },
+              {
+                "state": "position",
+                "start": 1791714304037,
+                "end": null
+              }
+            ],
+            "researchCapture": {
+              "eventSequence": 2,
+              "manualEvents": [
+                {
+                  "id": "op-3-mv3ofoyt:manual-1",
+                  "type": "ENTRY_EXPECTATION_RECORDED",
+                  "recordedAt": 1791714304037,
+                  "effectiveAt": 1791714304037,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-3-mv3ofoyt",
+                    "submissionId": "entry",
+                    "timing": "before_html_entry",
+                    "htmlEnteredAtAtRecording": null,
+                    "htmlEndedAtAtRecording": null,
+                    "content": {
+                      "path": "ES 事前预期",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    }
+                  }
+                },
+                {
+                  "id": "op-3-mv3ofoyt:manual-2",
+                  "type": "INITIAL_STOP_RECORDED",
+                  "recordedAt": 1791714304037,
+                  "effectiveAt": 1791714304037,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "stopPrice": 90
+                  }
+                }
+              ]
+            },
+            "exitCapture": null
+          },
+          {
+            "id": "op-4-mv3ofoyu",
+            "symbol": "GC",
+            "direction": "long",
+            "type": "cpb",
+            "zone": null,
+            "createdAt": 1791714304038,
+            "registeredAt": 1791714304038,
+            "biasAtRegistration": "neutral",
+            "structure3mAtRegistration": "breakout_strong_pullback_weak",
+            "invalidReason": null,
+            "migrationReason": null,
+            "enteredAt": 1791714304038,
+            "endedAt": 1791714304038,
+            "reason": "closed",
+            "attention": "wait",
+            "stageSince": 1791714304038,
+            "stages": [
+              {
+                "state": "wait",
+                "start": 1791714304038,
+                "end": 1791714304038
+              },
+              {
+                "state": "position",
+                "start": 1791714304038,
+                "end": 1791714304038
+              }
+            ],
+            "researchCapture": {
+              "eventSequence": 4,
+              "manualEvents": [
+                {
+                  "id": "op-4-mv3ofoyu:manual-1",
+                  "type": "ENTRY_EXPECTATION_RECORDED",
+                  "recordedAt": 1791714304038,
+                  "effectiveAt": 1791714304038,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-4-mv3ofoyu",
+                    "submissionId": "pre",
+                    "timing": "before_html_entry",
+                    "htmlEnteredAtAtRecording": null,
+                    "htmlEndedAtAtRecording": null,
+                    "content": {
+                      "path": "SAME_MS_PRE",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    }
+                  }
+                },
+                {
+                  "id": "op-4-mv3ofoyu:manual-2",
+                  "type": "ENTRY_EXPECTATION_CORRECTED",
+                  "recordedAt": 1791714304038,
+                  "effectiveAt": 1791714304038,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-4-mv3ofoyu",
+                    "submissionId": "after",
+                    "timing": "after_html_entry",
+                    "htmlEnteredAtAtRecording": 1791714304038,
+                    "htmlEndedAtAtRecording": null,
+                    "originalEventId": "op-4-mv3ofoyu:manual-1",
+                    "previousEventId": "op-4-mv3ofoyu:manual-1",
+                    "originalRecordedAt": 1791714304038,
+                    "originalContent": {
+                      "path": "SAME_MS_PRE",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    },
+                    "previousContent": {
+                      "path": "SAME_MS_PRE",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    },
+                    "content": {
+                      "path": "SAME_MS_AFTER",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    }
+                  }
+                },
+                {
+                  "id": "op-4-mv3ofoyu:manual-3",
+                  "type": "HOLDING_EXPECTATION_UPDATED",
+                  "recordedAt": 1791714304038,
+                  "effectiveAt": 1791714304038,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-4-mv3ofoyu",
+                    "submissionId": "hold",
+                    "timing": "after_html_entry",
+                    "htmlEnteredAtAtRecording": 1791714304038,
+                    "htmlEndedAtAtRecording": null,
+                    "status": "met",
+                    "reason": "SAME_MS_HOLD"
+                  }
+                },
+                {
+                  "id": "op-4-mv3ofoyu:manual-4",
+                  "type": "ENTRY_EXPECTATION_CORRECTED",
+                  "recordedAt": 1791714304038,
+                  "effectiveAt": 1791714304038,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-4-mv3ofoyu",
+                    "submissionId": "review",
+                    "timing": "post_close_review",
+                    "htmlEnteredAtAtRecording": 1791714304038,
+                    "htmlEndedAtAtRecording": 1791714304038,
+                    "originalEventId": "op-4-mv3ofoyu:manual-1",
+                    "previousEventId": "op-4-mv3ofoyu:manual-2",
+                    "originalRecordedAt": 1791714304038,
+                    "originalContent": {
+                      "path": "SAME_MS_PRE",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    },
+                    "previousContent": {
+                      "path": "SAME_MS_AFTER",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    },
+                    "content": {
+                      "path": "SAME_MS_REVIEW",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    }
+                  }
+                }
+              ]
+            },
+            "exitCapture": {
+              "kind": "UNKNOWN",
+              "groupId": null
+            }
+          },
+          {
+            "id": "op-5-mv3ofoyv",
+            "symbol": "ES",
+            "direction": "long",
+            "type": "cpb",
+            "zone": null,
+            "createdAt": 1791714304039,
+            "registeredAt": 1791714304039,
+            "biasAtRegistration": "neutral",
+            "structure3mAtRegistration": "breakout_strong_pullback_weak",
+            "invalidReason": null,
+            "migrationReason": null,
+            "enteredAt": null,
+            "endedAt": 1791714304039,
+            "reason": "canceled",
+            "attention": "wait",
+            "stageSince": 1791714304039,
+            "stages": [
+              {
+                "state": "wait",
+                "start": 1791714304039,
+                "end": 1791714304039
+              }
+            ],
+            "researchCapture": {
+              "eventSequence": 1,
+              "manualEvents": [
+                {
+                  "id": "op-5-mv3ofoyv:manual-1",
+                  "type": "ENTRY_EXPECTATION_RECORDED",
+                  "recordedAt": 1791714304039,
+                  "effectiveAt": 1791714304039,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-5-mv3ofoyv",
+                    "submissionId": "e",
+                    "timing": "before_html_entry",
+                    "htmlEnteredAtAtRecording": null,
+                    "htmlEndedAtAtRecording": null,
+                    "content": {
+                      "path": "canceled 原始事实",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    }
+                  }
+                }
+              ]
+            },
+            "exitCapture": null
+          },
+          {
+            "id": "op-6-mv3ofoyv",
+            "symbol": "CL",
+            "direction": "long",
+            "type": "cpb",
+            "zone": null,
+            "createdAt": 1791714304039,
+            "registeredAt": 1791714304039,
+            "biasAtRegistration": "neutral",
+            "structure3mAtRegistration": "breakout_strong_pullback_weak",
+            "invalidReason": null,
+            "migrationReason": null,
+            "enteredAt": null,
+            "endedAt": 1791714304039,
+            "reason": "invalid",
+            "attention": "wait",
+            "stageSince": 1791714304039,
+            "stages": [
+              {
+                "state": "wait",
+                "start": 1791714304039,
+                "end": 1791714304039
+              }
+            ],
+            "researchCapture": {
+              "eventSequence": 1,
+              "manualEvents": [
+                {
+                  "id": "op-6-mv3ofoyv:manual-1",
+                  "type": "ENTRY_EXPECTATION_RECORDED",
+                  "recordedAt": 1791714304039,
+                  "effectiveAt": 1791714304039,
+                  "source": "manual_intraday",
+                  "payload": {
+                    "recordId": "op-6-mv3ofoyv",
+                    "submissionId": "e",
+                    "timing": "before_html_entry",
+                    "htmlEnteredAtAtRecording": null,
+                    "htmlEndedAtAtRecording": null,
+                    "content": {
+                      "path": "invalid 原始事实",
+                      "keyLevels": "前高 / 缺口",
+                      "focus": "关注 MTF 行为"
+                    }
+                  }
+                }
+              ]
+            },
+            "exitCapture": null
+          },
+          {
+            "id": "\t=1+1",
+            "symbol": "ES",
+            "direction": "long",
+            "type": "cpb",
+            "zone": null,
+            "createdAt": 1791714304039,
+            "registeredAt": 1791714304039,
+            "biasAtRegistration": "neutral",
+            "structure3mAtRegistration": "breakout_strong_pullback_weak",
+            "invalidReason": null,
+            "migrationReason": null,
+            "enteredAt": null,
+            "endedAt": 1791714304039,
+            "reason": "canceled",
+            "attention": "wait",
+            "stageSince": 1791714304039,
+            "stages": [
+              {
+                "state": "wait",
+                "start": 1791714304039,
+                "end": 1791714304039
+              }
+            ],
+            "researchCapture": {
+              "eventSequence": 0,
+              "manualEvents": []
+            },
+            "exitCapture": null
+          }
+        ],
+        "migrationAudit": []
+      },
+      "timezone": "Asia/Shanghai"
+    },
+    "riskManager": {
+      "schemaVersion": 2,
+      "selectedAccountId": null,
+      "accounts": []
+    },
+    "chime": {
+      "schemaVersion": 1,
+      "slots": [
+        {
+          "slotId": "slot-1",
+          "enabled": true,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-2",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-3",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-4",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        },
+        {
+          "slotId": "slot-5",
+          "enabled": false,
+          "paused": false,
+          "preset": "5",
+          "minutes": 5,
+          "earlySeconds": 30
+        }
+      ],
+      "voiceEnabled": true,
+      "selectedVoiceURI": "",
+      "notifyEnabled": false,
+      "legacyImport": {
+        "status": "defaults",
+        "sourceVersion": null
+      }
+    }
+  },
+  "preferences": {
+    "appearance": "dark"
+  }
+}

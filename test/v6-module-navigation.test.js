@@ -10,16 +10,13 @@ test('Module navigation: header title is home entry; centralized nav is absent; 
   for(const value of ['GC / CL / ES','本地记录 V6','appearance-select','save-status','data-tools'])assert.ok(header.includes(value));
   assert.match(read('appearance.css'),/\.home-title-link\{display:block;color:inherit;text-decoration:none\}/);
 });
-test('Module navigation: research entry is outside summary, visible with closed history; original Risk/Chime entries reused',()=>{
-  const region=html.match(/<section class="history-module"[^]*?<\/details><\/section>/)[0];
-  assert.match(region,/class="history-module-nav"><a class="module-link" href="#\/exit-research" aria-label="进入 Exit Research"><span class="module-link-full">进入 Exit Research →<\/span><span class="module-link-short" aria-hidden="true">研究 →<\/span><\/a>/);
-  assert.doesNotMatch(region.match(/<summary>[^]*?<\/summary>/)[0],/<a\b/);
-  assert.ok(region.indexOf('history-module-nav')<region.indexOf('<details'));
+test('Module navigation: archive and research reuse independent entries; ended list is absent from home',()=>{
+  const region=html.match(/<section class="history-module archive-entry"[^]*?<\/section>/)[0];
+  assert.match(region,/href="#\/history"/);assert.match(region,/href="#\/exit-research"/);assert.doesNotMatch(region,/<details|<table|data-delete/);
   assert.match(risk,/entry\.href = '#\/risk'; entry\.textContent = '进入 Trading Risk Manager →'/);
-  assert.match(view,/settingsLink\.href = '#\/chime'/);
-  assert.equal((html.match(/id="risk-dashboard-host"/g)||[]).length,1);
+  assert.match(view,/settingsLink\.href = '#\/chime'/);assert.equal((html.match(/id="risk-dashboard-host"/g)||[]).length,1);
 });
-for(const route of ['risk','exit-research','chime','error'])test(`Module navigation: ${route} has an explicit hash return outside dynamic host`,()=>{
+for(const route of ['risk','exit-research','chime','history','error'])test(`Module navigation: ${route} has an explicit hash return outside dynamic host`,()=>{
   const region=html.match(new RegExp(`<section data-route-view="${route}"[^]*?<\\/section>`))[0];
   assert.match(region,/href="#\/home"[^>]*>(?:← )?返回日内交易状态卡<\/a>/);
   if(route==='exit-research'||route==='chime')assert.ok(region.indexOf('返回日内交易状态卡')<region.indexOf('-host'));

@@ -89,8 +89,8 @@ test('Setup assets: CSS and bundle use the same new version to avoid stale Setup
   const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
   const cssVersion=html.match(/refinement\.css\?v=([^"\s]+)/)?.[1];
   const bundleVersion=html.match(/dist\/app\.bundle\.js\?v=([^"\s]+)/)?.[1];
-  assert.equal(cssVersion,'v6-setup-expectations-20261011');assert.equal(bundleVersion,cssVersion);
+  assert.equal(cssVersion,'v6-expectations-remediation-20261011');assert.equal(bundleVersion,cssVersion);
   assert.doesNotMatch(html,/选择 MTF PB、MTF BOF/);
-  assert.ok(html.includes('选择 SPB、CPB 或 BOF 后'));
+  assert.ok(html.includes('历史档案 →'));assert.doesNotMatch(html,/今日机会记录/);
   assert.doesNotMatch(html,/选择 MTF PB 或 HTF BOF/);
 });

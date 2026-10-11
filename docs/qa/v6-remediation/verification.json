@@ -1,0 +1,173 @@
+{
+  "status": "LOCAL_CANDIDATE_READY_FOR_INDEPENDENT_REVIEW",
+  "originalCandidate": "eb80e9ace0784a40beacef2e870e6e821b026f58",
+  "base": "ef54f29e48d1de7e2f7a87840a6f0aa3cd2df72e",
+  "branch": "codex/v6-setup-expectations-remediation",
+  "candidateSha": "Exact SHA in delivery message; this manifest is committed with the candidate.",
+  "sourceAndTestFingerprintSha256": "ac237b47d3afc5aa69ebe769cd142c7966df643e583c0d4b655cbda7b0ec0873",
+  "sourceAndTestFiles": [
+    {
+      "file": "dist/app.bundle.js",
+      "sha256": "a534291399fa6dafb079386b29e7060292c1190b8f4892629285d678068d82ee"
+    },
+    {
+      "file": "index.html",
+      "sha256": "49c6be81aa244a43ec6e01001b5ee5b7b297337cd614222793f500a610de950e"
+    },
+    {
+      "file": "refinement.css",
+      "sha256": "5029acd978317e3581871e4139e81033517d066dc7cd63cd70872ab57c2bc974"
+    },
+    {
+      "file": "scripts/build.mjs",
+      "sha256": "65d9d02427a121b557b87a3518ae0c492079944e61939dd8080b20fbf213a18a"
+    },
+    {
+      "file": "scripts/qa-v6-expectations.mjs",
+      "sha256": "08864f2c287e1ff48c1eae7f9a3c7029ce7da6075ff2573d3728cb7a4720dca4"
+    },
+    {
+      "file": "scripts/qa-v6-remediation.mjs",
+      "sha256": "a07be038f83a5e95fffcfec4d6e1bb458d79bb2cb0e425b19bce2bf079838a84"
+    },
+    {
+      "file": "scripts/verify-v6-recovery.mjs",
+      "sha256": "66323d932c93ee8cb8833e9ecb2ec45abfcf0c2801c5ecab1ac2481ba37f1045"
+    },
+    {
+      "file": "src/app.js",
+      "sha256": "d2feeacda1fe96a341e1f2e2b9376dc1c0de4c06083cc665a355491ac69c1e8e"
+    },
+    {
+      "file": "src/capture-ui.js",
+      "sha256": "6420abfb19cec1ac13c6df542920bcc50010f9f9a7d0042c0d99f4519b480b58"
+    },
+    {
+      "file": "src/exit-research/ui/capture-adapter.js",
+      "sha256": "d1df804b8ea8c133137e01a0d54bc95f4c8ce3e5c99687849eb0af26b51cbf94"
+    },
+    {
+      "file": "src/exit-research/ui/render.js",
+      "sha256": "648993e127e8b6dca396727a1925ed3b5b29746345563b8ca6b44b2497fe127d"
+    },
+    {
+      "file": "src/exit-research/ui/view-model.js",
+      "sha256": "c2c5f85b47408f349060d5909bf477712f430dc92e1e2a2c67ce90ac04e70756"
+    },
+    {
+      "file": "src/expectation-panel.js",
+      "sha256": "306adfcb593c496df6813947939d71490dc8dbfcce47db4de5dc50ff63362472"
+    },
+    {
+      "file": "src/history-archive.js",
+      "sha256": "20a10b1f3b43afa9a52167a3508a6bc659e19dc974621e08ce260bb976dc28c9"
+    },
+    {
+      "file": "src/intraday-v6/expectations.js",
+      "sha256": "545db4637242e35cbdca4486374edfb1e9e3f506f236ddf00953ff8363120b05"
+    },
+    {
+      "file": "src/intraday-v6/index.js",
+      "sha256": "9bd17524d1ec892e447dc5318c094231685a283b6da2ed06820a674a74b31cc7"
+    },
+    {
+      "file": "src/intraday-v6/model.js",
+      "sha256": "2d35bb14ace03d442ae249154be568acc960afc02f7c3a4014ba804d89d9f8d1"
+    },
+    {
+      "file": "src/intraday-v6/queries.js",
+      "sha256": "f2a2ff2d6683402c329dd6988731d197933834406cde1eb2e98f0b7b48df756f"
+    },
+    {
+      "file": "src/router.js",
+      "sha256": "62d89b7781257dc46d62c966fc5e91311d5bdfeac9d859e8f22c52e349498567"
+    },
+    {
+      "file": "test/bundle.test.js",
+      "sha256": "9ec8d59502e4e39dc70d1f6506b7a3d95fe8af38d38ba0ab4f89fc58a9745356"
+    },
+    {
+      "file": "test/conflict.test.js",
+      "sha256": "13242f537219d9e0973cb0ab34b97b1c4e7a82a382c106351382b87a6f0c2234"
+    },
+    {
+      "file": "test/multi-trade-v6-capture.test.js",
+      "sha256": "2cd42d94c84708f004407cc82398182dafc1eca7e10d3a6b32a700f68fde6d2e"
+    },
+    {
+      "file": "test/multi-trade-v6-model.test.js",
+      "sha256": "b9ecc73da897da8fff8f5aae9f98807f17a147d99b47bef0eb49cc42a731c917"
+    },
+    {
+      "file": "test/v6-home-layout.test.js",
+      "sha256": "d9b6b961ddcc0774bf449f4fa50e827e23125c17837714fba9ab3fb707411312"
+    },
+    {
+      "file": "test/v6-module-navigation.test.js",
+      "sha256": "143cf72e81ad4106345829c08feca0221f65d9ad1a1fcc5d759c08f886af3b38"
+    },
+    {
+      "file": "test/v6-remediation.test.js",
+      "sha256": "3ca32477fcb6ca0dc650c36df072f20806e3697b9a961dcdefb09d512e73771a"
+    },
+    {
+      "file": "test/v6-setup-simplification.test.js",
+      "sha256": "dc9d011fb30e4cdf9a7770da8fb734727fac6a226f450abba49c62fa5ddce353"
+    }
+  ],
+  "build": "PASS",
+  "bundleSyntax": "PASS",
+  "qaScriptsSyntax": "PASS",
+  "recoveryVerifierSyntax": "PASS",
+  "fullTests": {
+    "tests": 1175,
+    "pass": 1175,
+    "fail": 0,
+    "skip": 0,
+    "newRemediationTests": 60,
+    "newRouteTest": 1,
+    "initialRegressionRedFailures": 17,
+    "log": "automated-tests.log"
+  },
+  "browser": {
+    "name": "Chrome",
+    "version": "154.0.8037.99",
+    "headless": true,
+    "syntheticOnly": true,
+    "regressionGroups": 26,
+    "targetedGroups": 20,
+    "totalGroups": 46,
+    "screenshots": 60,
+    "unexpectedConsoleErrorsOrWarnings": 0,
+    "expectedInjectedFaultDiagnostics": 4,
+    "regression": "regression/results.json",
+    "targeted": "targeted/results.json"
+  },
+  "frozen": {
+    "protectedFiles": 48,
+    "allBaseOriginalAndCurrentEqual": true,
+    "originalPanelOutsideHistoryHtmlByteIdentical": true,
+    "originalCssEntirePrefixPreserved": true,
+    "srcModelWholeFileUnchanged": true
+  },
+  "schema": {
+    "intraday": 6,
+    "unified": 2,
+    "migrationAdded": false,
+    "compatibility": "new reads old; original candidate rejects new management event without raw mutation; Base rejects new expectations without raw mutation"
+  },
+  "release": {
+    "push": false,
+    "merge": false,
+    "deploy": false,
+    "frozen": false
+  },
+  "unverified": [
+    "Real iOS/Android OS keyboard, touch and safe area",
+    "Physical monitor removal and browser toolbar native zoom",
+    "Spreadsheet formula execution",
+    "Production data and hosted deployment acceptance"
+  ],
+  "gitDiffCheck": "PASS for product; full staged/committed diff uses git -c core.whitespace=blank-at-eol,blank-at-eof,space-before-tab,cr-at-eol diff --check to preserve exact downloaded CSV CRLF.",
+  "logNormalization": "Trim trailing whitespace and final extra blank lines only."
+}

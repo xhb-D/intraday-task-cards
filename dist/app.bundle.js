@@ -1803,6 +1803,12 @@ const EXPECTATION_LIMIT = 200;
 const HOLDING_EXPECTATION_STATES = Object.freeze({ observing: '待观察', met: '符合预期', exceeded: '超出预期', underperformed: '不及预期' });
 const EXPECTATION_EVENT_TYPES = Object.freeze(['ENTRY_EXPECTATION_RECORDED', 'ENTRY_EXPECTATION_CORRECTED', 'HOLDING_EXPECTATION_UPDATED']);
 const isExpectationEvent = event => EXPECTATION_EVENT_TYPES.includes(event?.type);
+const MANAGEMENT_SWITCH_EVENT = 'BOF_MANAGEMENT_SWITCH_RECORDED';
+const isDecisionEvent = event => isExpectationEvent(event) || event?.type === MANAGEMENT_SWITCH_EVENT;
+function currentManagement(record) {
+  if (!['spb','cpb','bof'].includes(record?.type)) return null;
+  return record.researchCapture.manualEvents.find(e => e.type === MANAGEMENT_SWITCH_EVENT)?.payload.to || record.type.toUpperCase();
+}
 const keys = (o, names) => o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length === names.length && names.every(k => Object.hasOwn(o, k));
 const time = n => Number.isSafeInteger(n) && n >= 0;
 const reject = () => { throw Object.assign(new Error('预期事件链无效'), { code: 'V6_EXPECTATION_INVALID', path: 'researchCapture' }); };
@@ -1839,16 +1845,16 @@ function expectationPayload(record, submissionId, recordedAt) {
 function assertExpectationChain(record) {
   const capture = record.researchCapture;
   if (!keys(capture, ['eventSequence', 'manualEvents']) || !Array.isArray(capture.manualEvents) || capture.eventSequence !== capture.manualEvents.length) reject();
-  let previousTime = record.registeredAt, original = null, current = null;
+  let previousTime = record.registeredAt, original = null, current = null, switched = false;
   const submissions = new Set();
   for (const [index, event] of capture.manualEvents.entries()) {
     if (!keys(event, ['id', 'type', 'recordedAt', 'effectiveAt', 'source', 'payload']) || event.id !== `${record.id}:manual-${index + 1}` ||
         event.source !== 'manual_intraday' || !time(event.recordedAt) || !time(event.effectiveAt) || event.recordedAt < previousTime || event.effectiveAt > event.recordedAt) reject();
     previousTime = event.recordedAt;
-    if (!isExpectationEvent(event)) continue; // frozen legacy validator rejects unknown types
+    if (!isDecisionEvent(event)) continue; // frozen legacy validator rejects unknown types
     const p = event.payload, common = ['recordId', 'submissionId', 'timing', 'htmlEnteredAtAtRecording', 'htmlEndedAtAtRecording'];
     const fields = event.type === 'ENTRY_EXPECTATION_CORRECTED' ? ['content', 'originalEventId', 'previousEventId', 'originalRecordedAt', 'originalContent', 'previousContent'] :
-      event.type === 'ENTRY_EXPECTATION_RECORDED' ? ['content'] : ['status', 'reason'];
+      event.type === 'ENTRY_EXPECTATION_RECORDED' ? ['content'] : event.type === MANAGEMENT_SWITCH_EVENT ? ['from','to'] : ['status', 'reason'];
     if (!keys(p, [...common, ...fields]) || p.recordId !== record.id || typeof p.submissionId !== 'string' || !p.submissionId.trim() || p.submissionId.length > 100 ||
         submissions.has(p.submissionId) || event.effectiveAt !== event.recordedAt || p.timing !== expectationTiming({ enteredAt: p.htmlEnteredAtAtRecording, endedAt: p.htmlEndedAtAtRecording }, event.recordedAt)) reject();
     submissions.add(p.submissionId);
@@ -1857,7 +1863,11 @@ function assertExpectationChain(record) {
       const snapshot = p[field];
       if (snapshot === null ? actual !== null && actual < event.recordedAt : snapshot !== actual || !time(snapshot) || snapshot > event.recordedAt) reject();
     }
-    if (event.type === 'HOLDING_EXPECTATION_UPDATED') {
+    if (event.type === MANAGEMENT_SWITCH_EVENT) {
+      if (record.type !== 'bof' || switched || p.from !== 'BOF' || !['SPB','CPB'].includes(p.to) ||
+          p.htmlEnteredAtAtRecording === null || p.htmlEndedAtAtRecording !== null || p.timing !== 'after_html_entry') reject();
+      switched = true;
+    } else if (event.type === 'HOLDING_EXPECTATION_UPDATED') {
       if (record.enteredAt === null || event.recordedAt < record.enteredAt || record.endedAt !== null && event.recordedAt > record.endedAt || p.htmlEndedAtAtRecording !== null ||
           !Object.hasOwn(HOLDING_EXPECTATION_STATES, p.status) || !text(p.reason)) reject();
     } else {
@@ -1875,7 +1885,7 @@ function assertExpectationChain(record) {
 
 // Compatibility view only: canonical IDs, references and sequence are never changed.
 function legacyCaptureProjection(record) {
-  const manualEvents = structuredClone(record.researchCapture.manualEvents.filter(e => !isExpectationEvent(e)));
+  const manualEvents = structuredClone(record.researchCapture.manualEvents.filter(e => !isDecisionEvent(e)));
   const ids = new Map(manualEvents.map((event, i) => [event.id, `${record.id}:manual-${i + 1}`]));
   for (const event of manualEvents) {
     event.id = ids.get(event.id);
@@ -1885,15 +1895,27 @@ function legacyCaptureProjection(record) {
 }
 
 function manualDecisionReview(record) {
-  return { recordId: record.id, setup: record.type, truthSource: 'manual_intraday', timeBasis: 'HTML_CONFIRMATION_NOT_BROKER_FILL',
+  return { recordId: record.id, setup: record.type, currentManagement: currentManagement(record), truthSource: 'manual_intraday', timeBasis: 'HTML_CONFIRMATION_NOT_BROKER_FILL',
     htmlEnteredAt: record.enteredAt, htmlExitedAt: record.endedAt, entryExpectation: structuredClone(entryExpectation(record)),
     holdingExpectations: structuredClone(holdingExpectationHistory(record)), manualEvents: structuredClone(record.researchCapture.manualEvents) };
 }
 
-return {EXPECTATION_LIMIT,HOLDING_EXPECTATION_STATES,EXPECTATION_EVENT_TYPES,isExpectationEvent,normalizeExpectationContent,expectationTiming,expectationTimingLabel,expectationHistory,entryExpectation,holdingExpectationHistory,currentHoldingExpectation,expectationPayload,assertExpectationChain,legacyCaptureProjection,manualDecisionReview};
+// Display only. Snapshots order HTML facts among events sharing the same millisecond;
+// canonical manual sequence remains the tie-breaker within each phase.
+function manualDecisionTimeline(record) {
+  const phase = event => event.id === 'html-entry' ? 1 : event.id === 'html-exit' ? 3 :
+    event.payload?.htmlEndedAtAtRecording != null || event.payload?.timing === 'post_close_review' ? 4 :
+    event.payload?.htmlEnteredAtAtRecording != null || event.payload?.timing === 'after_html_entry' || !isDecisionEvent(event) ? 2 : 0;
+  const facts = [{ id:'html-entry', recordedAt:record.enteredAt, label:'HTML 入场确认' },
+    { id:'html-exit', recordedAt:record.endedAt, label:'HTML 退出／结束确认' }].filter(e => e.recordedAt !== null);
+  return structuredClone([...record.researchCapture.manualEvents, ...facts])
+    .map((event,index) => ({ event,index })).sort((a,b) => a.event.recordedAt - b.event.recordedAt || phase(a.event) - phase(b.event) || a.index - b.index).map(item => item.event);
+}
+
+return {EXPECTATION_LIMIT,HOLDING_EXPECTATION_STATES,EXPECTATION_EVENT_TYPES,isExpectationEvent,MANAGEMENT_SWITCH_EVENT,isDecisionEvent,currentManagement,normalizeExpectationContent,expectationTiming,expectationTimingLabel,expectationHistory,entryExpectation,holdingExpectationHistory,currentHoldingExpectation,expectationPayload,assertExpectationChain,legacyCaptureProjection,manualDecisionReview,manualDecisionTimeline};
 })();
 v6Modules["src/intraday-v6/queries.js"] = (() => {
-const { ORDER } = v6Modules["src/model.js"];
+const { ORDER, SETUP_LABELS } = v6Modules["src/model.js"];
 function assertSymbol(symbol) {
   if (!ORDER.includes(symbol)) throw Object.assign(new Error('未知品种'), { code: 'V6_SYMBOL_INVALID', path: 'symbol' });
 }
@@ -1925,7 +1947,14 @@ function recordLifecycleState(record) {
   return record.endedAt !== null ? 'ended' : record.enteredAt !== null ? 'position' : record.attention;
 }
 
-return {assertSymbol,activeOpportunityForSymbol,activeTradesForSymbol,effectiveDirectionForSymbol,recordLifecycleState};
+function archivedRecords(state, query = '') {
+  const needle = String(query).trim().toLocaleLowerCase();
+  return state.records.filter(record => record.endedAt !== null && (!needle ||
+    [record.id,record.symbol,record.type,SETUP_LABELS[record.type],record.direction,record.reason,JSON.stringify(record.researchCapture.manualEvents)].join(' ').toLocaleLowerCase().includes(needle)))
+    .sort((a,b) => b.endedAt - a.endedAt || b.registeredAt - a.registeredAt || compareId(a.id,b.id));
+}
+
+return {assertSymbol,activeOpportunityForSymbol,activeTradesForSymbol,effectiveDirectionForSymbol,recordLifecycleState,archivedRecords};
 })();
 v6Modules["src/intraday-v6/validation.js"] = (() => {
 const { assertExpectationChain, legacyCaptureProjection } = v6Modules["src/intraday-v6/expectations.js"];
@@ -2055,7 +2084,7 @@ return {SCHEMA_VERSION,safeTime,own,fail,assertJsonData,singleRecordV5View,asser
 })();
 v6Modules["src/intraday-v6/model.js"] = (() => {
 const { ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, HTF_STRUCTURES_V3, DIRECTIONS, CREATABLE_SETUPS, recordInitialStop: v5RecordInitialStop, correctInitialStop: v5CorrectInitialStop, recordBofToPb: v5RecordBofToPb, revertBofToPb: v5RevertBofToPb } = v6Modules["src/model.js"];
-const { normalizeExpectationContent, entryExpectation, expectationPayload, HOLDING_EXPECTATION_STATES } = v6Modules["src/intraday-v6/expectations.js"];
+const { normalizeExpectationContent, entryExpectation, expectationPayload, HOLDING_EXPECTATION_STATES, MANAGEMENT_SWITCH_EVENT } = v6Modules["src/intraday-v6/expectations.js"];
 const { effectiveBofToPbEvent } = v6Modules["src/model.js"];
 const { activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, assertSymbol } = v6Modules["src/intraday-v6/queries.js"];
 const { assertV6State, SCHEMA_VERSION, safeTime, own, fail, singleRecordV5View } = v6Modules["src/intraday-v6/validation.js"];
@@ -2215,7 +2244,7 @@ function deleteRecord(state, id) {
     const index = next.records.findIndex(record => record.id === id);
     if (index < 0) return { changed: false };
     if (next.records[index].endedAt === null) fail('V6_ACTIVE_RECORD_DELETE_FORBIDDEN', 'opportunityId');
-    next.records.splice(index, 1); return { changed: true };
+    fail('V6_RECORD_DELETE_FORBIDDEN', 'opportunityId');
   });
 }
 
@@ -2257,13 +2286,18 @@ function appendDecision(state, id, type, content, submissionId, recordedAt) {
     const record = recordFor(next, id);
     const prior = record.researchCapture.manualEvents.find(e => e.payload?.submissionId === submissionId);
     if (prior) {
-      const priorContent = type === 'HOLDING_EXPECTATION_UPDATED' ? { status: prior.payload.status, reason: prior.payload.reason } : prior.payload.content;
+      const priorContent = type === 'HOLDING_EXPECTATION_UPDATED' ? { status: prior.payload.status, reason: prior.payload.reason } :
+        type === MANAGEMENT_SWITCH_EVENT ? { from:prior.payload.from, to:prior.payload.to } : prior.payload.content;
       if (prior.type !== type || JSON.stringify(priorContent) !== JSON.stringify(content)) fail('V6_SUBMISSION_CONFLICT', 'submissionId');
       return { changed: false, reason: 'duplicate', event: structuredClone(prior) };
     }
     if (!safeTime(recordedAt) || recordedAt < record.registeredAt || recordedAt < (record.researchCapture.manualEvents.at(-1)?.recordedAt ?? 0)) fail('V6_TIME_INVALID', 'time');
     const payload = { ...expectationPayload(record, submissionId, recordedAt) };
-    if (type === 'HOLDING_EXPECTATION_UPDATED') {
+    if (type === MANAGEMENT_SWITCH_EVENT) {
+      requireTrade(record);
+      if (record.type !== 'bof' || !['SPB','CPB'].includes(content.to) || record.researchCapture.manualEvents.some(e => e.type === MANAGEMENT_SWITCH_EVENT)) fail('V6_MANAGEMENT_SWITCH_FORBIDDEN', 'opportunityId');
+      Object.assign(payload, content);
+    } else if (type === 'HOLDING_EXPECTATION_UPDATED') {
       requireTrade(record);
       if (!Object.hasOwn(HOLDING_EXPECTATION_STATES, content.status) || typeof content.reason !== 'string') fail('V6_EXPECTATION_INVALID', 'status');
       Object.assign(payload, content);
@@ -2293,8 +2327,11 @@ function correctEntryExpectation(state, id, content, submissionId, recordedAt = 
 function updateHoldingExpectation(state, id, status, reason, submissionId, recordedAt = Date.now()) {
   return appendDecision(state, id, 'HOLDING_EXPECTATION_UPDATED', { status, reason: typeof reason === 'string' ? reason.trim() : reason }, submissionId, recordedAt);
 }
+function switchBofManagement(state, id, to, submissionId, recordedAt = Date.now()) {
+  return appendDecision(state, id, MANAGEMENT_SWITCH_EVENT, { from:'BOF',to }, submissionId, recordedAt);
+}
 
-return {isSetupAllowed,createWorkspace,changeBias,changeStructure,changeDirection,chooseSetup,setOpportunityStage,markEntered,endOpportunity,markTradeExited,markAllTradesExited,deleteRecord,recordInitialStop,correctInitialStop,recordBofToPb,revertBofToPb,recordEntryExpectation,correctEntryExpectation,updateHoldingExpectation,assertV6State,SCHEMA_VERSION,effectiveInitialStop,effectiveBofToPbEvent,derivedManagementState,researchSetupClass};
+return {isSetupAllowed,createWorkspace,changeBias,changeStructure,changeDirection,chooseSetup,setOpportunityStage,markEntered,endOpportunity,markTradeExited,markAllTradesExited,deleteRecord,recordInitialStop,correctInitialStop,recordBofToPb,revertBofToPb,recordEntryExpectation,correctEntryExpectation,updateHoldingExpectation,switchBofManagement,assertV6State,SCHEMA_VERSION,effectiveInitialStop,effectiveBofToPbEvent,derivedManagementState,researchSetupClass};
 })();
 v6Modules["src/intraday-v6/migration.js"] = (() => {
 const { ORDER, assertState: assertV5State, recordSnapshot } = v6Modules["src/model.js"];
@@ -2342,13 +2379,13 @@ function migrateV5ToV6(v5State, options) {
 return {migrateV5ToV6};
 })();
 v6Modules["src/intraday-v6/index.js"] = (() => {
-const { entryExpectation, expectationHistory, currentHoldingExpectation, holdingExpectationHistory, expectationTimingLabel, manualDecisionReview, HOLDING_EXPECTATION_STATES, EXPECTATION_LIMIT } = v6Modules["src/intraday-v6/expectations.js"];
-const { isSetupAllowed, createWorkspace, changeBias, changeStructure, changeDirection, chooseSetup, setOpportunityStage, markEntered, endOpportunity, markTradeExited, markAllTradesExited, deleteRecord, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb, recordEntryExpectation, correctEntryExpectation, updateHoldingExpectation } = v6Modules["src/intraday-v6/model.js"];
+const { entryExpectation, expectationHistory, currentHoldingExpectation, holdingExpectationHistory, expectationTimingLabel, manualDecisionReview, HOLDING_EXPECTATION_STATES, EXPECTATION_LIMIT, currentManagement, manualDecisionTimeline } = v6Modules["src/intraday-v6/expectations.js"];
+const { isSetupAllowed, createWorkspace, changeBias, changeStructure, changeDirection, chooseSetup, setOpportunityStage, markEntered, endOpportunity, markTradeExited, markAllTradesExited, deleteRecord, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb, recordEntryExpectation, correctEntryExpectation, updateHoldingExpectation, switchBofManagement } = v6Modules["src/intraday-v6/model.js"];
 const { assertV6State, singleRecordV5View } = v6Modules["src/intraday-v6/validation.js"];
-const { activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, recordLifecycleState } = v6Modules["src/intraday-v6/queries.js"];
+const { activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, recordLifecycleState, archivedRecords } = v6Modules["src/intraday-v6/queries.js"];
 const { migrateV5ToV6 } = v6Modules["src/intraday-v6/migration.js"];
 // Production facade keeps frozen M1 module scopes and the legacy migration scope separate.
-const intradayV6 = Object.freeze({ singleRecordV5View, entryExpectation, expectationHistory, currentHoldingExpectation, holdingExpectationHistory, expectationTimingLabel, manualDecisionReview, HOLDING_EXPECTATION_STATES, EXPECTATION_LIMIT, isSetupAllowed, createWorkspace, assertV6State, changeBias, changeStructure, changeDirection, chooseSetup, setOpportunityStage, markEntered, endOpportunity, markTradeExited, markAllTradesExited, deleteRecord, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb, recordEntryExpectation, correctEntryExpectation, updateHoldingExpectation, activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, recordLifecycleState, migrateV5ToV6 });
+const intradayV6 = Object.freeze({ switchBofManagement, currentManagement, manualDecisionTimeline, archivedRecords, singleRecordV5View, entryExpectation, expectationHistory, currentHoldingExpectation, holdingExpectationHistory, expectationTimingLabel, manualDecisionReview, HOLDING_EXPECTATION_STATES, EXPECTATION_LIMIT, isSetupAllowed, createWorkspace, assertV6State, changeBias, changeStructure, changeDirection, chooseSetup, setOpportunityStage, markEntered, endOpportunity, markTradeExited, markAllTradesExited, deleteRecord, recordInitialStop, correctInitialStop, recordBofToPb, revertBofToPb, recordEntryExpectation, correctEntryExpectation, updateHoldingExpectation, activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, recordLifecycleState, migrateV5ToV6 });
 
 return {intradayV6};
 })();
@@ -2756,7 +2793,7 @@ const captureUi = (() => {
     const stop = effectiveInitialStop(record), editor = editors.get(record.id), id = domId(record.id);
     const controls = editor ? `<form class="research-stop-form" data-stop-form="${escape(record.id)}"><label class="sr-only" for="stop-${id}">${record.symbol} Initial Stop 价格</label><input id="stop-${id}" data-stop-input="${escape(record.id)}" type="number" step="any" min="0" required inputmode="decimal" value="${escape(editor.draft)}" aria-describedby="stop-error-${id}" placeholder="止损价格"><button type="submit">${stop === null ? '记录' : '保存修正'}</button>${action(record.symbol, 'stop-cancel', '取消', record.id)}</form>` : action(record.symbol, 'stop-edit', stop === null ? '填写' : '修改', record.id);
     const conversion = effectiveBofToPbEvent(record);
-    return `<section class="research-capture" aria-label="${record.symbol} Research Capture"><div class="research-stop"><span>Initial Stop：${stop === null ? '未填写' : formatStopPrice(stop)}</span>${controls}</div><p class="research-error" id="stop-error-${id}" role="status"${editor?.error ? '' : ' hidden'}>${escape(editor?.error || '')}</p><div class="research-management"><span>当前管理：${derivedManagementState(record) || '退出研究分类待确认'}</span>${researchSetupClass(record.type) === 'BOF' ? (conversion ? action(record.symbol,'bof-revert','撤销 BOF → PB',record.id) : action(record.symbol,'bof-to-pb','BOF → PB',record.id)) : ''}</div></section>`;
+    return `<section class="research-capture" aria-label="${record.symbol} Research Capture"><div class="research-stop"><span>Initial Stop：${stop === null ? '未填写' : formatStopPrice(stop)}</span>${controls}</div><p class="research-error" id="stop-error-${id}" role="status"${editor?.error ? '' : ' hidden'}>${escape(editor?.error || '')}</p><div class="research-management"><span>当前管理：${intradayV6.currentManagement(record) || derivedManagementState(record) || '退出研究分类待确认'}</span>${record.type === 'bof' && intradayV6.currentManagement(record) === 'BOF' ? action(record.symbol,'management-switch','转为 SPB',record.id,'SPB') + action(record.symbol,'management-switch','转为 CPB',record.id,'CPB') : ''}${researchSetupClass(record.type) === 'BOF' ? (conversion ? action(record.symbol,'bof-revert','撤销 BOF → PB',record.id) : action(record.symbol,'bof-to-pb','BOF → PB',record.id)) : ''}</div></section>`;
   }
   function renderExpectationSummary(record) {
     const entry = intradayV6.entryExpectation(record), holding = intradayV6.currentHoldingExpectation(record), count = intradayV6.holdingExpectationHistory(record).length;
@@ -2828,11 +2865,9 @@ function initExpectationPanel({ host, getRecord, save, storage, isLocked, viewpo
   }
   function feedback(message) { const el = host.querySelector('[data-expectation-feedback]'); if (el) el.textContent = message; }
   function historyHtml(record) {
-    const events = record.researchCapture.manualEvents;
-    const labels = { ENTRY_EXPECTATION_RECORDED:'首次入场预期', ENTRY_EXPECTATION_CORRECTED:'更正预期', HOLDING_EXPECTATION_UPDATED:'持仓预期', INITIAL_STOP_RECORDED:'Initial Stop', INITIAL_STOP_LATE_RECORDED:'Initial Stop 补录', INITIAL_STOP_CORRECTED:'Initial Stop 更正', BOF_TO_PB_RECORDED:'BOF → PB', BOF_TO_PB_REVERTED:'撤销 BOF → PB' };
-    const facts = [{ id:'html-entry', recordedAt:record.enteredAt, label:'HTML 入场确认' }, { id:'html-exit', recordedAt:record.endedAt, label:'HTML 退出／结束确认' }].filter(e => e.recordedAt !== null);
-    const timeline = [...events, ...facts].sort((a,b) => a.recordedAt - b.recordedAt);
-    return `<p class="expectation-note">以下为人工记录与 HTML 确认。时间接近不表示因果，券商成交须另行核对。</p><ol class="expectation-timeline">${timeline.map(e => `<li><time>${esc(fullTime(e.recordedAt))}</time><strong>${esc(e.label || labels[e.type])}</strong>${e.payload?.timing ? `<small>${esc(e.type === 'HOLDING_EXPECTATION_UPDATED' ? '持仓期间记录（依据 HTML 确认）' : intradayV6.expectationTimingLabel(e.payload.timing))}</small>` : ''}${e.payload?.content ? fields.map(([k,label]) => e.payload.content[k] ? `<p><b>${label}：</b>${esc(e.payload.content[k])}</p>` : '').join('') : ''}${e.type === 'HOLDING_EXPECTATION_UPDATED' ? `<p>${intradayV6.HOLDING_EXPECTATION_STATES[e.payload.status]}${e.payload.reason ? ' · ' + esc(e.payload.reason) : ''}</p>` : ''}${e.type === 'ENTRY_EXPECTATION_CORRECTED' ? `<small>原始事件：${esc(e.payload.originalEventId)}<br>更正自：${esc(e.payload.previousEventId)}</small>` : ''}${e.payload && !e.payload.timing ? `<small>${esc(JSON.stringify(e.payload))}</small>` : ''}</li>`).join('') || '<li>尚未记录</li>'}</ol>`;
+    const labels = { ENTRY_EXPECTATION_RECORDED:'首次入场预期', ENTRY_EXPECTATION_CORRECTED:'更正预期', HOLDING_EXPECTATION_UPDATED:'持仓预期', BOF_MANAGEMENT_SWITCH_RECORDED:'人工管理转换', INITIAL_STOP_RECORDED:'Initial Stop', INITIAL_STOP_LATE_RECORDED:'Initial Stop 补录', INITIAL_STOP_CORRECTED:'Initial Stop 更正', BOF_TO_PB_RECORDED:'BOF → PB', BOF_TO_PB_REVERTED:'撤销 BOF → PB' };
+    const timeline = intradayV6.manualDecisionTimeline(record);
+    return `<p class="expectation-note">以下为人工记录与 HTML 确认。时间接近不表示因果，券商成交须另行核对。</p><ol class="expectation-timeline">${timeline.map(e => `<li><time>${esc(fullTime(e.recordedAt))}</time><strong>${esc(e.label || labels[e.type])}</strong>${e.payload?.timing ? `<small>${esc(['HOLDING_EXPECTATION_UPDATED','BOF_MANAGEMENT_SWITCH_RECORDED'].includes(e.type) ? '持仓期间记录（依据 HTML 确认）' : intradayV6.expectationTimingLabel(e.payload.timing))}</small>` : ''}${e.payload?.content ? fields.map(([k,label]) => e.payload.content[k] ? `<p><b>${label}：</b>${esc(e.payload.content[k])}</p>` : '').join('') : ''}${e.type === 'HOLDING_EXPECTATION_UPDATED' ? `<p>${intradayV6.HOLDING_EXPECTATION_STATES[e.payload.status]}${e.payload.reason ? ' · ' + esc(e.payload.reason) : ''}</p>` : ''}${e.type === 'BOF_MANAGEMENT_SWITCH_RECORDED' ? `<p>${esc(e.payload.from)} → ${esc(e.payload.to)} · 人工管理，原始 Setup 不变</p>` : ''}${e.type === 'ENTRY_EXPECTATION_CORRECTED' ? `<small>原始事件：${esc(e.payload.originalEventId)}<br>更正自：${esc(e.payload.previousEventId)}</small>` : ''}${e.payload && !e.payload.timing ? `<small>${esc(JSON.stringify(e.payload))}</small>` : ''}</li>`).join('') || '<li>尚未记录</li>'}</ol>`;
   }
   function entryHtml(record) {
     const entry = intradayV6.entryExpectation(record);
@@ -2930,6 +2965,31 @@ function initExpectationPanel({ host, getRecord, save, storage, isLocked, viewpo
   viewport.addEventListener?.('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
   return { open(id, requested = 'entry', source = null) { request(() => activate(id, requested, source)); }, sync,
     routeChanged(home) { if (target !== null) host.hidden = !home; }, hasDraft:dirty };
+}
+
+
+
+function renderHistoryArchive(state, query = '') {
+  const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  const records = intradayV6.archivedRecords(state, query);
+  return records.map(record => `<tr><td data-label="登记时间 / ID">${esc(fullTime(record.registeredAt))}<small>${esc(record.id)}</small></td><td data-label="品种 / 方向">${esc(record.symbol)} · ${esc(DIRECTIONS[record.direction])}</td><td data-label="原始 Setup / 人工管理">${esc(SETUP_LABELS[record.type])}${intradayV6.currentManagement(record) ? `<small>人工管理：${esc(intradayV6.currentManagement(record))}</small>` : ''}</td><td data-label="结束事实">${captureRecordProgress(record)}<small>${esc(fullTime(record.endedAt))}</small></td><td data-label="查看"><button type="button" data-expectation-history="${esc(record.id)}">预期与完整历史</button></td></tr>`).join('');
+}
+
+// Full backup restores remain explicit replacement, but may not erase an existing
+// ended archive or its event prefix. No merge and no second writable trade store.
+function assertArchiveRetention(current, restored) {
+  const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object' ?
+    Object.fromEntries(Object.keys(value).sort().map(key => [key,canonical(value[key])])) : value;
+  const same = (a,b) => JSON.stringify(canonical(a)) === JSON.stringify(canonical(b));
+  for (const record of current.records.filter(r => r.endedAt !== null)) {
+    const next = restored.records.find(r => r.id === record.id);
+    const facts = r => Object.fromEntries(Object.entries(r).filter(([key]) => key !== 'researchCapture'));
+    if (!next || !same(facts(record),facts(next)) ||
+        !same(record.researchCapture.manualEvents, next.researchCapture.manualEvents.slice(0,record.researchCapture.manualEvents.length))) {
+      throw Object.assign(new Error('此备份会移除或改写现有历史档案，已阻止恢复。请先保全两份完整备份，在隔离环境核对；不能用删除历史实现恢复。'), {code:'V6_ARCHIVE_RETENTION_REQUIRED'});
+    }
+  }
+  return true;
 }
 
 
@@ -3037,10 +3097,10 @@ function preserveScrollPosition(render, viewport = globalThis) {
 }
 
 
-const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk', chime: '#/chime', research: '#/exit-research' });
+const ROUTES = Object.freeze({ home: '#/home', risk: '#/risk', chime: '#/chime', research: '#/exit-research', history: '#/history' });
 
 function parseRoute(hash) {
-  return hash === ROUTES.research ? 'exit-research' : hash === ROUTES.risk ? 'risk' : hash === ROUTES.chime ? 'chime' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
+  return hash === ROUTES.history ? 'history' : hash === ROUTES.research ? 'exit-research' : hash === ROUTES.risk ? 'risk' : hash === ROUTES.chime ? 'chime' : hash === '' || hash === '#' || hash === ROUTES.home ? 'home' : 'unknown';
 }
 
 function normalizeRoute(hash) {
@@ -3061,7 +3121,7 @@ function applyRoute(root, hash = globalThis.location?.hash || '') {
     const heading = root?.querySelector?.('[data-route-error-heading]');
     heading?.focus?.();
   }
-  if (globalThis.document) document.title = active === 'exit-research' ? 'Exit Research · 统一交易控制中心' : active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'chime' ? '自然周期报时 · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
+  if (globalThis.document) document.title = active === 'history' ? '历史档案 · 统一交易控制中心' : active === 'exit-research' ? 'Exit Research · 统一交易控制中心' : active === 'risk' ? 'Trading Risk Manager · 统一交易控制中心' : active === 'chime' ? '自然周期报时 · 统一交易控制中心' : active === 'error' ? '找不到页面 · 统一交易控制中心' : '日内交易状态卡 · 统一交易控制中心';
   return { route: active, unknown: route === 'unknown' };
 }
 
@@ -4120,16 +4180,26 @@ function blockOverlappingResearch(result) {
 const setupClassificationPending = type => ['spb', 'cpb', 'bof'].includes(type);
 function replayCompatibleInput(trade) {
   const copy = structuredClone(trade);
-  copy.manualEvents = copy.manualEvents.filter(e => !['ENTRY_EXPECTATION_RECORDED','ENTRY_EXPECTATION_CORRECTED','HOLDING_EXPECTATION_UPDATED'].includes(e.type));
+  copy.manualEvents = copy.manualEvents.filter(e => !['ENTRY_EXPECTATION_RECORDED','ENTRY_EXPECTATION_CORRECTED','HOLDING_EXPECTATION_UPDATED','BOF_MANAGEMENT_SWITCH_RECORDED'].includes(e.type));
   return copy;
 }
 function weeklyDecisionReview(intraday) {
   return (intraday?.records || []).map(record => intradayV6.manualDecisionReview(record));
 }
+function encodeDecisionCsvText(value) {
+  const text = String(value ?? '');
+  return /^[=+\-@'\s\p{Cc}\p{Cf}]/u.test(text) || text.startsWith('csv-text:') || /[\p{Cc}\p{Cf}]/u.test(text) ? 'csv-text:' + JSON.stringify(text) : text;
+}
+function decodeDecisionCsvText(value) {
+  if (typeof value !== 'string') throw new Error('INVALID_DECISION_CSV_TEXT');
+  const decoded = value.startsWith('csv-text:') ? JSON.parse(value.slice('csv-text:'.length)) : value;
+  if (typeof decoded !== 'string') throw new Error('INVALID_DECISION_CSV_TEXT');
+  return decoded;
+}
 function decisionReviewCsv(intraday) {
-  const fields = ['record_id','setup','research_classification','html_entry_confirmed_at','html_exit_confirmed_at','entry_expectation_versions','holding_expectations','all_manual_events','time_basis'];
-  const cell = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
-  const rows = weeklyDecisionReview(intraday).map(r => [r.recordId,r.setup,setupClassificationPending(r.setup)?'PENDING_HUMAN_REVIEW':'EXISTING_CLASSIFICATION',r.htmlEnteredAt,r.htmlExitedAt,JSON.stringify(r.entryExpectation?.versions || []),JSON.stringify(r.holdingExpectations),JSON.stringify(r.manualEvents),r.timeBasis]);
+  const fields = ['record_id','setup','research_classification','html_entry_confirmed_at','html_exit_confirmed_at','entry_expectation_versions','holding_expectations','all_manual_events','time_basis','current_management','text_encoding'];
+  const cell = value => '"' + encodeDecisionCsvText(value).replace(/"/g, '""') + '"';
+  const rows = weeklyDecisionReview(intraday).map(r => [r.recordId,r.setup,setupClassificationPending(r.setup)?'PENDING_HUMAN_REVIEW':'EXISTING_CLASSIFICATION',r.htmlEnteredAt,r.htmlExitedAt,JSON.stringify(r.entryExpectation?.versions || []),JSON.stringify(r.holdingExpectations),JSON.stringify(r.manualEvents),r.timeBasis,r.currentManagement,'csv-text-prefix-v1']);
   return [fields, ...rows].map(row => row.map(cell).join(',')).join('\r\n');
 }
 
@@ -4139,7 +4209,7 @@ function legacyMatchingRecords(records) {
   return records.map(record => intradayV6.singleRecordV5View(record).records[0]);
 }
 
-return {captureResearchInput, blockOverlappingResearch, setupClassificationPending, replayCompatibleInput, weeklyDecisionReview, decisionReviewCsv, legacyMatchingRecords};
+return {captureResearchInput, blockOverlappingResearch, setupClassificationPending, replayCompatibleInput, weeklyDecisionReview, encodeDecisionCsvText, decodeDecisionCsvText, decisionReviewCsv, legacyMatchingRecords};
 })();
 erModuleRegistry["src/exit-research/csv.js"] = (() => {
 // Strict comma-separated text parser. No IO, coercion, recovery or partial results.
@@ -5706,12 +5776,12 @@ function buildWorkbenchModel({ intraday, files, flatConfirmed, store }) {
     const original = records.find(r => r.id === projected.opportunityId);
     const manualEvents = structuredClone(original.researchCapture.manualEvents);
     const t = { ...projected, originalSetup: original.type, researchSetupClass: researchSetupClass(original.type), manualEvents,
-      manualSetupTransitions: manualEvents.filter(e => ['BOF_TO_PB_RECORDED','BOF_TO_PB_REVERTED'].includes(e.type)) };
+      manualSetupTransitions: manualEvents.filter(e => ['BOF_TO_PB_RECORDED','BOF_TO_PB_REVERTED','BOF_MANAGEMENT_SWITCH_RECORDED'].includes(e.type)) };
     const matchingIds = matches.get(t.opportunityId)?.candidateLogicalTradeIds || [];
     const ids=matchingIds.length?matchingIds:t.logicalTradeId?[t.logicalTradeId]:[];
     const settings = store.settings.tradeOverrides[t.opportunityId] || { replayHardEndAt: null, executionTickSize: null };
     const risk = initialRisk(t), converted = t.manualEvents.some(e => e.type === 'BOF_TO_PB_RECORDED');
-    return { ...t, manualDecisionTruth: reviewMap.get(t.opportunityId), researchClassificationStatus: setupClassificationPending(t.originalSetup) ? 'PENDING_HUMAN_REVIEW' : 'EXISTING_CLASSIFICATION', strategyComparisonEligible: !setupClassificationPending(t.originalSetup) && t.qualityStatus !== 'BLOCKED', hasConversion: converted, initialRiskPoints: risk.initialRiskPoints, realizedR: rAtPrice(t, t.actualExitPrice), settings: structuredClone(settings),
+    return { ...t, manualDecisionTruth: reviewMap.get(t.opportunityId), currentManagement: reviewMap.get(t.opportunityId)?.currentManagement || null, researchClassificationStatus: setupClassificationPending(t.originalSetup) ? 'PENDING_HUMAN_REVIEW' : 'EXISTING_CLASSIFICATION', strategyComparisonEligible: !setupClassificationPending(t.originalSetup) && t.qualityStatus !== 'BLOCKED', hasConversion: converted, initialRiskPoints: risk.initialRiskPoints, realizedR: rAtPrice(t, t.actualExitPrice), settings: structuredClone(settings),
       candidates: ids.map(id => logicalMap.get(id)).filter(Boolean).map(c => ({ logicalTradeId: c.logicalTradeId, contract: c.contract, direction: c.direction, entryTime: c.entryStartedAt.normalized, exitTime: c.exitCompletedAt.normalized, entryPrice: c.entryVwap, exitPrice: c.exitVwap, quantity: c.quantity, sourceRows: [...c.sourceRows] })) };
   });
   const p = store.preferences;
@@ -5798,7 +5868,7 @@ function erMatching(t) {
 }
 function erDetails(t) {
   if(!t)return '<section class="er-section"><h3>单笔交易详情</h3><p class="er-empty">选择研究交易查看交易事实、匹配与指标。</p></section>';
-  return `<section class="er-section"><header class="er-section-head"><h3>单笔交易详情 · ${erEscape(t.researchFamily)}</h3>${erTradeQuality(t)}</header><h4>交易事实</h4>${erFacts([['品种 / 方向',`${t.researchFamily} / ${label(DIRECTION_LABELS,t.direction)}`],['原始入场类型',label(SETUP_LABELS,t.originalSetup)],['BOF → PB 时间',t.manualSetupTransitions.filter(e=>e.type==='BOF_TO_PB_RECORDED').map(e=>erTime(e.recordedAt)).join('；')||'—'],['机会登记时间',erTime(t.registeredAt)],['HTML 入场确认',erTime(t.taskEntryConfirmedAt)],['HTML 平仓确认',erTime(t.taskExitConfirmedAt)],['具体执行合约',t.executionContract||'—'],['真实入场时间',erTime(t.actualEntryTime)],['真实入场价',erNumber(t.actualEntryPrice)],['真实平仓时间',erTime(t.actualExitTime)],['真实平仓价',erNumber(t.actualExitPrice)],['数量',erNumber(t.quantity)],['初始止损',erNumber(t.initialStop)],['初始风险（1R）',erNumber(t.initialRiskPoints)]])}${t.researchClassificationStatus==='PENDING_HUMAN_REVIEW'?'<p class="er-empty">退出研究分类待确认；没有继承旧 PB / BOF 策略。</p>':''}${t.manualDecisionTruth ? `<details><summary>交易预期与跟踪 · 只读人工记录</summary><p>Manual Decision Truth；时间标记依据 HTML 确认，不能作为市场或券商成交事实。</p>${erTechnical(t.manualDecisionTruth)}</details>` : ''}${erMatching(t)}
+  return `<section class="er-section"><header class="er-section-head"><h3>单笔交易详情 · ${erEscape(t.researchFamily)}</h3>${erTradeQuality(t)}</header><h4>交易事实</h4>${erFacts([['品种 / 方向',`${t.researchFamily} / ${label(DIRECTION_LABELS,t.direction)}`],['原始入场类型',label(SETUP_LABELS,t.originalSetup)],['HTML 人工管理',t.currentManagement || '—'],['BOF → PB 时间',t.manualSetupTransitions.filter(e=>e.type==='BOF_TO_PB_RECORDED').map(e=>erTime(e.recordedAt)).join('；')||'—'],['机会登记时间',erTime(t.registeredAt)],['HTML 入场确认',erTime(t.taskEntryConfirmedAt)],['HTML 平仓确认',erTime(t.taskExitConfirmedAt)],['具体执行合约',t.executionContract||'—'],['真实入场时间',erTime(t.actualEntryTime)],['真实入场价',erNumber(t.actualEntryPrice)],['真实平仓时间',erTime(t.actualExitTime)],['真实平仓价',erNumber(t.actualExitPrice)],['数量',erNumber(t.quantity)],['初始止损',erNumber(t.initialStop)],['初始风险（1R）',erNumber(t.initialRiskPoints)]])}${t.researchClassificationStatus==='PENDING_HUMAN_REVIEW'?'<p class="er-empty">退出研究分类待确认；没有继承旧 PB / BOF 策略。</p>':''}${t.manualDecisionTruth ? `<details><summary>交易预期与跟踪 · 只读人工记录</summary><p>Manual Decision Truth；时间标记依据 HTML 确认，不能作为市场或券商成交事实。</p>${erTechnical(t.manualDecisionTruth)}</details>` : ''}${erMatching(t)}
     ${t.qualityReasons.includes('V6_OVERLAP_EXECUTION_UNSUPPORTED') ? '<p class="er-empty">多笔重叠持仓暂不支持成交归属核验；本轮不自动匹配。</p>' : ''}<h4>成交数据核验</h4>${erFacts([['订单记录',label(QA_STATUS_LABELS,t.executionQa?.orders.status||'INSUFFICIENT_DATA')],['持仓记录',label(QA_STATUS_LABELS,t.executionQa?.positionHistory.status||'INSUFFICIENT_DATA')]])}<p class="er-muted">主要成交事实以 Fills 为准；Orders 和 Position History 用于交叉核对。</p><p class="er-muted">${t.researchClassificationStatus==='PENDING_HUMAN_REVIEW'?'研究分类待确认；成交资料即使齐备，也不能进行正式策略比较。':erEscape(label(QUALITY_LABELS,t.qualityStatus))+'：'+erEscape(QUALITY_EXPLANATIONS[t.qualityStatus]||'请核对输入资料。')}</p>${erTechnical({opportunityId:t.opportunityId,logicalTradeId:t.logicalTradeId,rawSetup:t.originalSetup,registeredAt:t.registeredAt,taskEntryConfirmedAt:t.taskEntryConfirmedAt,taskExitConfirmedAt:t.taskExitConfirmedAt,matchingStatus:t.matchingStatus,matchingReasons:t.matchingReasons,qualityReasons:t.qualityReasons,executionQa:t.executionQa,candidates:t.candidates.map(c=>({logicalTradeId:c.logicalTradeId,sourceRows:c.sourceRows}))})}</section>${erMetrics(t)}
     <section class="er-section"><h3>退出管理回放</h3><p class="er-muted">比较固定的研究管理方式。所有时间显示为北京时间；研究截止时间必须明确填写并包含时区。</p><form data-er-settings><label>研究截止时间（含时区）<input name="hardEnd" aria-label="研究截止时间" type="text" placeholder="例如 2037-01-01T01:20:00Z" value="${t.settings.replayHardEndAt===null?'':erEscape(new Date(t.settings.replayHardEndAt).toISOString())}"></label><label>执行最小变动单位（选填，须确认来源）<input name="tick" aria-label="执行最小变动单位" type="number" min="0" step="any" placeholder="未配置时，回放结果需复核" value="${t.settings.executionTickSize===null?'':erEscape(t.settings.executionTickSize)}"></label><button type="submit">保存本次交易研究设置</button></form>${t.replayStatus==='SETUP_CLASSIFICATION_PENDING'?'<p class="er-empty">退出研究分类待人工确认；保留原始 Setup，暂不进行正式策略比较。</p>':t.replayStatus==='REPLAY_HARD_END_REQUIRED'?'<p class="er-empty">请先明确研究截止时间，实际持仓表现仍可查看。</p>':t.replayStatus==='WAITING_MARKET_DATA'?'<p class="er-empty">等待行情数据</p>':`<p>实际退出：${erR(t.realizedR)} · ${t.researchSetupClass==='BOF'?'按实际人工管理 / 始终按原始 Setup 管理并排比较':'按实际人工管理'}</p><div class="er-policy-grid">${t.replays.map(erReplayCard).join('')}</div>`}${erTechnical({replayStatus:t.replayStatus})}</section>`;
 }
@@ -5999,7 +6069,8 @@ let legacyChimeRecovery = false;
 let recoveryCanonicalRaw = null;
 let recoveryLegacyRaw = null;
 let restoredNotice = '';
-let historyScope = 'today';
+let archiveQuery = '';
+let managementSubmissionSequence = 0;
 let currentDay = '';
 let collapsedCards = new Set();
 let storage = null;
@@ -6075,7 +6146,6 @@ function storageStatus() {
   document.querySelector('#chime-summary-host').inert = safeReadOnly;
   document.querySelector('#chime-settings-host').inert = safeReadOnly;
   document.querySelector('#risk-manager-host').inert = safeReadOnly;
-  document.querySelectorAll('[data-delete]').forEach(button => { button.disabled = policy.historyInert || corruption; });
   if (corruption) {
     document.querySelector('#ignore-legacy-chime').hidden = true;
     label.textContent = '旧版数据需检查 · 未覆盖'; message.textContent = `旧版交易数据需要人工检查，系统没有自动修改原数据。${migrationBlockReason}。请导出原始数据后检查。`; renderBannerVisibility(banner, message.textContent); retry.hidden = true; startFresh.hidden = true; cardsEl.inert = false; return;
@@ -6158,15 +6228,11 @@ function renderCommodityDashboard() {
   hiddenCommoditiesEl.hidden = !expanded;
   hiddenCommoditiesEl.innerHTML = expanded ? `<h3 id="hidden-commodities-title">已隐藏的商品（${hiddenSymbols.length}）</h3>${hiddenRows}` : '';
 }
-function recordsForScope() {
-  const day = dateKey(now()); return state.records.filter(record => historyScope === 'all' || record.endedAt === null || dateKey(record.registeredAt) === day || dateKey(record.endedAt) === day).sort((a,b) => b.registeredAt - a.registeredAt);
-}
 function renderHistory() {
-  const records = recordsForScope(); currentDay = dateKey(now());
-  document.querySelector('#history-count').textContent = `${records.length} 条 · ${historyScope === 'all' ? '全部保留' : '今日及未结束'}`;
+  const records = intradayV6.archivedRecords(state,archiveQuery); currentDay = dateKey(now());
+  document.querySelector('#history-count').textContent = `${records.length} 条 · 已结束档案`;
   document.querySelector('#history-empty').hidden = Boolean(records.length); document.querySelector('#history-table').hidden = !records.length;
-  document.querySelectorAll('[data-scope]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.scope === historyScope)));
-  historyBody.innerHTML = records.map(record => `<tr><td>${escapeHtml(fullTime(record.registeredAt))}</td><td><b>${record.symbol}</b></td><td>${directionShort(record.direction)}</td><td>${SETUP_LABELS[record.type]}</td><td class="position">${escapeHtml(record.zone ?? '—')}</td><td>${captureRecordProgress(record)}</td><td><button type="button" data-expectation-history="${escapeHtml(record.id)}">预期与历史</button> ${record.endedAt === null ? '—' : `<button class="delete" data-delete="${escapeHtml(record.id)}" type="button">删除</button>`}</td></tr>`).join('');
+  historyBody.innerHTML = renderHistoryArchive(state,archiveQuery);
 }
 function renderChime() {
   const chime = unified?.sections?.chime; if (!chime || !chimeView) return;
@@ -6208,8 +6274,8 @@ function finishConfirmation(confirmed) {
   if (writeLocked()) { announce('检测到存档冲突或回读不一致；当前页面已锁定，本次确认未应用'); return; }
   if (action.kind !== 'restore' && storage?.getItem && storage.getItem(UNIFIED_KEY) !== action.storageRaw) { externalConflict = true; storageStatus(); announce('存档已被其他页面修改；请刷新后重新确认'); return; }
   if (action.revision !== state.revision) { reportDiagnostic(Object.assign(new Error('确认操作版本已过期'), { code: 'REVISION_CONFLICT' }), { phase: 'confirmation', relevantSymbol: action.symbol || null }); announce('任务已变化，本次确认未应用'); return; }
-  if (action.kind === 'restore') { try { if (writeLocked()) return; const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V6。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
-  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(intradayV6.createWorkspace(now()), now()); const candidate = makeUnified(fresh); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
+  if (action.kind === 'restore') { try { if (writeLocked()) return; assertArchiveRetention(state,action.unified.sections.intraday.state); const saved = saveUnified(action.unified, { preImport: true, expectedRaw: action.storageRaw }, 'unified_import_commit'); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); appearanceView?.render(unified.preferences.appearance); restoredNotice = `已恢复${action.importKind === 'unified' ? '完整备份' : '风险管理器备份'}。${action.migrated ? '其中日内数据已迁移为 V6。' : ''}仍须对照交易平台核对当前任务与持仓。`; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('备份已恢复；旧记录未合并，不发送任何订单'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); announce('导入前快照或统一存档写入失败；当前内存未改变'); } return; }
+  if (action.kind === 'fresh') { try { const fresh = makeEnvelope(intradayV6.createWorkspace(now()), now()); const candidate = makeUnified(fresh); assertArchiveRetention(state,candidate.sections.intraday.state); const saved = saveUnified(candidate); unified = saved; state = copy(saved.sections.intraday.state); state.lastSavedAt = saved.savedAt; lastRaw = JSON.stringify(saved); corruption = false; saveError = ''; chimeCoordinator?.settingsChanged(); chimeScheduler?.update(); if (nativeChimeDevMode) void chimeExecution?.settingsSaved(); restoredNotice = '已明确开始空白工作区；原异常存档已保留在原始导出中。'; dashboardView?.render(); fullRiskView?.render(); renderAll(); announce('已开始空白工作区；请按实际交易状态重新建立任务'); } catch (error) { saveError = error.code || 'StorageUnavailable'; storageStatus(); } return; }
   if (!state.cards[action.symbol]) return;
   if (action.kind === 'entry') { if (intradayV6.markEntered(state, action.opportunityId, now(), true).changed) mutate(`${action.symbol} 已确认入场`, action.symbol, action.opportunityId); }
   if (action.kind === 'trade-exit') { if (intradayV6.markTradeExited(state, action.opportunityId, action.exitKind, now(), true).changed) mutate(`${action.symbol} 该笔已退出；保留方向`, action.symbol, action.opportunityId); }
@@ -6232,9 +6298,13 @@ function handleAction(button) {
   if (action === 'toggle-collapse') { collapsedCards = toggleCardCollapsed(collapsedCards,symbol); renderAll(); return; }
   if (!captureDataCurrent()) return;
   const record = state.records.find(record => record.id === opportunityId && record.symbol === symbol);
-  if (['stop-edit','stop-cancel','bof-to-pb','bof-revert','entry','stage','end','trade-exit'].includes(action) && !record) return;
+  if (['stop-edit','stop-cancel','bof-to-pb','bof-revert','management-switch','entry','stage','end','trade-exit'].includes(action) && !record) return;
   if (action === 'stop-edit') { stopEditors.set(record.id, { draft: effectiveInitialStop(record) === null ? '' : String(effectiveInitialStop(record)), error: '' }); renderAll(); document.getElementById(`stop-${captureUi.domId(record.id)}`)?.focus({ preventScroll:true }); return; }
   if (action === 'stop-cancel') { stopEditors.delete(record.id); renderAll(); return; }
+  if (action === 'management-switch') {
+    const submissionId = globalThis.crypto?.randomUUID?.() || `management-${now()}-${++managementSubmissionSequence}`;
+    if (intradayV6.switchBofManagement(state,record.id,value,submissionId,now()).changed) mutate(`${symbol} 该笔人工管理：${value}；原始 BOF 不变`,symbol,record.id); return;
+  }
   if (action === 'bof-to-pb') { if (intradayV6.recordBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：PB`,symbol,record.id); return; }
   if (action === 'bof-revert') { if (intradayV6.revertBofToPb(state,record.id,now()).changed) mutate(`${symbol} 该笔当前管理：BOF`,symbol,record.id); return; }
   if (action === 'bias') { if (intradayV6.changeBias(state,symbol,value).changed) mutate(`${symbol} 当前偏见：${BIASES[value]}`,symbol); return; }
@@ -6304,8 +6374,8 @@ cardsEl.addEventListener('submit', event => { const form = event.target.closest(
 cardsEl.addEventListener('input', event => { const input = event.target.closest('[data-stop-input]'); if (!input) return; const opportunity = state.records.find(record => record.id === input.dataset.stopInput); if (opportunity && !writeLocked() && !corruption) stopEditors.set(opportunity.id, { draft: input.value, error: '' }); });
 cardsEl.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleAction(button), { phase: 'interaction', relevantSymbol: button.dataset.symbol }); });
 [commodityDashboardEl, hiddenCommoditiesEl].forEach(host => host.addEventListener('click', event => { const button = event.target.closest('button[data-action]'); if (button && event.detail <= 1) safe(() => handleCommodityDashboardAction(button), { phase: 'commodity_dashboard_interaction', relevantSymbol: button.dataset.symbol }); }));
-historyBody.addEventListener('click', event => { const history = event.target.closest('[data-expectation-history]'); if (history) { expectationPanel?.open(history.dataset.expectationHistory, 'history', history); return; } const button = event.target.closest('[data-delete]'); if (!button || writeLocked() || event.detail > 1) return; safe(() => { if (intradayV6.deleteRecord(state, button.dataset.delete).changed) { persist(); renderAll(); announce('已删除本条机会记录；任务和持仓不变，后续状态变化不会自动恢复该记录'); } }, { phase: 'interaction' }); });
-document.querySelectorAll('[data-scope]').forEach(button => button.addEventListener('click', () => { historyScope = button.dataset.scope; renderHistory(); }));
+historyBody.addEventListener('click', event => { const history = event.target.closest('[data-expectation-history]'); if (history) expectationPanel?.open(history.dataset.expectationHistory, 'history', history); });
+document.querySelector('#archive-query').addEventListener('input', event => { archiveQuery = event.target.value; renderHistory(); });
 document.querySelector('#dialog-cancel').addEventListener('click', () => finishConfirmation(false)); document.querySelector('#dialog-confirm').addEventListener('click', () => safe(() => finishConfirmation(true), { phase: 'confirmation' })); dialog.addEventListener('cancel', event => { event.preventDefault(); finishConfirmation(false); });
 document.querySelector('#data-tools').addEventListener('click', () => { document.querySelector('#data-feedback').textContent = ''; dataDialog.showModal(); }); document.querySelector('#data-close').addEventListener('click', () => dataDialog.close());
 document.querySelector('#export-today').addEventListener('click', () => { download(exportMarkdown(state, 'today'), `日内机会_${dateKey(now())}.md`, 'text/markdown;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已生成 Markdown 下载；当前任务未修改。'; });
@@ -6316,7 +6386,7 @@ document.querySelector('#export-raw').addEventListener('click', () => { download
 document.querySelector('#export-chime-raw').addEventListener('click', () => { download(recoveryLegacyRaw ?? '', `自然周期报时_原始旧设置_${dateKey(now())}.json`, 'application/json;charset=utf-8'); document.querySelector('#data-feedback').textContent = '已导出未经解析的原始旧报时设置；本地原数据未修改。'; });
 document.querySelector('#ignore-legacy-chime').addEventListener('click', () => { if (!legacyChimeRecovery) return; openConfirmation({ kind: 'ignore-legacy-chime' }, '忽略无法识别的旧报时设置？', '将保留旧报时键原始内容，并以默认报时设置升级统一存档。状态卡、风险管理器及外观保持原值；此选择不会删除或改写旧键。', '忽略并使用默认值', '只有确认不再迁移旧报时设置时继续。'); });
 document.querySelector('#import-json').addEventListener('click', () => { if (writeLocked()) return; document.querySelector('#import-file').value = ''; document.querySelector('#import-file').click(); });
-document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind, migrated: preview.migration?.migrated === true }, '确认导入备份？', `${importSummary(preview.kind, preview.state, preview.migration)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${captureMigrationMessage(error)}。原数据未改变。`; } finally { event.target.value = ''; } });
+document.querySelector('#import-file').addEventListener('change', async event => { const file = event.target.files?.[0]; if (!file) return; try { if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到存档冲突或回读不一致；请刷新读取最新状态后再恢复备份。'; return; } if (file.size > 8 * 1024 * 1024) throw new Error('文件超过 8 MB 限制'); const raw = await file.text(); const parsed = parseBackupRaw(raw); const preview = normalizeImport(parsed, unified); assertArchiveRetention(state,preview.state.sections.intraday.state); if (writeLocked()) { document.querySelector('#data-feedback').textContent = '检测到其他标签页写入；恢复未应用。'; return; } dataDialog.close(); openConfirmation({ kind: 'restore', unified: preview.state, importKind: preview.kind, migrated: preview.migration?.migrated === true }, '确认导入备份？', `${importSummary(preview.kind, preview.state, preview.migration)}\n\n导入前会先保存当前完整存档快照；导入不会产生订单。`, '确认导入', '请先导出当前完整 JSON 备份。确认前若检测到其他标签页写入，本次导入将取消。'); } catch (error) { document.querySelector('#data-feedback').textContent = `未导入：${error.code === 'V6_ARCHIVE_RETENTION_REQUIRED' ? error.message : captureMigrationMessage(error)}。原数据未改变。`; } finally { event.target.value = ''; } });
 document.querySelector('#storage-retry').addEventListener('click', () => { if (!writeLocked()) persist(); });
 document.querySelector('#start-fresh').addEventListener('click', () => { if (!writeLocked()) openConfirmation({ kind: 'fresh' }, '开始空白工作区？', '将以空白三卡开始，并在下一次保存时替换当前无法读取的本地存档。请先导出原始存档（如需保留）。', '确认开始空白', '恢复有效 JSON 备份不会覆盖原存档；开始空白工作区会在下次保存时替换它。'); });
 window.addEventListener('storage', event => { if (event.key === UNIFIED_KEY && event.newValue !== lastRaw) { externalConflict = true; saveError = 'Conflict'; chimeCoordinator?.invalidate('检测到统一存档外部修改；本页报时已停止。'); storageStatus(); renderChime(); } });
@@ -6373,7 +6443,7 @@ appearanceView = initAppearance(document.querySelector('#appearance-select'), { 
 });
 try { researchWorkbench = initExitResearchWorkbench(document.querySelector('#exit-research-host'), { getIntraday: () => state, storage }); }
 catch (error) { const host = document.querySelector('#exit-research-host'); if (host) host.textContent = 'Exit Research 暂不可用；首页状态卡仍可正常使用。'; reportDiagnostic(error, { phase: 'exit_research_init' }); }
-function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else { const result = applyRoute(document, normalized); if (result.route === 'exit-research') researchWorkbench?.refresh(); else researchWorkbench?.hide(); expectationPanel?.routeChanged(result.route === 'home'); } }
+function route() { const currentHash = globalThis.location?.hash || ''; const normalized = normalizeRoute(currentHash); if (globalThis.location && currentHash !== normalized) globalThis.location.hash = normalized; else { const result = applyRoute(document, normalized); if (result.route === 'exit-research') researchWorkbench?.refresh(); else researchWorkbench?.hide(); if (result.route === 'history') renderHistory(); expectationPanel?.routeChanged(['home','history'].includes(result.route)); } }
 window.addEventListener('hashchange', route); route();
 try { dashboardView = initRiskDashboard(document.querySelector('#risk-dashboard-host'), {
   getState: () => unified?.sections.riskManager || { schemaVersion: 2, selectedAccountId: null, accounts: [] },
@@ -6405,7 +6475,7 @@ expectationPanel = initExpectationPanel({
     announce('该笔交易的预期记录已保存'); return { ok:true };
   }
 });
-expectationPanel.routeChanged((globalThis.location?.hash || '#/home') === '#/home');
+expectationPanel.routeChanged(['#/home','#/history'].includes(globalThis.location?.hash || '#/home'));
 renderAll(); storageStatus(); renderChime();
 if (nativeChimeDevMode) {
   void chimeExecution.refresh();

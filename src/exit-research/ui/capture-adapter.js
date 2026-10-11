@@ -26,16 +26,26 @@ export function blockOverlappingResearch(result) {
 export const setupClassificationPending = type => ['spb', 'cpb', 'bof'].includes(type);
 export function replayCompatibleInput(trade) {
   const copy = structuredClone(trade);
-  copy.manualEvents = copy.manualEvents.filter(e => !['ENTRY_EXPECTATION_RECORDED','ENTRY_EXPECTATION_CORRECTED','HOLDING_EXPECTATION_UPDATED'].includes(e.type));
+  copy.manualEvents = copy.manualEvents.filter(e => !['ENTRY_EXPECTATION_RECORDED','ENTRY_EXPECTATION_CORRECTED','HOLDING_EXPECTATION_UPDATED','BOF_MANAGEMENT_SWITCH_RECORDED'].includes(e.type));
   return copy;
 }
 export function weeklyDecisionReview(intraday) {
   return (intraday?.records || []).map(record => intradayV6.manualDecisionReview(record));
 }
+export function encodeDecisionCsvText(value) {
+  const text = String(value ?? '');
+  return /^[=+\-@'\s\p{Cc}\p{Cf}]/u.test(text) || text.startsWith('csv-text:') || /[\p{Cc}\p{Cf}]/u.test(text) ? 'csv-text:' + JSON.stringify(text) : text;
+}
+export function decodeDecisionCsvText(value) {
+  if (typeof value !== 'string') throw new Error('INVALID_DECISION_CSV_TEXT');
+  const decoded = value.startsWith('csv-text:') ? JSON.parse(value.slice('csv-text:'.length)) : value;
+  if (typeof decoded !== 'string') throw new Error('INVALID_DECISION_CSV_TEXT');
+  return decoded;
+}
 export function decisionReviewCsv(intraday) {
-  const fields = ['record_id','setup','research_classification','html_entry_confirmed_at','html_exit_confirmed_at','entry_expectation_versions','holding_expectations','all_manual_events','time_basis'];
-  const cell = value => '"' + String(value ?? '').replace(/"/g, '""') + '"';
-  const rows = weeklyDecisionReview(intraday).map(r => [r.recordId,r.setup,setupClassificationPending(r.setup)?'PENDING_HUMAN_REVIEW':'EXISTING_CLASSIFICATION',r.htmlEnteredAt,r.htmlExitedAt,JSON.stringify(r.entryExpectation?.versions || []),JSON.stringify(r.holdingExpectations),JSON.stringify(r.manualEvents),r.timeBasis]);
+  const fields = ['record_id','setup','research_classification','html_entry_confirmed_at','html_exit_confirmed_at','entry_expectation_versions','holding_expectations','all_manual_events','time_basis','current_management','text_encoding'];
+  const cell = value => '"' + encodeDecisionCsvText(value).replace(/"/g, '""') + '"';
+  const rows = weeklyDecisionReview(intraday).map(r => [r.recordId,r.setup,setupClassificationPending(r.setup)?'PENDING_HUMAN_REVIEW':'EXISTING_CLASSIFICATION',r.htmlEnteredAt,r.htmlExitedAt,JSON.stringify(r.entryExpectation?.versions || []),JSON.stringify(r.holdingExpectations),JSON.stringify(r.manualEvents),r.timeBasis,r.currentManagement,'csv-text-prefix-v1']);
   return [fields, ...rows].map(row => row.map(cell).join(',')).join('\r\n');
 }
 

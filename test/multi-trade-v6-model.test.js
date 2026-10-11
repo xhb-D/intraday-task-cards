@@ -215,10 +215,10 @@ test('V6 flatten group IDs are deterministic, distinct across batches and avoid 
   const used=state.records[0].exitCapture.groupId; const c=m.markAllTradesExited(state,'GC',T+70,true); assert.notEqual(c.groupId,used); m.assertV6State(state);
 });
 
-test('V6 ended history can be deleted; no-op missing ID leaves revision unchanged', () => {
+test('V6 ended history cannot be deleted; no-op missing ID leaves revision unchanged', () => {
   const {state,a}=pair(); m.markTradeExited(state,a.id,'UNKNOWN',T+30,true);
-  assert.equal(m.deleteRecord(state,a.id).changed,true); const before=clone(state);
-  assert.equal(m.deleteRecord(state,a.id).changed,false); assert.deepEqual(state,before);
+  rejectsUnchanged(state,()=>m.deleteRecord(state,a.id),'V6_RECORD_DELETE_FORBIDDEN'); const before=clone(state);
+  assert.equal(m.deleteRecord(state,'missing').changed,false); assert.deepEqual(state,before);
 });
 
 test('V6 frozen input is rejected before mutation, and overflow cannot partially write', () => {

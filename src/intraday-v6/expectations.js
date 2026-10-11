@@ -3,6 +3,12 @@ export const EXPECTATION_LIMIT = 200;
 export const HOLDING_EXPECTATION_STATES = Object.freeze({ observing: '待观察', met: '符合预期', exceeded: '超出预期', underperformed: '不及预期' });
 export const EXPECTATION_EVENT_TYPES = Object.freeze(['ENTRY_EXPECTATION_RECORDED', 'ENTRY_EXPECTATION_CORRECTED', 'HOLDING_EXPECTATION_UPDATED']);
 export const isExpectationEvent = event => EXPECTATION_EVENT_TYPES.includes(event?.type);
+export const MANAGEMENT_SWITCH_EVENT = 'BOF_MANAGEMENT_SWITCH_RECORDED';
+export const isDecisionEvent = event => isExpectationEvent(event) || event?.type === MANAGEMENT_SWITCH_EVENT;
+export function currentManagement(record) {
+  if (!['spb','cpb','bof'].includes(record?.type)) return null;
+  return record.researchCapture.manualEvents.find(e => e.type === MANAGEMENT_SWITCH_EVENT)?.payload.to || record.type.toUpperCase();
+}
 const keys = (o, names) => o && typeof o === 'object' && !Array.isArray(o) && Object.keys(o).length === names.length && names.every(k => Object.hasOwn(o, k));
 const time = n => Number.isSafeInteger(n) && n >= 0;
 const reject = () => { throw Object.assign(new Error('预期事件链无效'), { code: 'V6_EXPECTATION_INVALID', path: 'researchCapture' }); };
@@ -39,16 +45,16 @@ export function expectationPayload(record, submissionId, recordedAt) {
 export function assertExpectationChain(record) {
   const capture = record.researchCapture;
   if (!keys(capture, ['eventSequence', 'manualEvents']) || !Array.isArray(capture.manualEvents) || capture.eventSequence !== capture.manualEvents.length) reject();
-  let previousTime = record.registeredAt, original = null, current = null;
+  let previousTime = record.registeredAt, original = null, current = null, switched = false;
   const submissions = new Set();
   for (const [index, event] of capture.manualEvents.entries()) {
     if (!keys(event, ['id', 'type', 'recordedAt', 'effectiveAt', 'source', 'payload']) || event.id !== `${record.id}:manual-${index + 1}` ||
         event.source !== 'manual_intraday' || !time(event.recordedAt) || !time(event.effectiveAt) || event.recordedAt < previousTime || event.effectiveAt > event.recordedAt) reject();
     previousTime = event.recordedAt;
-    if (!isExpectationEvent(event)) continue; // frozen legacy validator rejects unknown types
+    if (!isDecisionEvent(event)) continue; // frozen legacy validator rejects unknown types
     const p = event.payload, common = ['recordId', 'submissionId', 'timing', 'htmlEnteredAtAtRecording', 'htmlEndedAtAtRecording'];
     const fields = event.type === 'ENTRY_EXPECTATION_CORRECTED' ? ['content', 'originalEventId', 'previousEventId', 'originalRecordedAt', 'originalContent', 'previousContent'] :
-      event.type === 'ENTRY_EXPECTATION_RECORDED' ? ['content'] : ['status', 'reason'];
+      event.type === 'ENTRY_EXPECTATION_RECORDED' ? ['content'] : event.type === MANAGEMENT_SWITCH_EVENT ? ['from','to'] : ['status', 'reason'];
     if (!keys(p, [...common, ...fields]) || p.recordId !== record.id || typeof p.submissionId !== 'string' || !p.submissionId.trim() || p.submissionId.length > 100 ||
         submissions.has(p.submissionId) || event.effectiveAt !== event.recordedAt || p.timing !== expectationTiming({ enteredAt: p.htmlEnteredAtAtRecording, endedAt: p.htmlEndedAtAtRecording }, event.recordedAt)) reject();
     submissions.add(p.submissionId);
@@ -57,7 +63,11 @@ export function assertExpectationChain(record) {
       const snapshot = p[field];
       if (snapshot === null ? actual !== null && actual < event.recordedAt : snapshot !== actual || !time(snapshot) || snapshot > event.recordedAt) reject();
     }
-    if (event.type === 'HOLDING_EXPECTATION_UPDATED') {
+    if (event.type === MANAGEMENT_SWITCH_EVENT) {
+      if (record.type !== 'bof' || switched || p.from !== 'BOF' || !['SPB','CPB'].includes(p.to) ||
+          p.htmlEnteredAtAtRecording === null || p.htmlEndedAtAtRecording !== null || p.timing !== 'after_html_entry') reject();
+      switched = true;
+    } else if (event.type === 'HOLDING_EXPECTATION_UPDATED') {
       if (record.enteredAt === null || event.recordedAt < record.enteredAt || record.endedAt !== null && event.recordedAt > record.endedAt || p.htmlEndedAtAtRecording !== null ||
           !Object.hasOwn(HOLDING_EXPECTATION_STATES, p.status) || !text(p.reason)) reject();
     } else {
@@ -75,7 +85,7 @@ export function assertExpectationChain(record) {
 
 // Compatibility view only: canonical IDs, references and sequence are never changed.
 export function legacyCaptureProjection(record) {
-  const manualEvents = structuredClone(record.researchCapture.manualEvents.filter(e => !isExpectationEvent(e)));
+  const manualEvents = structuredClone(record.researchCapture.manualEvents.filter(e => !isDecisionEvent(e)));
   const ids = new Map(manualEvents.map((event, i) => [event.id, `${record.id}:manual-${i + 1}`]));
   for (const event of manualEvents) {
     event.id = ids.get(event.id);
@@ -85,7 +95,19 @@ export function legacyCaptureProjection(record) {
 }
 
 export function manualDecisionReview(record) {
-  return { recordId: record.id, setup: record.type, truthSource: 'manual_intraday', timeBasis: 'HTML_CONFIRMATION_NOT_BROKER_FILL',
+  return { recordId: record.id, setup: record.type, currentManagement: currentManagement(record), truthSource: 'manual_intraday', timeBasis: 'HTML_CONFIRMATION_NOT_BROKER_FILL',
     htmlEnteredAt: record.enteredAt, htmlExitedAt: record.endedAt, entryExpectation: structuredClone(entryExpectation(record)),
     holdingExpectations: structuredClone(holdingExpectationHistory(record)), manualEvents: structuredClone(record.researchCapture.manualEvents) };
+}
+
+// Display only. Snapshots order HTML facts among events sharing the same millisecond;
+// canonical manual sequence remains the tie-breaker within each phase.
+export function manualDecisionTimeline(record) {
+  const phase = event => event.id === 'html-entry' ? 1 : event.id === 'html-exit' ? 3 :
+    event.payload?.htmlEndedAtAtRecording != null || event.payload?.timing === 'post_close_review' ? 4 :
+    event.payload?.htmlEnteredAtAtRecording != null || event.payload?.timing === 'after_html_entry' || !isDecisionEvent(event) ? 2 : 0;
+  const facts = [{ id:'html-entry', recordedAt:record.enteredAt, label:'HTML 入场确认' },
+    { id:'html-exit', recordedAt:record.endedAt, label:'HTML 退出／结束确认' }].filter(e => e.recordedAt !== null);
+  return structuredClone([...record.researchCapture.manualEvents, ...facts])
+    .map((event,index) => ({ event,index })).sort((a,b) => a.event.recordedAt - b.event.recordedAt || phase(a.event) - phase(b.event) || a.index - b.index).map(item => item.event);
 }

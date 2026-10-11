@@ -1,0 +1,334 @@
+{
+  "algorithm": "SHA-256",
+  "excludedSelf": "docs/qa/v6-remediation/sha256-manifest.json",
+  "files": [
+    {
+      "file": "docs/V6_EXPECTATIONS_RECOVERY.md",
+      "sha256": "4df7bb1ad5486e8d54b73f87a676fc5a2814588291ced3d3b473eed426d73fb4"
+    },
+    {
+      "file": "docs/V6_SETUP_EXPECTATIONS_REMEDIATION_REPORT.md",
+      "sha256": "81b097720452d03c1c0039a958a69235d6ee925990da6ebcc6cde4f7b8d3c964"
+    },
+    {
+      "file": "docs/qa/v6-remediation/README.md",
+      "sha256": "fcdce1e9e8398697937277a2582b8e405d9a9d3f419cb04f8017325b569abb63"
+    },
+    {
+      "file": "docs/qa/v6-remediation/automated-tests.log",
+      "sha256": "883f4a2fb811a1553693f372a2d82747c35e433769325a4294ae6e22f04b4486"
+    },
+    {
+      "file": "docs/qa/v6-remediation/build.log",
+      "sha256": "b8e9bf805e51c5a87bfac256ba1c3cbf21b73257baa3f56a13150a145252238d"
+    },
+    {
+      "file": "docs/qa/v6-remediation/changed-files.txt",
+      "sha256": "f126e883ed342092134f0f3a988b3e39b0a44a4a1900dde074a7a26c1ce311fa"
+    },
+    {
+      "file": "docs/qa/v6-remediation/frozen-boundaries.json",
+      "sha256": "6a734e3145db48f43a8b440df4d0bb0be2ade886694ecaaebf61e2dc63d4af52"
+    },
+    {
+      "file": "docs/qa/v6-remediation/index.html",
+      "sha256": "8d4b619ead24ee0cff89135b7295f0c84a7c9bfbbf24ad756fe4dd9f51101468"
+    },
+    {
+      "file": "docs/qa/v6-remediation/initial-red.log",
+      "sha256": "cb8fb001561b0f0d4986098a33a237517288346e08905d0799ec52b544d3db19"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-01-pending-empty.png",
+      "sha256": "07234f237da6d7ad20bc318633c88bd1f91399770256b79636f5ea5d0f2f4593"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-02-entry-panel.png",
+      "sha256": "b12ce4b66bbf7661ea39bb49ae9a6d848ad49f1ecd91e20ab605badb223ba1b4"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-03-pending-saved.png",
+      "sha256": "8d4410f20d2f61e56ff548b2f767a9bdadb689561fc9beb2787e60e8c32dd905"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-04-active-empty.png",
+      "sha256": "89f6b97a3ac2859d4ab1ca48b0f2a79eb4284721bfdc3c83a4f20de8291620ae"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-05-active-tracking.png",
+      "sha256": "8d1bcb64d2789f4b85d12cad3581c40b158c05f54cfb0aa0720187318edb0bc3"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-06-update-panel.png",
+      "sha256": "4100cd69ecfb06d491f176bb30812e669f98fd502a42c2356cecb13a18d6d838"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-07-history-panel.png",
+      "sha256": "500de92f0bec2137b186bd72d623b157b4eb81d67e67fb3078f117cb8b51ffc2"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-08-dragged.png",
+      "sha256": "30ebd0d3ffca8ce4109278eda803b9981665a0dd232a1a415620e681e345e444"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-09-reopened-position.png",
+      "sha256": "30ebd0d3ffca8ce4109278eda803b9981665a0dd232a1a415620e681e345e444"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-dark-10-research-classification-pending.png",
+      "sha256": "c36cc8caf3bed1219f3034cce0bd66592852031e5e9d09d751eb27e25ac5285a"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-01-pending-empty.png",
+      "sha256": "143d984bec6dfea7d6f8787ef66655b9077ec35709b4d1311c0fe554154640f9"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-02-entry-panel.png",
+      "sha256": "3027f139dd51b12806ec804e84cbb771fa2855607d42d788bc4f7a12bc946a31"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-03-pending-saved.png",
+      "sha256": "de9951e2d6d626cc08025e551def97f1aa3290558f6cf7958adf818bca220049"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-04-active-empty.png",
+      "sha256": "c86914c8f6caf5495745ded4caaeb05f605b24aeb5ac038fc3508f5251c01c69"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-05-active-tracking.png",
+      "sha256": "23bad9a58ef511927e35f23666a685bcbd56fdb9314ece4fd84555a7199f0edd"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-06-update-panel.png",
+      "sha256": "01773b5282f269d43c2f8e7491b214f9391360df38cbf38583d0fecee89c055e"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-07-history-panel.png",
+      "sha256": "9c6b8a1cc844dcd7b8b32d9103498fd4ca74f90b82282759bbdc1f8ce63b83da"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-08-dragged.png",
+      "sha256": "1d59f4eb5d5e706eb5444955b58f188f5f87b431b321ea8500a2759a7bd26a6a"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-09-reopened-position.png",
+      "sha256": "1d59f4eb5d5e706eb5444955b58f188f5f87b431b321ea8500a2759a7bd26a6a"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/desktop-light-10-research-classification-pending.png",
+      "sha256": "1f31d8c231c4ba32c744bad45bf9b7719adacf0ed42389d02f147367312f174a"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-dark-320-drawer.png",
+      "sha256": "c78ce582bdb4b2ff9598e3ea567512703d35fa24618edf133801e488a9ab83ca"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-dark-375-drawer.png",
+      "sha256": "a1d72750656c3caadba9508e10ba5aaaf57462b6fa4e4d5456b4dee5f35981a3"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-dark-390-closed-scroll-restored.png",
+      "sha256": "efaa9fc6a146e4c509359b9667ce2dc63b0dbe8742ddd66ff5a20f33710ef42d"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-dark-390-drawer.png",
+      "sha256": "ef5b1f3aa96172b3df5f2afeffc83bf92420e4c463426497ee17da27049956e4"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-dark-390-reduced-viewport-keyboard-simulation.png",
+      "sha256": "2c940dd7ad4e15f8ada0b09381adecc3f6af36cf5ac075e4de460352a43fb8ff"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-light-320-drawer.png",
+      "sha256": "6637a5887449cf8b543fb3b5c050bd1377732da801a4ec38113693b572ad2ed1"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-light-375-drawer.png",
+      "sha256": "f1d53b214d281b98f80eef45b147cc15e0db990b556ae677b3d7f116454b0e78"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-light-390-closed-scroll-restored.png",
+      "sha256": "62fbf4d7c27221820ec224368dec7284780a9acd566b5bae5d7e5d6ccb2e4a9e"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-light-390-drawer.png",
+      "sha256": "5fbee4f92d2aa4e39e8840edf131d0f413d2f62b3969f2e91ab2e8534110ffa7"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/mobile-light-390-reduced-viewport-keyboard-simulation.png",
+      "sha256": "516e7255791bda0268b3c1aacca73d61007e0bf134ef85b0824ccfb50f5c904e"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/results.json",
+      "sha256": "b54b2ff7da9bfa9fa53c76c5038f1442a8646b3a550aa2bb995d24c029fc1c0c"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/synthetic-dark-backup.json",
+      "sha256": "cafbb599520831dfac327452783b2f22f789debe465c90dd10bf62369df1501d"
+    },
+    {
+      "file": "docs/qa/v6-remediation/regression/synthetic-light-backup.json",
+      "sha256": "50a216eac4f4a16c790ac7a1a00210eb5f700b2f81313c4fd67bdd1f71fbbffe"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-after-archive-query.png",
+      "sha256": "a1e9632ec709221099d67784f9e94f0645e280f624089a56db2d84131344c3d0"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-after-archive-readonly-history.png",
+      "sha256": "947a2773b67ae1aaff907f418366cab64a9f0e02551c2222909a2d7226cad8d0"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-after-bof-to-cpb.png",
+      "sha256": "314bcfd4ff504fa62b87d4df6b0b12852b6b961a6ce4b594de968c2c51c0fbd2"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-after-bof-to-spb.png",
+      "sha256": "765a92b8d5e5b9138c4f0535f34933225ad893c719e4f16ca252cf843f3be7e8"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-after-equal-ms-order.png",
+      "sha256": "7ba28526dab03894e34ab434e06af87ec8ed0f056ac6f9ac03fce2651a5f0ff4"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-after-home-current-only.png",
+      "sha256": "d1ccfc22aecb7eb614587170f063048d6f8359ca4fe9abfd898eaf12f73881a0"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-after-two-store-recovery.png",
+      "sha256": "a5cc791bb8ad4577ff608eda703fe0d8ccc101bda985907e1b2d755d01923d1b"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-before-equal-ms-order.png",
+      "sha256": "66d9fd2eb5d91cf8bf557a5b090089e2be63d67504e6a6e23c4a688dcc44e4f9"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-before-home-ended-list.png",
+      "sha256": "c5d25293c60569a32f78c9bced80393f6180e41be4a40566958c87d557174294"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-decision.csv",
+      "sha256": "21f688459ebd927de5ccc4ae247ffe7d3e4c2c7c97f5f75786d83115f39871e7"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-recovery-verification.json",
+      "sha256": "f6b46207564a673bbd33420c3964ac49d695f4bd8e2267bb1bfaa9384fccef18"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-research-store.json",
+      "sha256": "520597c290ef35309117bff9ba0d812bbf20162a3da125c7a383f51b89cf20aa"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/dark-unified.json",
+      "sha256": "2d399bea96e45dea56938dcebbe0cf2ab4ac25c87c9b9f7858ca6ee8a1f8de55"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-after-archive-query.png",
+      "sha256": "81d75be3dd3fa6f2329c49bb36777aba79bc2a986dd723e5e74c327ca79abea7"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-after-archive-readonly-history.png",
+      "sha256": "af6a3d178e15cd9ed4adaaee47dd899e5b49d7570a2a879e718e844926bfafd2"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-after-bof-to-cpb.png",
+      "sha256": "d3661a5960394af36d20be7f546a7df9f114383a6d081b73b8815ebaaab35f2b"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-after-bof-to-spb.png",
+      "sha256": "2c25173912725ed92521e8a51a6cddeee3140957e5a9947265e4cb399126c676"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-after-equal-ms-order.png",
+      "sha256": "013848834401e98cbfe5a7287be64c528fe1bf9adf602e745a2bee862723f823"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-after-home-current-only.png",
+      "sha256": "43f600f282a7789cde00e309f06114324b84ec2fbad92f0811d34e4b69d94d3f"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-after-two-store-recovery.png",
+      "sha256": "642b689d59cf006710b05039f5a42e9c3162e977483810487392b55c0f27f55e"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-before-equal-ms-order.png",
+      "sha256": "c5b25f74580956eaad5800ca1eeeeeff258d7575f02b2271aadc746bd0f39cf4"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-before-home-ended-list.png",
+      "sha256": "9a9907c9aa6e660e418d38e1118e978c97027df1887a3b13db1201777bb78497"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-decision.csv",
+      "sha256": "b8dd00cdca755377c32a44cd16c7ae79a16f2b3f580134163bf99279ce9c89f8"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-recovery-verification.json",
+      "sha256": "5bb0a5bfd1bda586343cecb83b496fbe6a98c8daa8e60894e9c54a300c1e2e56"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-research-store.json",
+      "sha256": "520597c290ef35309117bff9ba0d812bbf20162a3da125c7a383f51b89cf20aa"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/light-unified.json",
+      "sha256": "08f6a7d27f7eae6f57269f6e7c2db823ca991fcae3a722d9e8254576890d22c6"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-dark-320-archive-drawer.png",
+      "sha256": "85828906a9ce73a22a5c4119103490697d1268debe7aa79731ea5fdf603553b8"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-dark-320-archive.png",
+      "sha256": "26578579a1c59dfdfaed18cd8041cfe248e1cd0706c6b10dc8d9a43f95932dd5"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-dark-320-bof-management.png",
+      "sha256": "5ef9ece19c26f1a82457c73e1bd3574b6f211fb929b06e16451076f5adb50e82"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-dark-390-archive-drawer.png",
+      "sha256": "4a5da0c4a0831eef9a7b239c54ada408d1a7459d00b2a60eeb777f00f41d9d41"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-dark-390-archive.png",
+      "sha256": "117e6b9ae3490c48c3086d74fba32b1e49c7c54011daa7f62b059878fbc852f6"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-dark-390-bof-management.png",
+      "sha256": "6ed92e1ed7133ba6f3f94a20fcc96052665ec11463c8ca78bc76e1845d1ca90d"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-light-320-archive-drawer.png",
+      "sha256": "e25e5fb45bfd4444bc3450f4e7ca93a8b4047dd611e5e0ca8be208728d013345"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-light-320-archive.png",
+      "sha256": "2fd88a90fcb7703cbe725b5c73255c9f418ad73b95074cbd2261f1e02613c57a"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-light-320-bof-management.png",
+      "sha256": "12f891164523cbea58c83e5914d982a54dbfdadf35bbf4759535a4fa59cb45cc"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-light-390-archive-drawer.png",
+      "sha256": "a0773ab9fc55992d354af0347a9f94ef3f61fddb374ef3e25b9def8e5bf38a19"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-light-390-archive.png",
+      "sha256": "bd62850340847107c055d4256749d5fa0b4a2ab6ed9aef8fb17c8377eb9148d5"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/mobile-light-390-bof-management.png",
+      "sha256": "71f1b6840ab2383882c06b2e727e9ac40d1fe1fcfeacb7ba7b918e44ce8a762b"
+    },
+    {
+      "file": "docs/qa/v6-remediation/targeted/results.json",
+      "sha256": "a7e658a60782000589ffe680741087f1e84ce6a166e30216101041624d74236f"
+    },
+    {
+      "file": "docs/qa/v6-remediation/verification.json",
+      "sha256": "5b561aced010c24ef2a160878e2ee1e9003db5ad47efefe08cfefac33a9a04b6"
+    }
+  ]
+}

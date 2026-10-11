@@ -1,0 +1,18 @@
+{
+  "status": "PASS",
+  "readOnly": true,
+  "unified": {
+    "sha256": "2d399bea96e45dea56938dcebbe0cf2ab4ac25c87c9b9f7858ca6ee8a1f8de55",
+    "schemaVersion": 2,
+    "intradaySchemaVersion": 6,
+    "records": 7,
+    "ended": 5,
+    "manualEvents": 14
+  },
+  "research": {
+    "sha256": "520597c290ef35309117bff9ba0d812bbf20162a3da125c7a383f51b89cf20aa",
+    "manualDecisions": 1,
+    "tradeOverrides": 1,
+    "setupFilter": "SETUP_BOF"
+  }
+}

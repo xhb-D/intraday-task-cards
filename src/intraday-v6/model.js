@@ -3,7 +3,7 @@ import {
   recordInitialStop as v5RecordInitialStop, correctInitialStop as v5CorrectInitialStop,
   recordBofToPb as v5RecordBofToPb, revertBofToPb as v5RevertBofToPb
 } from '../model.js';
-import { normalizeExpectationContent, entryExpectation, expectationPayload, HOLDING_EXPECTATION_STATES } from './expectations.js';
+import { normalizeExpectationContent, entryExpectation, expectationPayload, HOLDING_EXPECTATION_STATES, MANAGEMENT_SWITCH_EVENT } from './expectations.js';
 import { effectiveBofToPbEvent } from '../model.js';
 import { activeOpportunityForSymbol, activeTradesForSymbol, effectiveDirectionForSymbol, assertSymbol } from './queries.js';
 import { assertV6State, SCHEMA_VERSION, safeTime, own, fail, singleRecordV5View } from './validation.js';
@@ -165,7 +165,7 @@ export function deleteRecord(state, id) {
     const index = next.records.findIndex(record => record.id === id);
     if (index < 0) return { changed: false };
     if (next.records[index].endedAt === null) fail('V6_ACTIVE_RECORD_DELETE_FORBIDDEN', 'opportunityId');
-    next.records.splice(index, 1); return { changed: true };
+    fail('V6_RECORD_DELETE_FORBIDDEN', 'opportunityId');
   });
 }
 
@@ -207,13 +207,18 @@ function appendDecision(state, id, type, content, submissionId, recordedAt) {
     const record = recordFor(next, id);
     const prior = record.researchCapture.manualEvents.find(e => e.payload?.submissionId === submissionId);
     if (prior) {
-      const priorContent = type === 'HOLDING_EXPECTATION_UPDATED' ? { status: prior.payload.status, reason: prior.payload.reason } : prior.payload.content;
+      const priorContent = type === 'HOLDING_EXPECTATION_UPDATED' ? { status: prior.payload.status, reason: prior.payload.reason } :
+        type === MANAGEMENT_SWITCH_EVENT ? { from:prior.payload.from, to:prior.payload.to } : prior.payload.content;
       if (prior.type !== type || JSON.stringify(priorContent) !== JSON.stringify(content)) fail('V6_SUBMISSION_CONFLICT', 'submissionId');
       return { changed: false, reason: 'duplicate', event: structuredClone(prior) };
     }
     if (!safeTime(recordedAt) || recordedAt < record.registeredAt || recordedAt < (record.researchCapture.manualEvents.at(-1)?.recordedAt ?? 0)) fail('V6_TIME_INVALID', 'time');
     const payload = { ...expectationPayload(record, submissionId, recordedAt) };
-    if (type === 'HOLDING_EXPECTATION_UPDATED') {
+    if (type === MANAGEMENT_SWITCH_EVENT) {
+      requireTrade(record);
+      if (record.type !== 'bof' || !['SPB','CPB'].includes(content.to) || record.researchCapture.manualEvents.some(e => e.type === MANAGEMENT_SWITCH_EVENT)) fail('V6_MANAGEMENT_SWITCH_FORBIDDEN', 'opportunityId');
+      Object.assign(payload, content);
+    } else if (type === 'HOLDING_EXPECTATION_UPDATED') {
       requireTrade(record);
       if (!Object.hasOwn(HOLDING_EXPECTATION_STATES, content.status) || typeof content.reason !== 'string') fail('V6_EXPECTATION_INVALID', 'status');
       Object.assign(payload, content);
@@ -242,4 +247,7 @@ export function correctEntryExpectation(state, id, content, submissionId, record
 }
 export function updateHoldingExpectation(state, id, status, reason, submissionId, recordedAt = Date.now()) {
   return appendDecision(state, id, 'HOLDING_EXPECTATION_UPDATED', { status, reason: typeof reason === 'string' ? reason.trim() : reason }, submissionId, recordedAt);
+}
+export function switchBofManagement(state, id, to, submissionId, recordedAt = Date.now()) {
+  return appendDecision(state, id, MANAGEMENT_SWITCH_EVENT, { from:'BOF',to }, submissionId, recordedAt);
 }
