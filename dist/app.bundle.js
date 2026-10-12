@@ -2839,7 +2839,9 @@ function initExpectationPanel({ host, getRecord, save, storage, isLocked, viewpo
   const fields = [['path','预期路径','预计价格接下来如何发展？'],['keyLevels','关键位置','主要目标在哪里？途中需要警惕什么位置？'],['focus','观察重点','希望看到什么 MTF 价格行为支持原预期？']];
   const empty = () => ({ path: '', keyLevels: '', focus: '' });
   let target = null, mode = 'entry', initial = null, draft = empty(), entryVersion = null, submissionId = null, busy = false;
-  let waitingAction = null, drag = null, position = loadExpectationPosition(storage), opener = null;
+  let waitingAction = null, drag = null, position = loadExpectationPosition(storage), opener = null, editingFocus = null;
+  const document = host.ownerDocument || viewport.document;
+  let pointerStartedInside = false;
   const mobile = () => (viewport.innerWidth || 1200) <= 629;
   const editing = () => ['record','correct','update'].includes(mode);
   const dirty = () => target !== null && editing() && JSON.stringify(draft) !== JSON.stringify(initial);
@@ -2879,7 +2881,7 @@ function initExpectationPanel({ host, getRecord, save, storage, isLocked, viewpo
     const entry = intradayV6.entryExpectation(record), isForm = editing();
     const titles = { record:'入场预期', entry:'入场预期', correct:'更正预期', update:'持仓预期更新', history:'完整历史' };
     const timing = record.endedAt !== null ? '本次保存为复盘补写，不能作为事前预期。' : record.enteredAt !== null ? '本次保存时间晚于 HTML 入场确认；不代表已核对券商成交时间。' : '保存真实记录时间，以 HTML 入场确认时间区分补录。';
-    host.innerHTML = `<header class="expectation-panel-header" data-expectation-drag><div><h2 id="expectation-panel-title">交易预期与跟踪</h2><p>${esc(record.symbol)} · ${esc(record.type.toUpperCase())} · ${esc(DIRECTIONS[record.direction])}</p></div><div class="expectation-window-actions">${button('reset','重置位置')}${button('close','关闭')}</div></header><div class="expectation-panel-scroll"><p class="expectation-record-label">${esc(SETUP_LABELS[record.type])}<br><small>交易 ID：${esc(record.id)}</small></p><nav class="expectation-tabs" aria-label="交易预期分区">${button('entry','入场预期')}${record.enteredAt !== null && record.endedAt === null ? button('update','持仓跟踪') : ''}${button('history','完整历史')}</nav><div data-expectation-discard hidden class="expectation-discard" role="alert">有未保存的草稿。${button('keep','保留当前草稿')}${button('discard','放弃草稿并继续')}</div><h3>${titles[mode]}</h3><p data-expectation-lifecycle class="expectation-note">${esc(timing)}</p>${mode === 'history' ? historyHtml(record) : mode === 'entry' ? entryHtml(record) : ''}${isForm ? `<form data-expectation-form>${mode === 'update' ? `<fieldset><legend>本次判断</legend>${Object.entries(intradayV6.HOLDING_EXPECTATION_STATES).map(([k,v]) => `<label class="expectation-status"><input type="radio" name="status" value="${k}"${draft.status===k?' checked':''} required>${v}</label>`).join('')}</fieldset><label>简短原因（选填）<textarea name="reason" rows="2" maxlength="400" placeholder="一句话记录当前观察">${esc(draft.reason)}</textarea></label><p class="expectation-note" data-reason-hint>不及预期时建议记录原因；可留空。</p>` : fields.map(([k,label,hint]) => `<label>${label}<textarea name="${k}" rows="2" maxlength="400" placeholder="${hint}">${esc(draft[k])}</textarea></label>`).join('')}<p class="expectation-note">${mode === 'update' ? '原因' : '每项'}最多 200 字符。${mode === 'update' ? '每次保存新增记录，不自动改变交易。' : '至少填写一项；首次内容和每次更正都会保留。'}</p><div class="expectation-form-actions"><button type="submit">${mode==='update'?'保存本次判断':mode==='correct'?'保存更正':'保存预期'}</button>${button('cancel','取消')}</div></form>` : ''}<p class="expectation-feedback" data-expectation-feedback role="status"></p><p class="expectation-note" data-position-status></p>${mode !== 'history' && entry ? `<details><summary>查看完整历史 · ${record.researchCapture.manualEvents.length}条人工事件</summary>${historyHtml(record)}</details>` : ''}</div>`;
+    host.innerHTML = `<header class="expectation-panel-header" data-expectation-drag><div><h2 id="expectation-panel-title">交易预期与跟踪</h2><p>${esc(record.symbol)} · ${esc(record.type.toUpperCase())} · ${esc(DIRECTIONS[record.direction])}</p></div><div class="expectation-window-actions">${button('reset','重置位置')}${button('close','关闭')}</div></header><div class="expectation-panel-scroll"><p class="expectation-record-label">${esc(SETUP_LABELS[record.type])}<br><small>交易 ID：${esc(record.id)}</small></p><nav class="expectation-tabs" aria-label="交易预期分区">${button('entry','入场预期')}${record.enteredAt !== null && record.endedAt === null ? button('update','持仓跟踪') : ''}${button('history','完整历史')}</nav><div data-expectation-discard hidden class="expectation-discard" role="alert" aria-labelledby="expectation-unsaved-title"><strong id="expectation-unsaved-title">存在未保存修改</strong>${button('save-close','保存并关闭')}${button('keep','继续编辑')}${button('discard','放弃修改')}</div><h3>${titles[mode]}</h3><p data-expectation-lifecycle class="expectation-note">${esc(timing)}</p>${mode === 'history' ? historyHtml(record) : mode === 'entry' ? entryHtml(record) : ''}${isForm ? `<form data-expectation-form>${mode === 'update' ? `<fieldset><legend>本次判断</legend>${Object.entries(intradayV6.HOLDING_EXPECTATION_STATES).map(([k,v]) => `<label class="expectation-status"><input type="radio" name="status" value="${k}"${draft.status===k?' checked':''} required>${v}</label>`).join('')}</fieldset><label>简短原因（选填）<textarea name="reason" rows="2" maxlength="400" placeholder="一句话记录当前观察">${esc(draft.reason)}</textarea></label><p class="expectation-note" data-reason-hint>不及预期时建议记录原因；可留空。</p>` : fields.map(([k,label,hint]) => `<label>${label}<textarea name="${k}" rows="2" maxlength="400" placeholder="${hint}">${esc(draft[k])}</textarea></label>`).join('')}<p class="expectation-note">${mode === 'update' ? '原因' : '每项'}最多 200 字符。${mode === 'update' ? '每次保存新增记录，不自动改变交易。' : '至少填写一项；首次内容和每次更正都会保留。'}</p><div class="expectation-form-actions"><button type="submit">${mode==='update'?'保存本次判断':mode==='correct'?'保存更正':'保存预期'}</button>${button('cancel','取消')}</div></form>` : ''}<p class="expectation-feedback" data-expectation-feedback role="status"></p><p class="expectation-note" data-position-status></p>${mode !== 'history' && entry ? `<details><summary>查看完整历史 · ${record.researchCapture.manualEvents.length}条人工事件</summary>${historyHtml(record)}</details>` : ''}</div>`;
     host.hidden = false;
     geometry(); sync();
   }
@@ -2894,13 +2896,20 @@ function initExpectationPanel({ host, getRecord, save, storage, isLocked, viewpo
     render(); host.querySelector(isFormSelector())?.focus({ preventScroll:true });
   }
   const isFormSelector = () => editing() ? 'textarea, input' : '[data-expectation-action="close"]';
-  function request(action) {
+  function request(action, closing = false) {
+    if (busy) return;
     if (!dirty()) { action(); return; }
-    waitingAction = action; const warning = host.querySelector('[data-expectation-discard]'); warning.hidden = false; warning.scrollIntoView?.({ block:'nearest' });
+    if (!waitingAction) editingFocus = document.activeElement;
+    waitingAction = action; const warning = host.querySelector('[data-expectation-discard]'); warning.hidden = false;
+    warning.querySelector('[data-expectation-action="save-close"]').hidden = !closing;
+    warning.querySelector('[data-expectation-action="keep"]').textContent = closing ? '继续编辑' : '保留当前草稿';
+    warning.querySelector('[data-expectation-action="discard"]').textContent = closing ? '放弃修改' : '放弃草稿并继续';
+    geometry(); warning.scrollIntoView?.({ block:'nearest' }); warning.querySelector('[data-expectation-action="keep"]')?.focus({ preventScroll:true });
   }
-  function close() {
+  const requestClose = (restoreFocus = true) => request(() => close(restoreFocus), true);
+  function close(restoreFocus = true) {
     target = null; waitingAction = null; mode = 'entry'; draft = empty(); initial = structuredClone(draft); host.hidden = true;
-    opener?.isConnected && opener.focus({ preventScroll:true });
+    if (restoreFocus && opener?.isConnected) opener.focus({ preventScroll:true });
   }
   function sync() {
     if (target === null) return;
@@ -2908,6 +2917,8 @@ function initExpectationPanel({ host, getRecord, save, storage, isLocked, viewpo
     const stopped = mode === 'update' && record && (record.endedAt !== null || record.enteredAt === null);
     const submit = host.querySelector('[type="submit"]');
     if (submit) submit.disabled = busy || isLocked() || stale || stopped;
+    const saveAndClose = host.querySelector('[data-expectation-action="save-close"]');
+    if (saveAndClose) saveAndClose.disabled = !submit || submit.disabled;
     if (stale) feedback('交易记录已改变或被移除。草稿仍保留，请核对后重新打开。');
     else if (stopped) feedback('该笔交易已结束，不能继续保存普通持仓判断。草稿仍保留，可取消后查看历史。');
     else if (isLocked()) feedback('存档冲突或保存保护已锁定写入；草稿仍保留。');
@@ -2920,29 +2931,49 @@ function initExpectationPanel({ host, getRecord, save, storage, isLocked, viewpo
     if (!Object.hasOwn(draft, input.name)) return;
     draft[input.name] = input.value;
   });
-  host.addEventListener('submit', event => {
-    if (!event.target.matches('[data-expectation-form]')) return;
-    event.preventDefault(); if (busy) return;
+  function saveDraft(afterSave = null) {
+    if (busy) return;
     sync(); if (host.querySelector('[type="submit"]').disabled) return;
+    if (!host.querySelector('[data-expectation-form]').reportValidity()) return;
     busy = true; sync();
     try {
       const result = save({ id:target, mode, draft:structuredClone(draft), submissionId, expectedEntryEventId:entryVersion });
       if (!result.ok) { feedback(result.message || '保存未完成，草稿仍保留。'); return; }
+      if (afterSave) { afterSave(); return; }
       const id = target; activate(id, mode === 'update' ? 'history' : 'entry'); feedback('已保存本次记录。');
     } catch (error) { feedback(error.code === 'V6_EXPECTATION_INVALID' ? '请检查内容：每项最多 200 字符，入场预期至少填写一项，持仓判断需选择状态。' : '保存未完成，草稿仍保留。请检查存档或交易状态。'); }
     finally { busy = false; sync(); }
+  }
+  host.addEventListener('submit', event => {
+    if (!event.target.matches('[data-expectation-form]')) return;
+    event.preventDefault(); saveDraft();
   });
   host.addEventListener('click', event => {
     const el = event.target.closest('[data-expectation-action]'); if (!el || event.detail > 1) return;
     const action = el.dataset.expectationAction;
-    if (action === 'keep') { waitingAction = null; host.querySelector('[data-expectation-discard]').hidden = true; return; }
-    if (action === 'discard') { const next = waitingAction; waitingAction = null; next?.(); return; }
+    if (action === 'keep') { waitingAction = null; host.querySelector('[data-expectation-discard]').hidden = true; editingFocus?.isConnected && editingFocus.focus({ preventScroll:true }); geometry(); return; }
+    if (action === 'discard') { const next = waitingAction; waitingAction = null; draft = structuredClone(initial); next?.(); return; }
+    if (action === 'save-close') { if (waitingAction) saveDraft(waitingAction); return; }
     if (action === 'reset') { position = null; geometry(true); return; }
-    if (action === 'close') request(close);
+    if (action === 'close') requestClose();
     else if (action === 'cancel') request(() => activate(target, 'entry'));
     else if (['entry','correct','update','history'].includes(action)) request(() => activate(target, action));
   });
-  host.addEventListener('keydown', event => { if (event.key === 'Escape') { event.preventDefault(); request(close); } });
+  // Observe completed clicks only: scrolling or a pointer released after starting
+  // inside the panel must never count as an outside dismissal.
+  document.addEventListener?.('pointerdown', event => { pointerStartedInside = host.contains(event.target); }, true);
+  document.addEventListener?.('pointercancel', () => { pointerStartedInside = false; }, true);
+  document.addEventListener?.('click', event => {
+    const startedInside = event.detail > 0 && pointerStartedInside; pointerStartedInside = false;
+    if (target === null || host.hidden || host.contains(event.target) || event.composedPath().includes(host) || startedInside || drag || waitingAction) return;
+    // The opening/switching click bubbles here after the home/history handler.
+    if (opener?.contains(event.target)) return;
+    requestClose(false);
+  });
+  document.addEventListener?.('keydown', event => {
+    if (event.key !== 'Escape' || event.isComposing || event.defaultPrevented || target === null || host.hidden || drag || document.querySelector('dialog[open]')) return;
+    event.preventDefault(); requestClose();
+  });
   host.addEventListener('pointerdown', event => {
     const header = event.target.closest('[data-expectation-drag]');
     if (!header || event.target.closest('button') || mobile() || event.button !== 0) return;
@@ -2964,7 +2995,7 @@ function initExpectationPanel({ host, getRecord, save, storage, isLocked, viewpo
   viewport.visualViewport?.addEventListener('scroll', () => geometry());
   viewport.addEventListener?.('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
   return { open(id, requested = 'entry', source = null) { request(() => activate(id, requested, source)); }, sync,
-    routeChanged(home) { if (target !== null) host.hidden = !home; }, hasDraft:dirty };
+    routeChanged(home) { if (target !== null) { if (home) host.hidden = false; else requestClose(false); } }, hasDraft:dirty };
 }
 
 

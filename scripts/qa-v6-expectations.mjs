@@ -78,7 +78,7 @@ for(const theme of ['light','dark']){
   await page.setViewportSize({width:760,height:600});await visibleBounds(page);await paction(page,'reset').click();await visibleBounds(page);await page.setViewportSize({width:1500,height:1100});await paction(page,'close').click();
   await action(page,'expectation-entry',b.id).click();await page.evaluate(()=>{document.documentElement.style.zoom='1.25';dispatchEvent(new Event('resize'));});await visibleBounds(page);await page.evaluate(()=>{document.documentElement.style.zoom='';dispatchEvent(new Event('resize'));});await paction(page,'close').click();checks.push(`${theme}: resize/zoom/reclamp/reset PASS`);
   // Legacy stop and BOF regression while the floating panel is open.
-  await action(page,'expectation-entry',ids.GC).click();await dragTo(page,35,70);await action(page,'bof-to-pb',ids.CL).click();await action(page,'bof-revert',ids.CL).click();assert.equal(await panel(page).isVisible(),true);await paction(page,'close').click();
+  await action(page,'expectation-entry',ids.GC).click();await dragTo(page,35,70);await action(page,'bof-to-pb',ids.CL).click();assert.equal(await panel(page).isVisible(),false);await action(page,'bof-revert',ids.CL).click();
   // Quota failure retains form and canonical bytes.
   await action(page,'expectation-entry',b.id).click();await paction(page,'correct').click();await panel(page).locator('[name="path"]').fill('保存失败仍须保留');const beforeFailure=await raw(page);
   expectedFault='quota';

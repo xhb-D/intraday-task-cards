@@ -1,0 +1,650 @@
+{
+  "status": "PASS",
+  "browser": "154.0.8037.99",
+  "origin": "http://127.0.0.1:59977/#/home",
+  "fixture": "synthetic only",
+  "checks": [
+    {
+      "scope": "1440-light",
+      "name": "01 close button",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "02 outside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "03 inside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "05 tab",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "keyboard tab activation remains inside after rerender",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "06 history expand",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "04 input / correction",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "inside pointer release outside is not an outside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "07 ESC clean",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "dirty close button uses same guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "ESC converts a pending tab switch into close confirmation",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "08 ESC dirty guard / all entry fields",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "12 continue editing",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "09 outside dirty guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "11 discard restores saved values",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "10 save and close succeeds once / original save flow",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "17 existing expectation history unchanged",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "entry recording save and close",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "invalid save retains draft",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "holding reason / status guard and save",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "18 save failure retains panel / draft / canonical bytes",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "20 multi Trade switching isolation",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "13 desktop drag never closes",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "14 reload restores position",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "reset position",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "global ESC with outside focus",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "outside card click",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "close / drag / reset write no canonical data",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "dirty route navigation retains visible guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-light",
+      "name": "19 real dual-tab CAS lock retains draft and canonical",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "01 close button",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "02 outside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "03 inside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "05 tab",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "keyboard tab activation remains inside after rerender",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "06 history expand",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "04 input / correction",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "inside pointer release outside is not an outside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "07 ESC clean",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "dirty close button uses same guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "ESC converts a pending tab switch into close confirmation",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "08 ESC dirty guard / all entry fields",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "12 continue editing",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "09 outside dirty guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "11 discard restores saved values",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "10 save and close succeeds once / original save flow",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "17 existing expectation history unchanged",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "entry recording save and close",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "invalid save retains draft",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "holding reason / status guard and save",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "18 save failure retains panel / draft / canonical bytes",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "20 multi Trade switching isolation",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "13 desktop drag never closes",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "14 reload restores position",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "reset position",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "global ESC with outside focus",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "outside card click",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "close / drag / reset write no canonical data",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "dirty route navigation retains visible guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "1440-dark",
+      "name": "19 real dual-tab CAS lock retains draft and canonical",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "01 close button",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "15 mobile outside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "03 inside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "05 tab",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "keyboard tab activation remains inside after rerender",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "06 history expand",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "16 mobile input",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "07 ESC clean",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "dirty close button uses same guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "ESC converts a pending tab switch into close confirmation",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "08 ESC dirty guard / all entry fields",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "12 continue editing",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "09 outside dirty guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "dirty mobile touch outside protects draft",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "11 discard restores saved values",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "10 save and close succeeds once / original save flow",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "17 existing expectation history unchanged",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "entry recording save and close",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "invalid save retains draft",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "holding reason / status guard and save",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "18 save failure retains panel / draft / canonical bytes",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "20 multi Trade switching isolation",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "mobile background scroll remains available",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "mobile touch outside preserves scroll",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "mobile reduced viewport keeps input / draft",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "close / drag / reset write no canonical data",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "dirty route navigation retains visible guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-light",
+      "name": "19 real dual-tab CAS lock retains draft and canonical",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "01 close button",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "15 mobile outside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "03 inside click",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "05 tab",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "keyboard tab activation remains inside after rerender",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "06 history expand",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "16 mobile input",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "07 ESC clean",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "dirty close button uses same guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "ESC converts a pending tab switch into close confirmation",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "08 ESC dirty guard / all entry fields",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "12 continue editing",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "09 outside dirty guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "dirty mobile touch outside protects draft",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "11 discard restores saved values",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "10 save and close succeeds once / original save flow",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "17 existing expectation history unchanged",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "entry recording save and close",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "invalid save retains draft",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "holding reason / status guard and save",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "18 save failure retains panel / draft / canonical bytes",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "20 multi Trade switching isolation",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "mobile background scroll remains available",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "mobile touch outside preserves scroll",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "mobile reduced viewport keeps input / draft",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "close / drag / reset write no canonical data",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "dirty route navigation retains visible guard",
+      "status": "PASS"
+    },
+    {
+      "scope": "390-dark",
+      "name": "19 real dual-tab CAS lock retains draft and canonical",
+      "status": "PASS"
+    }
+  ],
+  "screenshots": [
+    "1440-light-01-open.png",
+    "1440-light-outside-closed.png",
+    "1440-light-esc-closed.png",
+    "1440-light-02-esc-unsaved.png",
+    "1440-light-03-outside-unsaved.png",
+    "1440-light-discard-closed.png",
+    "1440-light-04-saved.png",
+    "1440-light-05-save-failure.png",
+    "1440-light-06-dragged.png",
+    "1440-light-07-position-restored.png",
+    "1440-dark-01-open.png",
+    "1440-dark-outside-closed.png",
+    "1440-dark-esc-closed.png",
+    "1440-dark-02-esc-unsaved.png",
+    "1440-dark-03-outside-unsaved.png",
+    "1440-dark-discard-closed.png",
+    "1440-dark-04-saved.png",
+    "1440-dark-05-save-failure.png",
+    "1440-dark-06-dragged.png",
+    "1440-dark-07-position-restored.png",
+    "390-light-01-open.png",
+    "390-light-outside-closed.png",
+    "390-light-esc-closed.png",
+    "390-light-02-esc-unsaved.png",
+    "390-light-03-outside-unsaved.png",
+    "390-light-discard-closed.png",
+    "390-light-04-saved.png",
+    "390-light-05-save-failure.png",
+    "390-light-06-reduced-viewport.png",
+    "390-dark-01-open.png",
+    "390-dark-outside-closed.png",
+    "390-dark-esc-closed.png",
+    "390-dark-02-esc-unsaved.png",
+    "390-dark-03-outside-unsaved.png",
+    "390-dark-discard-closed.png",
+    "390-dark-04-saved.png",
+    "390-dark-05-save-failure.png",
+    "390-dark-06-reduced-viewport.png"
+  ],
+  "errors": [],
+  "expectedDiagnostics": [
+    {
+      "fault": "quota",
+      "message": "[intraday-task-cards diagnostic] {errorCode: CANONICAL_WRITE_FAILED, phase: unified_storage_write, message: 统一存档写入失败；原始存档已恢复, cause: QA quota, relevantSymbol: null}"
+    },
+    {
+      "fault": "quota",
+      "message": "[intraday-task-cards diagnostic] {errorCode: CANONICAL_WRITE_FAILED, phase: unified_storage_write, message: 统一存档写入失败；原始存档已恢复, cause: QA quota, relevantSymbol: null}"
+    },
+    {
+      "fault": "quota",
+      "message": "[intraday-task-cards diagnostic] {errorCode: CANONICAL_WRITE_FAILED, phase: unified_storage_write, message: 统一存档写入失败；原始存档已恢复, cause: QA quota, relevantSymbol: null}"
+    },
+    {
+      "fault": "quota",
+      "message": "[intraday-task-cards diagnostic] {errorCode: CANONICAL_WRITE_FAILED, phase: unified_storage_write, message: 统一存档写入失败；原始存档已恢复, cause: QA quota, relevantSymbol: null}"
+    }
+  ],
+  "limitations": [
+    "Mobile uses Chrome touch emulation; physical iOS Safari and the real OS soft keyboard are not verified. Reduced visual viewport is simulated."
+  ]
+}

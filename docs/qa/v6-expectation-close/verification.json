@@ -1,0 +1,31 @@
+{
+  "status": "PASS",
+  "base": "00aa5971a9f51c941b06c5b883e3966113fa2072",
+  "branch": "codex/v6-expectation-panel-close-guard",
+  "mainUnchanged": "975b5095de22686a609a0f2313c0114a1eb81fd3",
+  "tests": {
+    "total": 1175,
+    "pass": 1175,
+    "fail": 0,
+    "skipped": 0
+  },
+  "newBrowserChecks": 116,
+  "existingBrowserRegressionChecks": 26,
+  "screenshots": 38,
+  "build": "PASS",
+  "syntax": "PASS",
+  "diffCheck": "PASS",
+  "protectedUnchanged": 350,
+  "noSchemaChange": true,
+  "noDataModelChange": true,
+  "noBusinessLogicChange": true,
+  "noMigrationChange": true,
+  "noHelperChange": true,
+  "noPush": true,
+  "noMerge": true,
+  "noDeploy": true,
+  "limitations": [
+    "Mobile uses Chrome touch emulation; physical iOS Safari and the real OS soft keyboard are not verified. Reduced visual viewport is simulated."
+  ],
+  "bundleOnlyPanelChanged": true
+}

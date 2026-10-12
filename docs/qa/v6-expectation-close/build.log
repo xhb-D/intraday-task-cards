@@ -1,0 +1,3 @@
+PASS: node scripts/build.mjs
+PASS: bundle/source/QA syntax checks
+PASS: git diff --check
