@@ -10,8 +10,9 @@
 .classifier .option{height:26px;border-color:#263341;background:#151e29;color:#8e9daf;font-size:11px}
 .bias-field .option.selected{background:#202c38;border-color:#52687d;color:#d3dee9;font-weight:600}
 .structure-segment{grid-template-columns:minmax(0,1fr) minmax(0,1.7fr) minmax(0,1fr)}
-.capture-card .structure-segment{grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,.55fr)}
-.capture-card .structure-segment .option{white-space:normal;overflow-wrap:anywhere}
+.capture-card .structure-segment{grid-template-columns:repeat(5,minmax(0,1fr));height:auto;align-items:stretch}
+.capture-card .structure-segment .option{min-width:0;height:auto;min-height:26px;padding:3px 2px;line-height:16px;white-space:normal;overflow-wrap:break-word}
+@container (max-width:300px){.capture-card .structure-segment{grid-template-columns:repeat(6,minmax(0,1fr))}.capture-card .structure-segment .option{grid-column:span 2}.capture-card .structure-segment .option:nth-last-child(-n+2){grid-column:span 3}}
 .capture-card .structure-legacy-note{margin:6px 0 0;font-size:11px;line-height:1.5}
 .structure-field .option.selected{background:#263545;border-color:#718ba5;color:#e0eaf5;font-weight:650}
 .structure-field .field-label,.direction-field .field-label{white-space:nowrap}
@@ -132,6 +133,7 @@
 /* V6 capture: compact independent trades, then one pending opportunity. */
 .capture-card{display:grid;gap:12px;min-width:0}
 .capture-card .card-controls{grid-template-rows:auto auto auto;gap:7px}
+.capture-card .active-trades[hidden],.capture-card .new-opportunity[hidden]{display:none}
 .capture-card h3{font-size:13px;line-height:20px;margin:0;font-weight:650}
 .capture-section-heading,.trade-heading,.pending-heading{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap}
 .capture-section-heading{margin-bottom:7px}.holdings-empty,.opportunity-empty{margin:5px 0;color:var(--text-secondary);font-size:12px;line-height:18px}

@@ -19,15 +19,15 @@ function setup(structure, direction='long') {
   v6.changeStructure(state,'GC',structure);v6.changeDirection(state,'GC',direction,T+1);
   return state;
 }
-test('HTF V2 UI: three exact choices in order; precise headings and no legacy creation buttons on every card',()=>{
+test('HTF UI: five current key-level choices; historical V2 dictionaries unchanged on every card',()=>{
   assert.deepEqual(Object.keys(structures),keys);assert.deepEqual(Object.values(structures),labels);
   for(const symbol of ['GC','CL','ES']){
     const html=captureUi.renderCard(v6.createWorkspace(T),symbol),section=html.match(/<section class="classifier structure-field">([^]*?)<\/section>/)[1];
     const buttons=[...section.matchAll(/<button[^>]*data-action="structure"[^>]*data-value="([^"]+)"[^>]*>([^]*?)<\/button>/g)];
-    assert.deepEqual(buttons.map(m=>m[1]),Object.keys(v5.HTF_STRUCTURES_V3));assert.deepEqual(buttons.map(m=>m[2]),Object.values(v5.HTF_STRUCTURES_V3).map(s=>s.replace(/&/g,'&amp;')));
-    assert.ok(html.indexOf('确定持仓预期（关注波段动能&amp;未测试优质缺口）')<html.indexOf('结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）'));
-    assert.ok(html.indexOf('结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）')<html.indexOf('交易方向 <span'));
-    assert.ok(html.includes('小偏见方向&gt;大偏见方向'));
+    assert.deepEqual(buttons.map(m=>m[1]),Object.keys(v5.HTF_KEY_LEVELS));assert.deepEqual(buttons.map(m=>m[2]),Object.values(v5.HTF_KEY_LEVELS).map(s=>s.replace(/&/g,'&amp;')));
+    assert.ok(html.indexOf('TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）')<html.indexOf('趋势 FVG/震荡 OB 波段极值点'));
+    assert.ok(html.indexOf('趋势 FVG/震荡 OB 波段极值点')<html.indexOf('交易方向</span>'));
+    assert.doesNotMatch(html,/direction-note|小偏见方向|大偏见方向/);
   }
 });
 for(const key of keys)for(const type of ['mtf_pb','mtf_bof'])for(const direction of ['long','short'])test(`HTF V2 ${key}/${type}/${direction}: explicit selection, immutable snapshot, lifecycle, JSON and Markdown`,()=>{

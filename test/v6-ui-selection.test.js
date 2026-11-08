@@ -45,22 +45,22 @@ for (const direction of ['long', 'short', 'none']) {
     assertSelection(render(state), 'direction', direction, 3);
   });
 }
-test('V6 home title: exact replacement note remains inline within direction label', () => {
+test('V6 home title: plain direction label has no priority explanation', () => {
   const html = render(v6.createWorkspace(T));
-  assert.ok(html.includes(`<span class="field-label">交易方向 <span class="direction-note">${note}</span></span>`));
+  assert.ok(html.includes(`<span class="field-label">交易方向</span>`));assert.ok(!html.includes(note));
   assert.doesNotMatch(html, /市场结构不明确时看HTF缺口/);
 });
-test('V6 home readonly direction: title note preserved without restoring editable choices', () => {
+test('V6 home readonly direction: plain title preserves the existing direction lock', () => {
   const state = v6.createWorkspace(T);
   v6.changeStructure(state, 'GC', 'breakout_strong_pullback_weak');
   v6.changeDirection(state, 'GC', 'long', T + 1);
   v6.chooseSetup(state, 'GC', 'spb', T + 2);
   const html = render(state);
-  assert.ok(html.includes(note));
+  assert.ok(!html.includes(note));
   assert.equal(buttons(html, 'direction').length, 0);
   assert.match(html, /class="readonly"[^>]*>做多 · 当前机会锁定/);
 });
-test('V6 production bundle: renders updated direction explanation', () => {
+test('V6 production bundle: omits the removed direction explanation', () => {
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
-  assert.ok(bundle.includes(`交易方向 <span class="direction-note">${note}</span>`));
+  assert.ok(bundle.includes(`<span class="field-label">交易方向</span>`));assert.ok(!bundle.includes(note));
 });

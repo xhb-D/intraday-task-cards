@@ -5,10 +5,10 @@ import * as v6 from '../src/intraday-v6/model.js';
 import { captureUi } from '../src/capture-ui.js';
 const T=1750000000000;
 const choices=(html,action)=>[...html.matchAll(/<button\b([^>]*)>/g)].map(m=>m[1]).filter(a=>a.includes(`data-action="${action}"`));
-for(const structure of ['breakout_strong_pullback_weak','breakout_weak_pullback_strong','htf_range_v2'])test(`V6 structure ${structure}: all choices neutral, only current selected`,()=>{
+for(const structure of ['htf_bull_breakout','htf_bull_pullback','htf_bear_breakout','htf_bear_cover','htf_range_v2'])test(`V6 structure ${structure}: all choices neutral, only current selected`,()=>{
   const state=v6.createWorkspace(T);v6.changeStructure(state,'GC',structure);
   const before=structuredClone(state),buttons=choices(captureUi.renderCard(state,'GC'),'structure');
-  assert.equal(buttons.length,3);
+  assert.equal(buttons.length,5);
   for(const b of buttons){assert.match(b,/data-tone="neutral"/);assert.doesNotMatch(b,/data-tone="(?:bullish|bearish)"|class="[^"]*(?:green|red)/);const selected=b.includes(`data-value="${structure}"`);assert.equal(/class="[^"]*\bselected\b/.test(b),selected);assert.ok(b.includes(`aria-pressed="${selected}"`));}
   assert.deepEqual(state,before);
 });

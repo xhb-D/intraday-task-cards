@@ -8,9 +8,9 @@ import { ready, T } from './fixtures/intraday-v6.js';
 const html=readFileSync(new URL('../index.html',import.meta.url),'utf8');
 const css=readFileSync(new URL('../refinement.css',import.meta.url),'utf8');
 const chimeCss=readFileSync(new URL('../natural-chime.css',import.meta.url),'utf8');
-const big='<span class="field-label context-heading"><strong class="context-title">大偏见</strong><span class="context-note">确定持仓预期（关注波段动能&amp;未测试优质缺口）</span></span>';
-const small='<span class="field-label context-heading"><strong class="context-title">小偏见</strong><span class="context-note">结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）</span></span>';
-for(const symbol of ['GC','CL','ES'])for(const lifecycle of ['none','wait','signal','position'])test(`Home layout ${symbol}/${lifecycle}: exact two-level big/small bias headings, direction order, no canonical mutation`,()=>{
+const big='<span class="field-label context-heading"><strong class="context-title">HTF关键位</strong><span class="context-note">趋势 FVG/震荡 OB 波段极值点</span></span>';
+const small='<span class="field-label context-heading"><strong class="context-title">日内偏见</strong><span class="context-note">TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）</span></span>';
+for(const symbol of ['GC','CL','ES'])for(const lifecycle of ['none','wait','signal','position'])test(`Home layout ${symbol}/${lifecycle}: exact intraday bias then HTF key-level headings, direction order, no canonical mutation`,()=>{
   const state=ready(symbol),beforeSetup=state.cards[symbol].structure3m;
   if(lifecycle!=='none'){
     const r=v6.chooseSetup(state,symbol,'cpb',T+2).opportunity;
@@ -19,9 +19,9 @@ for(const symbol of ['GC','CL','ES'])for(const lifecycle of ['none','wait','sign
   }
   const before=structuredClone(state),output=captureUi.renderCard(state,symbol);
   assert.ok(output.includes(big));assert.ok(output.includes(small));
-  assert.ok(output.indexOf(big)<output.indexOf(small));assert.ok(output.indexOf(small)<output.indexOf('交易方向 <span'));
-  assert.ok(output.includes('小偏见方向&gt;大偏见方向'));assert.ok(output.includes(`aria-label="${symbol} 大偏见"`));assert.ok(output.includes(`aria-label="${symbol} 小偏见"`));
-  assert.equal((output.match(/data-action="structure"/g)||[]).length,3);assert.equal((output.match(/data-action="bias"/g)||[]).length,3);assert.equal((output.match(/data-action="setup"/g)||[]).length,3);
+  assert.ok(output.indexOf(small)<output.indexOf(big));assert.ok(output.indexOf(big)<output.indexOf('交易方向</span>'));
+  assert.ok(!output.includes('direction-note'));assert.ok(output.includes(`aria-label="${symbol} HTF关键位"`));assert.ok(output.includes(`aria-label="${symbol} 日内偏见"`));
+  assert.equal((output.match(/data-action="structure"/g)||[]).length,5);assert.equal((output.match(/data-action="bias"/g)||[]).length,3);assert.equal((output.match(/data-action="setup"/g)||[]).length,3);
   assert.equal(state.cards[symbol].structure3m,beforeSetup);assert.deepEqual(state,before);
 });
 test('Home layout DOM: unique Risk mount follows history inside home; Chime alone retains the top mount',()=>{
@@ -52,10 +52,10 @@ test('Home footer DOM: title, visible cards, unique hidden mount, history, Risk 
   assert.match(html,/<section id="hidden-commodities"[^>]* hidden><\/section>/);
   assert.match(css,/\.hidden-commodities\[hidden\]\{display:none\}/);
 });
-test('Home direction note: exact new priority on all three cards; prior guidance absent',()=>{
+test('Home direction title: no priority explanation on any card',()=>{
   for(const symbol of ['GC','CL','ES']){
     const output=captureUi.renderCard(ready(symbol),symbol);
-    assert.match(output,/交易方向 <span class="direction-note">小偏见方向&gt;大偏见方向<\/span>/);
+    assert.match(output,/<span class="field-label">交易方向<\/span>/);assert.doesNotMatch(output,/direction-note|小偏见方向|大偏见方向/);
     assert.doesNotMatch(output,/偏见方向&gt;HTF方向&gt;MTF方向/);
   }
 });

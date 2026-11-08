@@ -7,7 +7,7 @@ import { captureUi } from '../src/capture-ui.js';
 const T = 1750000000000;
 for (const symbol of ['GC', 'CL', 'ES']) {
   for (const lifecycle of ['none', 'wait', 'signal', 'position']) {
-    test(`V6 card header ${symbol}/${lifecycle}: HTF structure then bias then direction, exact labels and no state changes`, () => {
+    test(`V6 card header ${symbol}/${lifecycle}: intraday bias then HTF key levels then direction, exact labels and no state changes`, () => {
       const state = v6.createWorkspace(T);
       if (lifecycle !== 'none') {
         v6.changeStructure(state, symbol, 'breakout_strong_pullback_weak');
@@ -20,11 +20,11 @@ for (const symbol of ['GC', 'CL', 'ES']) {
       const controls = html.match(/<div class="card-controls"[^]*?<\/section><\/div>/)?.[0];
       assert.ok(controls);
       assert.equal((controls.match(/class="field-label(?: context-heading)?"/g) || []).length, 3);
-      assert.match(controls, /structure-field[^]*?大偏见[^]*?bias-field[^]*?小偏见[^]*?direction-field[^]*?交易方向 /);
-      assert.ok(controls.includes('context-note">确定持仓预期（关注波段动能&amp;未测试优质缺口）</span>'));
-      assert.ok(controls.includes('context-note">结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）</span>'));
-      assert.ok(controls.includes('交易方向 <span class="direction-note">小偏见方向&gt;大偏见方向</span>'));
-      assert.ok(controls.includes(`aria-label="${symbol} 大偏见"`));
+      assert.match(controls, /bias-field[^]*?日内偏见[^]*?structure-field[^]*?HTF关键位[^]*?direction-field[^]*?交易方向<\/span>/);
+      assert.ok(controls.includes('context-note">趋势 FVG/震荡 OB 波段极值点</span>'));
+      assert.ok(controls.includes('context-note">TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）</span>'));
+      assert.ok(controls.includes('<span class="field-label">交易方向</span>'));assert.doesNotMatch(controls,/direction-note|小偏见方向|大偏见方向/);
+      assert.ok(controls.includes(`aria-label="${symbol} HTF关键位"`));
       assert.doesNotMatch(controls, /市场结构（MTF chanlun）|MTF结构处于HTF|市场结构不明确时|HTF方向&gt;缺口方向&gt;MTF方向/);
       assert.ok(html.indexOf(controls) < html.indexOf('class="active-trades"'));
       assert.ok(html.indexOf('class="active-trades"') < html.indexOf('class="new-opportunity"'));
@@ -34,8 +34,8 @@ for (const symbol of ['GC', 'CL', 'ES']) {
 }
 test('V6 header bundle: updated labels are included without old production wording', () => {
   const bundle = readFileSync(new URL('../dist/app.bundle.js', import.meta.url), 'utf8');
-  assert.ok(bundle.includes('context-note">确定持仓预期（关注波段动能&amp;未测试优质缺口）</span>'));
-  assert.ok(bundle.includes('交易方向 <span class="direction-note">小偏见方向&gt;大偏见方向</span>'));
+  assert.ok(bundle.includes('context-note">趋势 FVG/震荡 OB 波段极值点</span>'));
+  assert.ok(bundle.includes('<span class="field-label">交易方向</span>'));assert.doesNotMatch(bundle,/小偏见方向&gt;大偏见方向/);
   assert.doesNotMatch(bundle, /市场结构（MTF chanlun）|MTF结构处于HTF波段内部|HTF方向&gt;缺口方向&gt;MTF方向/);
 });
 
@@ -60,11 +60,13 @@ for (const direction of ['long', 'short']) {
     });
   }
 }
-test('V6 header context collapsed card: new headings remain together inside hidden controls', () => {
+test('V6 header context collapsed card: context stays visible and only holdings/opportunities are hidden', () => {
   const state = v6.createWorkspace(T), before = structuredClone(state);
   const html = captureUi.renderCard(state, 'GC', { collapsed: true });
-  assert.match(html, /class="card-controls" hidden><section class="classifier structure-field"/);
+  assert.match(html, /class="card-controls"><section class="classifier bias-field"/);
+  assert.match(html, /class="active-trades"[^>]* hidden>/);
+  assert.match(html, /class="new-opportunity" hidden>/);
   assert.ok(html.includes('aria-expanded="false"'));
-  assert.ok(html.includes('结合价格走势和VP分析TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）'));
+  assert.ok(html.includes('TPO 确认价格拒绝和接受（尾部&amp;单打印&amp;弱端点）'));
   assert.deepEqual(state, before);
 });

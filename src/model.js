@@ -8,6 +8,8 @@ export const VISIBLE_STRUCTURES_3M = Object.freeze({ bullish: '多头', range: '
 // V6 classification; kept separate so frozen V5 validation and historical meanings stay unchanged.
 export const HTF_STRUCTURES_V2 = Object.freeze({ trend_pullback_stronger: '趋势（回调变强）', trend_pullback_weaker: '趋势（回调变弱）', htf_range_v2: '震荡' });
 export const HTF_STRUCTURES_V3 = Object.freeze({ breakout_strong_pullback_weak: '突破强&回调弱', breakout_weak_pullback_strong: '突破弱&回调强', htf_range_v2: '震荡' });
+// Current HTF key-level choices; historical V2/V3 values remain readable and unchanged.
+export const HTF_KEY_LEVELS = Object.freeze({ htf_bull_breakout: '多头突破', htf_bull_pullback: '多头回调', htf_bear_breakout: '空头突破', htf_bear_cover: '空头回补', htf_range_v2: '震荡' });
 export const DIRECTIONS = Object.freeze({ long: '做多', short: '做空', none: '暂无交易方向' });
 export const SETUPS = Object.freeze({ mtf_pb: 'MTF PB', htf_pb: 'MTF BOF（趋势走弱 1次）', htf_bof: 'HTF BOF（恐慌或走弱 1次）' });
 // V6 creation is separate from frozen V5 readable types. Historical labels remain unchanged.

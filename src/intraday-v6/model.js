@@ -1,5 +1,5 @@
 import {
-  ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, HTF_STRUCTURES_V3, DIRECTIONS, CREATABLE_SETUPS,
+  ORDER, BIASES, STRUCTURES_3M, HTF_STRUCTURES_V2, HTF_STRUCTURES_V3, HTF_KEY_LEVELS, DIRECTIONS, CREATABLE_SETUPS,
   recordInitialStop as v5RecordInitialStop, correctInitialStop as v5CorrectInitialStop,
   recordBofToPb as v5RecordBofToPb, revertBofToPb as v5RevertBofToPb
 } from '../model.js';
@@ -10,9 +10,9 @@ import { assertV6State, SCHEMA_VERSION, safeTime, own, fail, singleRecordV5View 
 export { assertV6State, SCHEMA_VERSION } from './validation.js';
 export { effectiveInitialStop, effectiveBofToPbEvent, derivedManagementState, researchSetupClass } from '../model.js';
 
-// New registration requires explicit V3 classification; legacy records remain readable.
+// Current HTF choices extend the existing explicit-context gate; V3 inputs retain compatibility.
 export const isSetupAllowed = (direction, structure3m, type) =>
-  own(CREATABLE_SETUPS, type) && ['long', 'short'].includes(direction) && own(HTF_STRUCTURES_V3, structure3m);
+  own(CREATABLE_SETUPS, type) && ['long', 'short'].includes(direction) && (own(HTF_KEY_LEVELS, structure3m) || own(HTF_STRUCTURES_V3, structure3m));
 
 export function createWorkspace(time = Date.now()) {
   if (!safeTime(time)) fail('V6_TIME_INVALID', 'time');
@@ -71,7 +71,7 @@ export function changeBias(state, symbol, bias) {
 }
 export function changeStructure(state, symbol, structure3m) {
   return transact(state, next => {
-    if (!own(STRUCTURES_3M, structure3m) && !own(HTF_STRUCTURES_V2, structure3m) && !own(HTF_STRUCTURES_V3, structure3m)) fail('V6_STRUCTURE_INVALID', 'structure3m');
+    if (!own(STRUCTURES_3M, structure3m) && !own(HTF_STRUCTURES_V2, structure3m) && !own(HTF_STRUCTURES_V3, structure3m) && !own(HTF_KEY_LEVELS, structure3m)) fail('V6_STRUCTURE_INVALID', 'structure3m');
     const card = cardFor(next, symbol); if (card.structure3m === structure3m) return { changed: false, reason: 'same' };
     card.structure3m = structure3m; return { changed: true };
   });
