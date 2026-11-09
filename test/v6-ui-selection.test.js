@@ -38,11 +38,19 @@ for (const stage of ['wait', 'signal']) {
     assertSelection(render(state), 'stage', stage, 2);
   });
 }
-for (const direction of ['long', 'short', 'none']) {
+for (const [direction, label, tone] of [
+  ['long', '只做多', 'bullish'],
+  ['short', '只做空', 'bearish'],
+  ['none', '低多高空', 'neutral'],
+]) {
   test(`V6 home direction: ${direction} alone has selected class and pressed state`, () => {
     const state = v6.createWorkspace(T);
     v6.changeDirection(state, 'GC', direction, T + 1);
-    assertSelection(render(state), 'direction', direction, 3);
+    const html = render(state);
+    assertSelection(html, 'direction', direction, 3);
+    const selected = buttons(html, 'direction').find(choice => choice.selected);
+    assert.equal(selected.label, label);
+    assert.ok(selected.attributes.includes(`data-tone="${tone}"`));
   });
 }
 test('V6 home title: plain direction label has no priority explanation', () => {
